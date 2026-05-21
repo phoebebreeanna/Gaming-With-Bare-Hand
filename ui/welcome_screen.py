@@ -3,100 +3,92 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QTimer
 
+
 class WelcomeScreen(QWidget):
     def __init__(self, on_get_started):
         super().__init__()
         self.on_get_started = on_get_started
+        self.countdown = 5
+        self._total = self.countdown
         self.init_ui()
 
     def init_ui(self):
         self.setAutoFillBackground(True)
-        self.setStyleSheet("""
-            WelcomeScreen {
-                background: qlineargradient(
-                    x1:0, y1:0, x2:1, y2:1,
-                    stop:0 #2D1B69,
-                    stop:1 #9B6FBE
-                );
-            }
-            WelcomeScreen QLabel {
-                background: transparent;
-                color: white;
-            }
-        """)
+        self.setStyleSheet("WelcomeScreen { background-color: #F4F4F4; }")
 
-        layout= QVBoxLayout(self)
-        layout.setAlignment(Qt.AlignCenter)
-        layout.setSpacing(20)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        outer.addStretch()
 
-        #logo (we can replace this with an actual image later)
-        logo = QLabel("Logo")
-        logo.setAlignment(Qt.AlignCenter)
-        logo.setStyleSheet("font-size: 80px; font-weight: bold; color: white")
-        layout.addWidget(logo)
+        center = QVBoxLayout()
+        center.setAlignment(Qt.AlignCenter)
+        center.setSpacing(0)
 
-        #Welcome message
-        welcome_message= QLabel ("Welcome to our application!")
-        welcome_message.setAlignment(Qt.AlignCenter)
-        welcome_message.setStyleSheet("font-size: 24px; font-weight: bold; color: white")
-        layout.addWidget(welcome_message)
+        title = QLabel("HANDMOUSE")
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet("font-size: 52px; font-weight: 800; color: #111111; letter-spacing: 8px; background: transparent; border: none;")
+        center.addWidget(title)
 
-        layout.addSpacing(40)
+        center.addSpacing(10)
 
-        #Progress bar
+        subtitle = QLabel("GESTURE CONTROL · V1.0")
+        subtitle.setAlignment(Qt.AlignCenter)
+        subtitle.setStyleSheet("font-size: 9px; color: #9A9A9A; letter-spacing: 3px; background: transparent; border: none;")
+        center.addWidget(subtitle)
+
+        center.addSpacing(32)
+
         self.progress_bar = QProgressBar()
         self.progress_bar.setMinimum(0)
         self.progress_bar.setMaximum(100)
         self.progress_bar.setValue(0)
-        self.progress_bar.setFixedWidth(400)
-        self.progress_bar.setFixedHeight(8)
+        self.progress_bar.setFixedWidth(280)
+        self.progress_bar.setFixedHeight(2)
         self.progress_bar.setTextVisible(False)
         self.progress_bar.setStyleSheet("""
-            QProgressBar {
-                background-color: rgba(255,255,255,0.2);
-                border-radius: 5px;
-                border: none;
-            }
-            QProgressBar::chunk {
-                background-color: #6B35C7;
-                border-radius: 5px;
-            }
+            QProgressBar { background-color: #D8D8D8; border: none; border-radius: 1px; }
+            QProgressBar::chunk { background-color: #111111; border-radius: 1px; }
         """)
-
         progress_row = QHBoxLayout()
         progress_row.addStretch()
         progress_row.addWidget(self.progress_bar)
         progress_row.addStretch()
-        layout.addLayout(progress_row)
+        center.addLayout(progress_row)
 
-        #Countdown label
-        self.countdown_label = QLabel("Starting in 5s...")
+        center.addSpacing(10)
+
+        self.countdown_label = QLabel(f"STARTING IN {self.countdown}")
         self.countdown_label.setAlignment(Qt.AlignCenter)
-        self.countdown_label.setStyleSheet("font-size: 14px; color: #CCCCCC; background: transparent;")
-        layout.addWidget(self.countdown_label)
+        self.countdown_label.setStyleSheet("font-size: 8px; color: #C8896A; letter-spacing: 2px; background: transparent; border: none;")
+        center.addWidget(self.countdown_label)
 
-        layout.addSpacing(20)
+        outer.addLayout(center)
+        outer.addStretch()
 
-        #Countdown 5 seconds and jump to main menu
-        self.countdown = 1 # Testing with 1 seconds for faster transition, change to 10 for prototype demo
+        footer_wrap = QWidget()
+        footer_wrap.setFixedHeight(36)
+        footer_wrap.setStyleSheet("background: transparent; border-top: 1px solid #D8D8D8;")
+        footer_inner = QHBoxLayout(footer_wrap)
+        footer_inner.setContentsMargins(0, 0, 0, 0)
+        footer = QLabel("GESTURE CONTROL · v1.0 ·")
+        footer.setAlignment(Qt.AlignCenter)
+        footer.setStyleSheet("font-size: 7px; color: #B8B0AB; letter-spacing: 2px; background: transparent; border: none;")
+        footer_inner.addWidget(footer)
+        outer.addWidget(footer_wrap)
+
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_countdown)
-        self.timer.start(1000)  # Update every second
+        self.timer.start(1000)
 
     def update_countdown(self):
         self.countdown -= 1
-
-        #Update progress bar
-        progress = int((5 - self.countdown) / 5 * 100)
-        self.progress_bar.setValue(progress)
-
-        #Update countdown label
-        self.countdown_label.setText(f"Starting in {self.countdown}s...")
-
+        self.progress_bar.setValue(int((self._total - self.countdown) / self._total * 100))
+        self.countdown_label.setText(f"STARTING IN {self.countdown}")
         if self.countdown <= 0:
             self.timer.stop()
             self.on_get_main()
 
     def on_get_main(self):
-        self.timer.stop()  #Stop the timer if it's still running
+        self.timer.stop()
         self.on_get_started()
