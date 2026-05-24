@@ -23,6 +23,9 @@ class _SignalIO(io.RawIOBase):
         self._emit = emit_fn
         self._buf  = ""
 
+    def writable(self):
+        return True
+
     def write(self, text):
         if isinstance(text, bytes):
             text = text.decode("utf-8", errors="replace")
@@ -59,7 +62,8 @@ class _Worker(QThread):
                 self.finished_err.emit(str(exc))
 
 class PipelineUI(QWidget):
-    on_menu_toggle = Signal()
+    on_menu_toggle    = Signal()
+    training_complete = Signal()    # emitted after a successful train run
 
     def __init__(self, is_dark=False):
         super().__init__()
@@ -458,6 +462,7 @@ class PipelineUI(QWidget):
             f"TRAINING COMPLETE  ·  {self._total_epochs} / {self._total_epochs}")
         self._set_progress(1.0)
         self._step_done("Training complete.")
+        self.training_complete.emit()
 
     def _on_review(self):
         if not self._cfg or not self._training_result:

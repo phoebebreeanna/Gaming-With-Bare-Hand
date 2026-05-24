@@ -33,9 +33,10 @@ pyautogui.PAUSE = 0
 
 SCREEN_W, SCREEN_H = pyautogui.size()
 
-LOGIC_DIR  = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR   = os.path.join(LOGIC_DIR, 'data')
-MODEL_PATH = os.path.join(LOGIC_DIR, 'hand_landmarker.task')
+LOGIC_DIR   = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR    = os.path.join(LOGIC_DIR, 'data')
+CUSTOM_DIR  = os.path.join(DATA_DIR, 'custom')
+MODEL_PATH  = os.path.join(LOGIC_DIR, 'hand_landmarker.task')
 
 MOUSE_WEIGHTS  = os.path.join(DATA_DIR, 'mouse_gesture_model_best.pt')
 MOUSE_ENCODER  = os.path.join(DATA_DIR, 'mouse_label_encoder.pkl')
@@ -43,6 +44,13 @@ SUBWAY_WEIGHTS = os.path.join(DATA_DIR, 'subway_gesture_model_best.pt')
 SUBWAY_ENCODER = os.path.join(DATA_DIR, 'subway_label_encoder.pkl')
 RACING_WEIGHTS = os.path.join(DATA_DIR, 'gesture_model_racing.pt')
 RACING_ENCODER = os.path.join(DATA_DIR, 'label_encoder_racing.pkl')
+
+MOUSE_WEIGHTS_CUSTOM  = os.path.join(CUSTOM_DIR, 'mouse_gesture_model_best.pt')
+MOUSE_ENCODER_CUSTOM  = os.path.join(CUSTOM_DIR, 'mouse_label_encoder.pkl')
+SUBWAY_WEIGHTS_CUSTOM = os.path.join(CUSTOM_DIR, 'subway_gesture_model_best.pt')
+SUBWAY_ENCODER_CUSTOM = os.path.join(CUSTOM_DIR, 'subway_label_encoder.pkl')
+RACING_WEIGHTS_CUSTOM = os.path.join(CUSTOM_DIR, 'racing_gesture_model_best.pt')
+RACING_ENCODER_CUSTOM = os.path.join(CUSTOM_DIR, 'racing_label_encoder.pkl')
 
 MOUSE_SMOOTHING    = 0.45
 MOUSE_CONF_THRESH  = 0.75
@@ -413,29 +421,44 @@ def _mouse_scroll(amount):
 
 class HandControllerThread(QThread):
 
-    frame_ready     = Signal(QImage)
-    gesture_changed = Signal(str, str)   
-    state_changed   = Signal(str)
-    error_occurred  = Signal(str)
+    frame_ready       = Signal(QImage)
+    gesture_changed   = Signal(str, str)
+    state_changed     = Signal(str)
+    error_occurred    = Signal(str)
+    game_mode_changed = Signal(str)    # emits 'mouse', 'subway', 'racing'
 
-    slide_progress  = Signal(float, float)             
-    distance_update = Signal(float, bool, float)       
+    slide_progress  = Signal(float, float)
+    distance_update = Signal(float, bool, float)
     zone_pick_data  = Signal(str, str, float, float, float, float)
     running_data    = Signal(object)
-    stopped_data    = Signal(float, float)             
+    stopped_data    = Signal(float, float)
 
-    def __init__(self, camera_index=0, initial_zone='medium', skip_intro=False):
+    def __init__(self, camera_index=0, initial_zone='medium', skip_intro=False,
+                 model_sources=None, initial_game_mode='mouse'):
         super().__init__()
-        self.camera_index  = camera_index
-        self.initial_zone  = initial_zone
-        self.skip_intro    = skip_intro
-        self._running      = False
-        self._paused_event = threading.Event()
+        self.camera_index      = camera_index
+        self.initial_zone      = initial_zone
+        self.skip_intro        = skip_intro
+        self.initial_game_mode = initial_game_mode   # 'mouse' | 'subway' | 'racing'
+        self._running          = False
+        self._paused_event     = threading.Event()
         self._paused_event.set()
 
-        self.mouse_model,  self.mouse_le  = _load_nn(MOUSE_WEIGHTS,  MOUSE_ENCODER,  'MOUSE')
-        self.subway_model, self.subway_le = _load_nn(SUBWAY_WEIGHTS, SUBWAY_ENCODER, 'SUBWAY')
-        self.racing_model, self.racing_le = _load_nn(RACING_WEIGHTS, RACING_ENCODER, 'RACING')
+        sources = model_sources or {}
+
+        def _pick(mode, default_w, default_e, custom_w, custom_e):
+            if sources.get(mode) == 'custom' and os.path.exists(custom_w) and os.path.exists(custom_e):
+                print(f"[{mode.upper()}] Using custom model")
+                return custom_w, custom_e
+            return default_w, default_e
+
+        mw, me = _pick('mouse',  MOUSE_WEIGHTS,  MOUSE_ENCODER,  MOUSE_WEIGHTS_CUSTOM,  MOUSE_ENCODER_CUSTOM)
+        sw, se = _pick('subway', SUBWAY_WEIGHTS, SUBWAY_ENCODER, SUBWAY_WEIGHTS_CUSTOM, SUBWAY_ENCODER_CUSTOM)
+        rw, re = _pick('racing', RACING_WEIGHTS, RACING_ENCODER, RACING_WEIGHTS_CUSTOM, RACING_ENCODER_CUSTOM)
+
+        self.mouse_model,  self.mouse_le  = _load_nn(mw, me, 'MOUSE')
+        self.subway_model, self.subway_le = _load_nn(sw, se, 'SUBWAY')
+        self.racing_model, self.racing_le = _load_nn(rw, re, 'RACING')
 
         self._init_state()
 
@@ -458,6 +481,7 @@ class HandControllerThread(QThread):
         self.game_option_pending = None
         self.game_opt_number     = None
         self.active_game_mode    = None
+        self._pending_mode       = None   # set from UI thread to switch mid-game
 
         self.mouse_prev_row    = None
         self.left_click_entry_t = None
@@ -538,6 +562,7 @@ class HandControllerThread(QThread):
         self._rc_release_all()
         if opt == 1:
             self.active_game_mode = None
+            self.game_mode_changed.emit('mouse')
         elif opt == 2:
             self.active_game_mode = 2
             self.ss_current_zone  = 'neutral'
@@ -545,12 +570,18 @@ class HandControllerThread(QThread):
             self.ss_last_space_t  = 0.0
             self.ss_space_pressed = False
             self.ss_prev_row      = None
+            self.game_mode_changed.emit('subway')
         elif opt == 3:
             self.active_game_mode  = 3
             self.rc_prev_row_left  = None
             self.rc_prev_row_right = None
+            self.game_mode_changed.emit('racing')
         elif opt == 4:
             self.active_game_mode = 4
+
+    def switch_game_mode(self, mode: str):
+        """Called from the UI thread to switch mode mid-run (thread-safe via GIL)."""
+        self._pending_mode = mode
 
     def set_camera(self, index):
         self.camera_index = index
@@ -620,6 +651,10 @@ class HandControllerThread(QThread):
             self._set_zone(self.chosen_zone)
             self.app_state = 'running'
             self.state_changed.emit('running')
+            _opt_map = {'mouse': 1, 'subway': 2, 'racing': 3}
+            _opt = _opt_map.get(self.initial_game_mode, 1)
+            if _opt != 1:
+                self._activate_game_mode(_opt)
         else:
             self.intro_start_t = time.time()
 
@@ -767,6 +802,13 @@ class HandControllerThread(QThread):
                 self.distance_update.emit(dist, has_hand, hold_frac)
 
             elif self.app_state == 'running':
+                # UI-thread requested mode switch
+                if self._pending_mode is not None:
+                    _opt_map = {'mouse': 1, 'subway': 2, 'racing': 3}
+                    self._activate_game_mode(_opt_map.get(self._pending_mode, 1))
+                    game_opt_hold_t = None; self.game_opt_number = None; game_opt_frac = 0.0
+                    self._pending_mode = None
+
                 game_opt_hold_t, self.game_opt_number, game_opt_frac, triggered_opt = \
                     tick_game_opt(lms, lms2, now, game_opt_hold_t, self.game_opt_number)
                 if triggered_opt is not None:
@@ -998,6 +1040,7 @@ class HandControllerThread(QThread):
                         'conf': conf_ss,
                         'game_opt_num': self.game_opt_number or 0,
                         'game_opt_frac': game_opt_frac,
+                        'meta': {'game_opt': game_opt_frac},
                     })
 
                 elif self.active_game_mode == 3:
@@ -1042,6 +1085,7 @@ class HandControllerThread(QThread):
                         'gest_r': gest_r, 'conf_r': round(conf_r, 2),
                         'game_opt_num': self.game_opt_number or 0,
                         'game_opt_frac': game_opt_frac,
+                        'meta': {'game_opt': game_opt_frac},
                     })
 
                 elif self.active_game_mode == 4:

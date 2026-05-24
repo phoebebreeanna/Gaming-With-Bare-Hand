@@ -555,6 +555,15 @@ def run_training(cfg):
         print(f"ERROR: {data_path} not found. Run preprocess first.")
         return None, None, None
 
+    # Redirect model output to data/custom/ to avoid overwriting originals
+    _data_dir        = os.path.dirname(cfg['model_out'])
+    _custom_dir      = os.path.join(_data_dir, 'custom')
+    os.makedirs(_custom_dir, exist_ok=True)
+    _model_best_path    = os.path.join(_custom_dir, os.path.basename(cfg['model_best']))
+    _model_out_path     = os.path.join(_custom_dir, os.path.basename(cfg['model_out']))
+    _label_encoder_path = os.path.join(_custom_dir, os.path.basename(cfg['label_encoder']))
+    print(f"Output directory: {_custom_dir}")
+
     df    = pd.read_csv(data_path)
     df    = df[df['label'].isin(cfg['gestures'])].reset_index(drop=True)
     X     = df.drop('label', axis=1).values.astype(np.float32)
@@ -566,7 +575,7 @@ def run_training(cfg):
 
     le    = LabelEncoder()
     y_enc = le.fit_transform(y)
-    joblib.dump(le, cfg['label_encoder'])
+    joblib.dump(le, _label_encoder_path)
     print(f"\nClasses: {list(le.classes_)}")
     print(f"Features: {X.shape[1]}")
 
@@ -616,10 +625,10 @@ def run_training(cfg):
             if acc > best_acc:
                 best_acc   = acc
                 best_epoch = epoch + 1
-                torch.save(model.state_dict(), cfg['model_best'])
+                torch.save(model.state_dict(), _model_best_path)
 
     print(f"\nBest val_acc={best_acc:.3f} at epoch {best_epoch}")
-    model.load_state_dict(torch.load(cfg['model_best']))
+    model.load_state_dict(torch.load(_model_best_path, map_location='cpu', weights_only=False))
     model.eval()
 
     with torch.no_grad():
@@ -668,8 +677,8 @@ def run_training(cfg):
         for i in flagged_idx
     ]
 
-    torch.save(model.state_dict(), cfg['model_out'])
-    print(f"\nSaved: {cfg['model_out']}  +  {cfg['label_encoder']}")
+    torch.save(model.state_dict(), _model_out_path)
+    print(f"\nSaved: {_model_out_path}  +  {_label_encoder_path}")
     return flagged_idx, weak_gestures, flagged_meta
 
 def _render_hand_pixmap(lms_array, W=400, H=400):

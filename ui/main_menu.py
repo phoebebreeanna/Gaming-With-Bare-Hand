@@ -80,10 +80,14 @@ class MainMenu(QWidget):
         self.gesture_guide.on_menu_toggle.connect(self.toggle_sidebar)
         self.pages.addWidget(self.gesture_guide)
 
-        self.pages.addWidget(GameMode())
+        self.game_mode_widget = GameMode()
+        self.game_mode_widget.on_menu_toggle.connect(self.toggle_sidebar)
+        self.game_mode_widget.game_mode_changed.connect(self._on_game_mode_from_ui)
+        self.pages.addWidget(self.game_mode_widget)
 
         self.pipeline_ui = PipelineUI(is_dark=self.is_dark)
         self.pipeline_ui.on_menu_toggle.connect(self.toggle_sidebar)
+        self.pipeline_ui.training_complete.connect(self.game_mode_widget.refresh_custom_availability)
         self.pages.addWidget(self.pipeline_ui)
 
         self.pages.setCurrentIndex(0)
@@ -605,6 +609,18 @@ class MainMenu(QWidget):
         layout.addLayout(btn_row)
 
         return page
+
+    def _on_game_mode_from_ui(self, mode: str):
+        labels = {'mouse': 'MOUSE', 'subway': 'SUBWAY', 'racing': 'RACING'}
+        self.info_cards["MODE"].setText(labels.get(mode, mode.upper()))
+        if self._is_running and self.controller:
+            self.controller.switch_game_mode(mode)
+
+    @Slot(str)
+    def _on_controller_game_mode(self, mode: str):
+        labels = {'mouse': 'MOUSE', 'subway': 'SUBWAY', 'racing': 'RACING'}
+        self.info_cards["MODE"].setText(labels.get(mode, mode.upper()))
+        self.game_mode_widget.set_selected_mode(mode)
 
     def switch_page(self, index):
         self.pages.setCurrentIndex(index)
@@ -1167,6 +1183,7 @@ class MainMenu(QWidget):
         self.zone_guide.apply_theme(self.is_dark)
         self.user_guide.apply_theme(self.is_dark)
         self.gesture_guide.apply_theme(self.is_dark)
+        self.game_mode_widget.apply_theme(self.is_dark)
         self.pipeline_ui.apply_theme(self.is_dark)
         self.update()
         self.repaint()
@@ -1344,11 +1361,18 @@ class MainMenu(QWidget):
             self._on_zone_continue()
 
     def _start_controller(self):
+        from logic.app_config import get_model_source, get_game_mode
+        model_sources     = {m: get_model_source(m) for m in ('mouse', 'subway', 'racing')}
+        initial_game_mode = get_game_mode()
+
         zone = getattr(self.zone_guide, 'selected_zone', None) or get_saved_zone()
         self.controller = HandControllerThread(
             camera_index=self._get_selected_camera(),
             initial_zone=zone,
-            skip_intro=True)
+            skip_intro=True,
+            model_sources=model_sources,
+            initial_game_mode=initial_game_mode,
+        )
         self.controller.frame_ready.connect(self._update_frame)
         self.controller.gesture_changed.connect(self._update_gesture)
         self.controller.state_changed.connect(self._update_state)
@@ -1356,6 +1380,7 @@ class MainMenu(QWidget):
         self.controller.finished.connect(self._on_finished)
         self.controller.running_data.connect(self._on_running_data)
         self.controller.stopped_data.connect(self._on_stopped_data)
+        self.controller.game_mode_changed.connect(self._on_controller_game_mode)
         self.controller.start()
 
         self._is_running = True

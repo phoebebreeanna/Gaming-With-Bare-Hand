@@ -4,30 +4,61 @@ import json
 _CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'app_config.json')
 
 
-def is_setup_done() -> bool:
+def _read() -> dict:
     try:
         with open(_CONFIG_FILE) as f:
-            return json.load(f).get('setup_complete', False)
+            return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
-        return False
+        return {}
+
+
+def _write(config: dict) -> None:
+    with open(_CONFIG_FILE, 'w') as f:
+        json.dump(config, f, indent=2)
+
+
+def is_setup_done() -> bool:
+    return _read().get('setup_complete', False)
 
 
 def get_saved_zone() -> str:
-    try:
-        with open(_CONFIG_FILE) as f:
-            return json.load(f).get('zone', 'medium')
-    except (FileNotFoundError, json.JSONDecodeError):
-        return 'medium'
+    return _read().get('zone', 'medium')
 
 
 def mark_setup_done(zone: str = 'medium') -> None:
-    config = {}
-    try:
-        with open(_CONFIG_FILE) as f:
-            config = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        pass
+    config = _read()
     config['setup_complete'] = True
     config['zone'] = zone
-    with open(_CONFIG_FILE, 'w') as f:
-        json.dump(config, f, indent=2)
+    _write(config)
+
+
+def get_game_mode() -> str:
+    return _read().get('game_mode', 'mouse')
+
+
+def set_game_mode(mode: str) -> None:
+    config = _read()
+    config['game_mode'] = mode
+    _write(config)
+
+
+def get_mouse_enabled() -> bool:
+    return _read().get('mouse_enabled', False)
+
+
+def set_mouse_enabled(enabled: bool) -> None:
+    config = _read()
+    config['mouse_enabled'] = enabled
+    _write(config)
+
+
+def get_model_source(mode: str) -> str:
+    return _read().get('model_sources', {}).get(mode, 'default')
+
+
+def set_model_source(mode: str, source: str) -> None:
+    config = _read()
+    if 'model_sources' not in config:
+        config['model_sources'] = {}
+    config['model_sources'][mode] = source
+    _write(config)

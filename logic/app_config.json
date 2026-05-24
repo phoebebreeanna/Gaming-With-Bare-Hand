@@ -1,4 +1,9 @@
 {
   "setup_complete": true,
-  "zone": "small"
+  "zone": "small",
+  "game_mode": "subway",
+  "model_sources": {
+    "mouse": "default",
+    "subway": "default"
+  }
 }
