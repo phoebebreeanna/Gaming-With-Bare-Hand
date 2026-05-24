@@ -16,7 +16,6 @@ class GestureNet(nn.Module):
         return self.net(x)
 
 def extract_features(lms, prev_row):
-    """Normalise landmarks relative to wrist+scale and append delta from previous frame."""
     wx, wy, wz = lms[0].x, lms[0].y, lms[0].z
     scale = max(math.sqrt((lms[9].x - wx)**2 + (lms[9].y - wy)**2 + (lms[9].z - wz)**2), 1e-6)
     row = []
@@ -26,7 +25,6 @@ def extract_features(lms, prev_row):
     return row + delta, row
 
 def run_nn(lms, prev_row, model, le, conf_thresh):
-    """Run one inference step. Returns (gesture_str, confidence, new_prev_row)."""
     if model is None or le is None:
         return 'none', 0.0, prev_row
     features, new_prev = extract_features(lms, prev_row)
@@ -39,14 +37,13 @@ def run_nn(lms, prev_row, model, le, conf_thresh):
     return le.inverse_transform([idx.item()])[0], conf.item(), new_prev
 
 def load_nn(weights_path, encoder_path, input_size=126, tag='model'):
-    """Load a GestureNet + label encoder. Returns (model, le) or (None, None) on failure."""
     try:
         import joblib
         le = joblib.load(encoder_path)
         net = GestureNet(input_size, len(le.classes_))
         net.load_state_dict(torch.load(weights_path, map_location='cpu', weights_only=False))
         net.eval()
-        print(f"[NN:{tag}] Loaded — classes: {list(le.classes_)}")
+        print(f"[NN:{tag}] Loaded - classes: {list(le.classes_)}")
         return net, le
     except FileNotFoundError:
         print(f"[NN:{tag}] Model not found: {weights_path}")

@@ -15,9 +15,10 @@ from ui.pipeline_ui import PipelineUI
 from ui.mainmenu_setup import MainMenuSetup
 from ui.mainmenu_calibration import MainMenuCalibration
 from ui.mainmenu_zone import MainMenuZone
+from ui.mainmenu_camera import MainMenuCamera
 
 from logic.hand_controller import HandControllerThread, CameraPreviewThread, list_cameras
-from logic.app_config import is_setup_done, get_saved_zone, mark_setup_done
+from logic.app_config import is_setup_done, get_saved_zone, mark_setup_done, get_camera_index, set_camera_index
 
 class MainMenu(QWidget):
     def __init__(self):
@@ -83,6 +84,7 @@ class MainMenu(QWidget):
         self.game_mode_widget = GameMode()
         self.game_mode_widget.on_menu_toggle.connect(self.toggle_sidebar)
         self.game_mode_widget.game_mode_changed.connect(self._on_game_mode_from_ui)
+        self.game_mode_widget.camera_changed.connect(self._on_game_camera_changed)
         self.pages.addWidget(self.game_mode_widget)
 
         self.pipeline_ui = PipelineUI(is_dark=self.is_dark)
@@ -268,19 +270,26 @@ class MainMenu(QWidget):
         self.setup_guide = MainMenuSetup(is_dark=self.is_dark)
         self.setup_guide.on_lets_go.connect(self._on_setup_lets_go)
         self.setup_guide.on_menu_toggle.connect(self.toggle_sidebar)
-        self.home_stack.addWidget(self.setup_guide) 
+        self.home_stack.addWidget(self.setup_guide)
+
+        self.camera_guide = MainMenuCamera(is_dark=self.is_dark)
+        self.camera_guide.on_camera_continue.connect(self._on_camera_continue)
+        self.camera_guide.on_camera_back.connect(self._on_camera_back)
+        self.camera_guide.on_camera_select.connect(self._on_setup_camera_select)
+        self.camera_guide.on_menu_toggle.connect(self.toggle_sidebar)
+        self.home_stack.addWidget(self.camera_guide)
 
         self.calibration_guide = MainMenuCalibration(is_dark=self.is_dark)
         self.calibration_guide.on_continue.connect(self._on_distance_continue)
         self.calibration_guide.on_back.connect(self._on_distance_back)
         self.calibration_guide.on_menu_toggle.connect(self.toggle_sidebar)
-        self.home_stack.addWidget(self.calibration_guide) 
+        self.home_stack.addWidget(self.calibration_guide)
 
         self.zone_guide = MainMenuZone(is_dark=self.is_dark)
         self.zone_guide.on_zone_continue.connect(self._on_zone_continue)
         self.zone_guide.on_zone_back.connect(self._on_zone_back)
         self.zone_guide.on_menu_toggle.connect(self.toggle_sidebar)
-        self.home_stack.addWidget(self.zone_guide) 
+        self.home_stack.addWidget(self.zone_guide)
 
         return page
 
@@ -453,6 +462,13 @@ class MainMenu(QWidget):
 
         camera_top.addWidget(self.rec_lbl)
         camera_top.addStretch()
+
+        self.dist_alert_lbl = QLabel("")
+        self.dist_alert_lbl.setStyleSheet(
+            "color: #888888; font-size: 8px; font-weight: 700; "
+            "letter-spacing: 1.2px; background: transparent; border: none;")
+        camera_top.addWidget(self.dist_alert_lbl)
+
         camera_layout.addLayout(camera_top)
 
         self.camera_label = QLabel("LIVE CAMERA FEED")
@@ -1179,6 +1195,7 @@ class MainMenu(QWidget):
             """)
 
         self.setup_guide.apply_theme(self.is_dark)
+        self.camera_guide.apply_theme(self.is_dark)
         self.calibration_guide.apply_theme(self.is_dark)
         self.zone_guide.apply_theme(self.is_dark)
         self.user_guide.apply_theme(self.is_dark)
@@ -1206,9 +1223,22 @@ class MainMenu(QWidget):
         if cam is not None and cam >= 0 and self.controller:
             self.controller.set_camera(cam)
 
+    def _on_game_camera_changed(self, cam_idx: int):
+        if not self._is_running: return
+        if self.controller:
+            self.controller.set_camera(cam_idx)
+        for i in range(self.camera_combo.count()):
+            if self.camera_combo.itemData(i) == cam_idx:
+                self.camera_combo.blockSignals(True)
+                self.camera_combo.setCurrentIndex(i)
+                self.camera_combo.blockSignals(False)
+                break
+
     def _get_selected_camera(self) -> int:
         d = self.camera_combo.itemData(self.camera_combo.currentIndex())
-        return d if d is not None else 0
+        if d is not None and d >= 0:
+            return d
+        return get_camera_index()
 
     def update_uptime(self):
         elapsed = int(time.time() - self.start_time)
@@ -1244,21 +1274,57 @@ class MainMenu(QWidget):
             self.home_stack.setCurrentIndex(1)
 
     def _on_setup_lets_go(self):
+        cameras = list_cameras()
+        saved_cam = get_camera_index()
+        self.camera_guide.populate_cameras(cameras)
+        self.camera_guide.set_camera_index(saved_cam)
+        self._refresh_cameras()
+        for i in range(self.camera_combo.count()):
+            if self.camera_combo.itemData(i) == saved_cam:
+                self.camera_combo.blockSignals(True)
+                self.camera_combo.setCurrentIndex(i)
+                self.camera_combo.blockSignals(False)
+                break
+        self._start_preview()
         self.home_stack.setCurrentIndex(2)
+
+    def _on_camera_back(self):
+        self._stop_preview()
+        self.home_stack.setCurrentIndex(1)
+
+    def _on_camera_continue(self):
+        cam = self.camera_guide.get_selected_camera()
+        set_camera_index(cam)
+        self.game_mode_widget.set_camera_index(cam)
+        for i in range(self.camera_combo.count()):
+            if self.camera_combo.itemData(i) == cam:
+                self.camera_combo.blockSignals(True)
+                self.camera_combo.setCurrentIndex(i)
+                self.camera_combo.blockSignals(False)
+                break
+        self.home_stack.setCurrentIndex(3)
+
+    def _on_setup_camera_select(self, cam_idx: int):
+        self._stop_preview()
+        for i in range(self.camera_combo.count()):
+            if self.camera_combo.itemData(i) == cam_idx:
+                self.camera_combo.blockSignals(True)
+                self.camera_combo.setCurrentIndex(i)
+                self.camera_combo.blockSignals(False)
+                break
         self._start_preview()
 
     def _on_distance_continue(self):
-        self.home_stack.setCurrentIndex(3)
+        self.home_stack.setCurrentIndex(4)
 
     def _on_distance_back(self):
         self._optimal_since = None
-        self._stop_preview()
-        self.home_stack.setCurrentIndex(1)
+        self.home_stack.setCurrentIndex(2)
 
     def _on_zone_back(self):
         self._zone_hold_since = None
         self._zone_pending = None
-        self.home_stack.setCurrentIndex(2)
+        self.home_stack.setCurrentIndex(3)
 
     def _on_zone_continue(self):
         self._zone_hold_since = None
@@ -1292,6 +1358,8 @@ class MainMenu(QWidget):
     @Slot(object)
     def _on_preview_frame(self, image):
         pixmap = QPixmap.fromImage(image)
+        if hasattr(self, "camera_guide"):
+            self.camera_guide.set_frame(pixmap)
         if hasattr(self, "calibration_guide"):
             self.calibration_guide.set_frame(pixmap)
         if hasattr(self, "zone_guide"):
@@ -1302,7 +1370,7 @@ class MainMenu(QWidget):
         if hasattr(self, "calibration_guide"):
             self.calibration_guide.set_distance(norm_dist, has_hand)
 
-        if self.home_stack.currentIndex() != 2:
+        if self.home_stack.currentIndex() != 3:
             return
 
         _TARGET = 0.18
@@ -1329,7 +1397,7 @@ class MainMenu(QWidget):
 
     @Slot(int, bool)
     def _on_preview_fingers(self, count, has_hand):
-        if self.home_stack.currentIndex() != 3:
+        if self.home_stack.currentIndex() != 4:
             self._zone_hold_since = None
             self._zone_pending = None
             return
@@ -1381,6 +1449,7 @@ class MainMenu(QWidget):
         self.controller.running_data.connect(self._on_running_data)
         self.controller.stopped_data.connect(self._on_stopped_data)
         self.controller.game_mode_changed.connect(self._on_controller_game_mode)
+        self.controller.distance_live.connect(self._update_distance_live)
         self.controller.start()
 
         self._is_running = True
@@ -1466,6 +1535,7 @@ class MainMenu(QWidget):
         self._last_camera_pixmap = None
         self.camera_label.setPixmap(QPixmap())
         self.camera_label.setText("LIVE CAMERA FEED")
+        self.dist_alert_lbl.setText("")
         if self.is_dark:
             self.camera_label.setStyleSheet("""
                 background: transparent;
@@ -1535,6 +1605,24 @@ class MainMenu(QWidget):
             'running': 'RUNNING', 'stopped': 'PAUSED', 'idle': 'IDLE',
         }
         self.info_cards["STATUS"].setText(labels.get(state, state.upper()))
+
+    @Slot(float, bool)
+    def _update_distance_live(self, dist: float, has_hand: bool):
+        _TARGET = 0.18
+        _TOL    = 0.03
+        base = "font-size: 8px; font-weight: 700; letter-spacing: 1.2px; background: transparent; border: none;"
+        if not has_hand:
+            self.dist_alert_lbl.setText("● NO HAND")
+            self.dist_alert_lbl.setStyleSheet(f"color: #888888; {base}")
+        elif abs(dist - _TARGET) <= _TOL:
+            self.dist_alert_lbl.setText("● OPTIMAL")
+            self.dist_alert_lbl.setStyleSheet(f"color: #00cc66; {base}")
+        elif dist < _TARGET - _TOL:
+            self.dist_alert_lbl.setText("● TOO FAR")
+            self.dist_alert_lbl.setStyleSheet(f"color: #cc8800; {base}")
+        else:
+            self.dist_alert_lbl.setText("● TOO CLOSE")
+            self.dist_alert_lbl.setStyleSheet(f"color: #cc8800; {base}")
 
     @Slot(str)
     def _on_error(self, msg: str):

@@ -31,7 +31,7 @@ from PySide6.QtCore import Qt, QThread, Signal, QEventLoop
 from PySide6.QtGui import QImage, QPixmap
 
 PIPELINE_DIR = os.path.dirname(os.path.abspath(__file__))
-TASK_PATH    = os.path.join(PIPELINE_DIR, 'hand_landmarker.task')
+TASK_PATH    = os.path.join(PIPELINE_DIR, 'data', 'hand_landmarker.task')
 
 HAND_CONNECTIONS = [
     (0,1),(1,2),(2,3),(3,4),
@@ -103,11 +103,11 @@ def banner(text):
 
 def diversity_hint(count, diversity_every):
     hints = [
-        "vary your DISTANCE — move closer or further",
-        "vary your HEIGHT — raise or lower your hand",
-        "vary your ANGLE — tilt your wrist slightly",
-        "vary your POSITION — move left/right in frame",
-        "vary your LIGHTING — try different brightness",
+        "vary your DISTANCE - move closer or further",
+        "vary your HEIGHT - raise or lower your hand",
+        "vary your ANGLE - tilt your wrist slightly",
+        "vary your POSITION - move left/right in frame",
+        "vary your LIGHTING - try different brightness",
     ]
     return hints[(count // diversity_every) % len(hints)]
 
@@ -146,7 +146,6 @@ def wrist_dist(lms, last_pos):
     return math.sqrt(dx*dx + dy*dy)
 
 def draw_landmarks_collect(frame, lms, w, h):
-    """Draw hand skeleton overlay on a numpy RGB frame (cv2 drawing, not UI)."""
     pts = [(int(lm.x * w), int(lm.y * h)) for lm in lms]
     for a, b in HAND_CONNECTIONS:
         cv2.line(frame, pts[a], pts[b], (0, 200, 255), 1, cv2.LINE_AA)
@@ -173,7 +172,6 @@ def _qlabel(text, color=_TEXT, size=11, bold=False):
     return lbl
 
 class _CameraWorker(QThread):
-    """Background thread: capture frames + run MediaPipe IMAGE-mode detection."""
     frame_ready = Signal(object, object)  
 
     def __init__(self, task_path=None, cam_idx=0):
@@ -213,7 +211,6 @@ class _CameraWorker(QThread):
         detector.close()
 
 class CollectionWindow(QWidget):
-    """PySide6 gesture collection window — no cv2.imshow."""
 
     closed_sig = Signal()
 
@@ -391,7 +388,7 @@ class CollectionWindow(QWidget):
                 self.confirm_delete = False
                 state = "started" if self.collecting else "stopped"
                 g     = self.gestures[self.current_label]
-                print(f"Recording {state} — {g}  ({self.counts[g]} samples)")
+                print(f"Recording {state} - {g}  ({self.counts[g]} samples)")
 
         elif key == Qt.Key_D:
             if self.current_label is None:
@@ -467,7 +464,7 @@ def compute_delta(current, previous):
     return [c - p for c, p in zip(current, previous)]
 
 def run_preprocess(cfg):
-    banner("STEP 2 — PREPROCESSING")
+    banner("STEP 2 - PREPROCESSING")
     raw_path = cfg['raw_csv']
     out_path = cfg['processed_csv']
 
@@ -548,14 +545,13 @@ class GestureNet(nn.Module):
         return self.net(x)
 
 def run_training(cfg):
-    banner("STEP 3 — TRAINING")
+    banner("STEP 3 - TRAINING")
     data_path = cfg['processed_csv']
 
     if not os.path.exists(data_path):
         print(f"ERROR: {data_path} not found. Run preprocess first.")
         return None, None, None
 
-    # Redirect model output to data/custom/ to avoid overwriting originals
     _data_dir        = os.path.dirname(cfg['model_out'])
     _custom_dir      = os.path.join(_data_dir, 'custom')
     os.makedirs(_custom_dir, exist_ok=True)
@@ -682,7 +678,6 @@ def run_training(cfg):
     return flagged_idx, weak_gestures, flagged_meta
 
 def _render_hand_pixmap(lms_array, W=400, H=400):
-    """Render a 21×3 hand landmark array to a QPixmap (cv2 drawing → QImage)."""
     img = np.zeros((H, W, 3), dtype=np.uint8)
     img[:] = (15, 15, 22)
 
@@ -720,7 +715,6 @@ def _render_hand_pixmap(lms_array, W=400, H=400):
     return QPixmap.fromImage(qimg)
 
 class VisualizerWindow(QWidget):
-    """PySide6 sample review window — no cv2.imshow."""
 
     closed_sig = Signal()
 
@@ -855,7 +849,7 @@ class VisualizerWindow(QWidget):
         return self.to_remove
 
 def run_collection(cfg, target_gestures=None):
-    banner(f"STEP 1 — DATA COLLECTION  [{cfg['project']}]")
+    banner(f"STEP 1 - DATA COLLECTION  [{cfg['project']}]")
     gestures = cfg['gestures']
     if target_gestures:
         gestures = [g for g in gestures if g in target_gestures]
@@ -887,14 +881,14 @@ def run_collection(cfg, target_gestures=None):
 
 def run_visualizer(cfg, flagged_indices, flagged_meta):
     if not flagged_indices:
-        banner("No flagged samples — skipping review")
+        banner("No flagged samples - skipping review")
         return False
 
     csv_path     = cfg['processed_csv']
     df           = pd.read_csv(csv_path)
     feature_cols = [c for c in df.columns if c != 'label']
 
-    banner(f"STEP 4 — REVIEW  ({len(flagged_indices)} flagged samples)")
+    banner(f"STEP 4 - REVIEW  ({len(flagged_indices)} flagged samples)")
 
     loop = QEventLoop()
     win  = VisualizerWindow(cfg, flagged_indices, flagged_meta, df, feature_cols)
@@ -910,7 +904,7 @@ def run_visualizer(cfg, flagged_indices, flagged_meta):
     tmp = csv_path + '.tmp'
     df.drop(index=to_remove).reset_index(drop=True).to_csv(tmp, index=False)
     shutil.move(tmp, csv_path)
-    banner(f"Removed {len(to_remove)} samples — {len(df) - len(to_remove)} remaining")
+    banner(f"Removed {len(to_remove)} samples - {len(df) - len(to_remove)} remaining")
     return True
 
 def main():

@@ -69,9 +69,10 @@ class MainMenuSetup(QWidget):
         progress_row.setAlignment(Qt.AlignVCenter)
 
         progress_steps = [
-            ("01", "GUIDE", "active"),
-            ("02", "CALIBRATE", "idle"),
-            ("03", "ZONE", "idle"),
+            ("01", "GUIDE",     "active"),
+            ("02", "CAMERA",    "idle"),
+            ("03", "CALIBRATE", "idle"),
+            ("04", "ZONE",      "idle"),
         ]
 
         self.progress_steps_data = []
@@ -111,7 +112,7 @@ class MainMenuSetup(QWidget):
         content_layout.setContentsMargins(24, 20, 20, 24)
         content_layout.setSpacing(8)
 
-        self.meta = QLabel("01 / 05 - SETUP GUIDE")
+        self.meta = QLabel("01 / 04 - SETUP GUIDE")
         content_layout.addWidget(self.meta)
 
         self.title = QLabel("Quick setup - 4 easy steps")
@@ -128,16 +129,16 @@ class MainMenuSetup(QWidget):
 
         steps = [
             (
+                "Camera Setup",
+                "Confirm your camera input and verify the live preview",
+            ),
+            (
                 "Distance Check",
                 "Hold your hand at arm's length until the bar turns green - confirms optimal tracking depth",
             ),
             (
                 "Zone Setup",
                 "Pick Small, Medium or Large tracking zone - controls cursor sensitivity across your screen",
-            ),
-            (
-                "Camera Setup",
-                "Confirm your camera input and check resolution, frame rate and permissions",
             ),
             (
                 "Start Tracking",

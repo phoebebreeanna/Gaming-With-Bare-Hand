@@ -1,20 +1,21 @@
 import contextlib
 import io
 import os
+import time
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QPushButton, QTextEdit, QSizePolicy,
+    QLabel, QPushButton, QTextEdit, QSizePolicy, QStackedWidget, QScrollArea,
 )
 from PySide6.QtCore import Qt, Signal, QThread
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QPixmap, QImage
 
 _LOGIC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logic")
 
 CONF_MAP = {
-    "Mouse":  os.path.join(_LOGIC_DIR, "mouse_control.conf"),
-    "Subway": os.path.join(_LOGIC_DIR, "subway_surfers.conf"),
-    "Racing": os.path.join(_LOGIC_DIR, "racing.conf"),
+    "Mouse":  os.path.join(_LOGIC_DIR, "conf", "mouse_control.conf"),
+    "Subway": os.path.join(_LOGIC_DIR, "conf", "subway_surfers.conf"),
+    "Racing": os.path.join(_LOGIC_DIR, "conf", "racing.conf"),
 }
 
 class _SignalIO(io.RawIOBase):
@@ -63,7 +64,12 @@ class _Worker(QThread):
 
 class PipelineUI(QWidget):
     on_menu_toggle    = Signal()
-    training_complete = Signal()    # emitted after a successful train run
+    training_complete = Signal()
+
+    _PAGE_IDLE    = 0
+    _PAGE_COLLECT = 1
+    _PAGE_LOG     = 2
+    _PAGE_REVIEW  = 3
 
     def __init__(self, is_dark=False):
         super().__init__()
@@ -74,10 +80,22 @@ class PipelineUI(QWidget):
         self._training_result = None
         self._epoch           = 0
         self._total_epochs    = 0
+        self._raw_ready       = False
+        self._processed_ready = False
+        self._trained         = False
 
-        self._raw_ready       = False   
-        self._processed_ready = False   
-        self._trained         = False   
+        self._collect = {
+            'worker': None, 'cfg': None, 'counts': {},
+            'current_label': None, 'collecting': False,
+            'last_saved_pos': None, 'csv_file': None, 'csv_writer': None,
+            'confirm_delete': False, 'confirm_timer': 0.0,
+        }
+        self._review = {
+            'current_idx': 0, 'flagged_idx': [], 'flagged_meta': [],
+            'df': None, 'feature_cols': [], 'to_remove': [],
+        }
+        self._review_pixmap = None
+
         self.init_ui()
         self._load_conf()
         self.apply_theme(is_dark)
@@ -118,8 +136,8 @@ class PipelineUI(QWidget):
 
         content = QWidget()
         cl = QVBoxLayout(content)
-        cl.setContentsMargins(24, 16, 24, 16)
-        cl.setSpacing(10)
+        cl.setContentsMargins(24, 12, 24, 12)
+        cl.setSpacing(8)
 
         title_row = QHBoxLayout()
         title_row.setSpacing(6)
@@ -136,14 +154,213 @@ class PipelineUI(QWidget):
             title_row.addWidget(btn)
         cl.addLayout(title_row)
 
-        body = QHBoxLayout()
-        body.setSpacing(12)
+        self.top_stack = QStackedWidget()
+        cl.addWidget(self.top_stack, stretch=3)
+        self._build_idle_page()
+        self._build_collect_page()
+        self._build_log_page()
+        self._build_review_page()
 
+        bottom_row = QHBoxLayout()
+        bottom_row.setSpacing(12)
+        bottom_row.addWidget(self._build_counts_panel(), stretch=1)
+        bottom_row.addWidget(self._build_steps_panel(), stretch=1)
+        cl.addLayout(bottom_row, stretch=2)
+
+        self.progress_label = QLabel("TRAINING  ·  0 / 0")
+        self.progress_label.hide()
+        cl.addWidget(self.progress_label)
+
+        self.progress_bar_bg = QWidget()
+        self.progress_bar_bg.setFixedHeight(4)
+        self.progress_bar_bg.hide()
+        self.progress_bar_fill = QWidget(self.progress_bar_bg)
+        self.progress_bar_fill.setGeometry(0, 0, 0, 4)
+        cl.addWidget(self.progress_bar_bg)
+
+        root.addWidget(content, stretch=1)
+
+    def _build_idle_page(self):
+        page = QWidget()
+        pl = QVBoxLayout(page)
+        pl.setAlignment(Qt.AlignCenter)
+        self._idle_lbl = QLabel("SELECT A STEP BELOW TO BEGIN")
+        self._idle_lbl.setAlignment(Qt.AlignCenter)
+        pl.addWidget(self._idle_lbl)
+        self.top_stack.addWidget(page)
+
+    def _build_collect_page(self):
+        page = QWidget()
+        ph = QHBoxLayout(page)
+        ph.setContentsMargins(0, 0, 0, 0)
+        ph.setSpacing(8)
+
+        self._collect_cam_lbl = QLabel("Loading camera…")
+        self._collect_cam_lbl.setAlignment(Qt.AlignCenter)
+        self._collect_cam_lbl.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
+        ph.addWidget(self._collect_cam_lbl, stretch=1)
+
+        self._collect_ctrl = QWidget()
+        self._collect_ctrl.setFixedWidth(210)
+        cv = QVBoxLayout(self._collect_ctrl)
+        cv.setContentsMargins(10, 10, 10, 10)
+        cv.setSpacing(6)
+
+        self._collect_status = QLabel("SELECT A GESTURE")
+        self._collect_status.setWordWrap(True)
+        cv.addWidget(self._collect_status)
+
+        self._collect_sep1 = QWidget()
+        self._collect_sep1.setFixedHeight(1)
+        cv.addWidget(self._collect_sep1)
+
+        self._gesture_btns_container = QWidget()
+        self._gesture_btns_layout = QVBoxLayout(self._gesture_btns_container)
+        self._gesture_btns_layout.setContentsMargins(0, 0, 0, 0)
+        self._gesture_btns_layout.setSpacing(4)
+        self._gesture_btns = {}
+
+        self._collect_scroll = QScrollArea()
+        self._collect_scroll.setWidgetResizable(True)
+        self._collect_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._collect_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self._collect_scroll.setFrameShape(QScrollArea.NoFrame)
+        self._collect_scroll.setWidget(self._gesture_btns_container)
+        cv.addWidget(self._collect_scroll, stretch=1)
+
+        self._collect_sep2 = QWidget()
+        self._collect_sep2.setFixedHeight(1)
+        cv.addWidget(self._collect_sep2)
+
+        self._record_btn = QPushButton("RECORD")
+        self._record_btn.setFixedHeight(32)
+        self._record_btn.setCursor(Qt.PointingHandCursor)
+        self._record_btn.clicked.connect(self._toggle_recording)
+        cv.addWidget(self._record_btn)
+
+        self._delete_btn = QPushButton("DELETE GESTURE")
+        self._delete_btn.setFixedHeight(28)
+        self._delete_btn.setCursor(Qt.PointingHandCursor)
+        self._delete_btn.clicked.connect(self._on_delete_gesture)
+        cv.addWidget(self._delete_btn)
+
+        self._collect_done_btn = QPushButton("DONE")
+        self._collect_done_btn.setFixedHeight(32)
+        self._collect_done_btn.setCursor(Qt.PointingHandCursor)
+        self._collect_done_btn.clicked.connect(self._finish_collect)
+        cv.addWidget(self._collect_done_btn)
+
+        ph.addWidget(self._collect_ctrl)
+        self.top_stack.addWidget(page)
+
+    def _build_log_page(self):
+        page = QWidget()
+        pl = QVBoxLayout(page)
+        pl.setContentsMargins(0, 0, 0, 0)
+        pl.setSpacing(4)
+        self._log_hdr = QLabel("LOG OUTPUT")
+        pl.addWidget(self._log_hdr)
+        self._log_sep = QWidget()
+        self._log_sep.setFixedHeight(1)
+        pl.addWidget(self._log_sep)
+        self.log_area = QTextEdit()
+        self.log_area.setReadOnly(True)
+        self.log_area.setFont(QFont("Courier New", 9))
+        pl.addWidget(self.log_area, stretch=1)
+        self.top_stack.addWidget(page)
+
+    def _build_review_page(self):
+        page = QWidget()
+        ph = QHBoxLayout(page)
+        ph.setContentsMargins(0, 0, 0, 0)
+        ph.setSpacing(8)
+
+        self._review_hand_lbl = QLabel()
+        self._review_hand_lbl.setAlignment(Qt.AlignCenter)
+        self._review_hand_lbl.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
+        ph.addWidget(self._review_hand_lbl, stretch=1)
+
+        self._review_ctrl = QWidget()
+        self._review_ctrl.setFixedWidth(210)
+        rv = QVBoxLayout(self._review_ctrl)
+        rv.setContentsMargins(10, 10, 10, 10)
+        rv.setSpacing(6)
+
+        _review_info = QWidget()
+        _review_info_layout = QVBoxLayout(_review_info)
+        _review_info_layout.setContentsMargins(0, 0, 0, 0)
+        _review_info_layout.setSpacing(6)
+
+        self._review_counter = QLabel("0 / 0")
+        _review_info_layout.addWidget(self._review_counter)
+
+        self._review_badge = QLabel("")
+        _review_info_layout.addWidget(self._review_badge)
+
+        self._review_sep1 = QWidget()
+        self._review_sep1.setFixedHeight(1)
+        _review_info_layout.addWidget(self._review_sep1)
+
+        self._review_true_hdr = QLabel("TRUE LABEL")
+        _review_info_layout.addWidget(self._review_true_hdr)
+        self._review_true = QLabel("")
+        _review_info_layout.addWidget(self._review_true)
+
+        self._review_pred_hdr = QLabel("PREDICTED")
+        _review_info_layout.addWidget(self._review_pred_hdr)
+        self._review_pred = QLabel("")
+        _review_info_layout.addWidget(self._review_pred)
+
+        self._review_conf_hdr = QLabel("CONFIDENCE")
+        _review_info_layout.addWidget(self._review_conf_hdr)
+        self._review_conf = QLabel("")
+        _review_info_layout.addWidget(self._review_conf)
+
+        _review_info_layout.addStretch()
+
+        self._review_scroll = QScrollArea()
+        self._review_scroll.setWidgetResizable(True)
+        self._review_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._review_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self._review_scroll.setFrameShape(QScrollArea.NoFrame)
+        self._review_scroll.setWidget(_review_info)
+        rv.addWidget(self._review_scroll, stretch=1)
+
+        self._review_sep2 = QWidget()
+        self._review_sep2.setFixedHeight(1)
+        rv.addWidget(self._review_sep2)
+
+        self._review_removed = QLabel("0 marked for removal")
+        rv.addWidget(self._review_removed)
+
+        btns_row = QHBoxLayout()
+        btns_row.setSpacing(6)
+        self._keep_btn = QPushButton("KEEP")
+        self._keep_btn.setFixedHeight(32)
+        self._keep_btn.setCursor(Qt.PointingHandCursor)
+        self._keep_btn.clicked.connect(self._review_keep)
+        btns_row.addWidget(self._keep_btn)
+        self._remove_btn = QPushButton("REMOVE")
+        self._remove_btn.setFixedHeight(32)
+        self._remove_btn.setCursor(Qt.PointingHandCursor)
+        self._remove_btn.clicked.connect(self._review_remove)
+        btns_row.addWidget(self._remove_btn)
+        rv.addLayout(btns_row)
+
+        self._review_done_btn = QPushButton("DONE")
+        self._review_done_btn.setFixedHeight(32)
+        self._review_done_btn.setCursor(Qt.PointingHandCursor)
+        self._review_done_btn.clicked.connect(self._finish_review)
+        rv.addWidget(self._review_done_btn)
+
+        ph.addWidget(self._review_ctrl)
+        self.top_stack.addWidget(page)
+
+    def _build_counts_panel(self):
         self.counts_panel = QWidget()
-        self.counts_panel.setMinimumWidth(220)
-        self.counts_panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+        self.counts_panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
         cp = QVBoxLayout(self.counts_panel)
-        cp.setContentsMargins(14, 12, 14, 12)
+        cp.setContentsMargins(14, 10, 14, 10)
         cp.setSpacing(6)
 
         hdr_row = QHBoxLayout()
@@ -168,13 +385,13 @@ class PipelineUI(QWidget):
         self._gc_layout.setSpacing(2)
         cp.addWidget(self._gesture_container)
         cp.addStretch()
+        return self.counts_panel
 
-        body.addWidget(self.counts_panel, stretch=1)
-
+    def _build_steps_panel(self):
         self.steps_panel = QWidget()
-        self.steps_panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+        self.steps_panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
         sp = QVBoxLayout(self.steps_panel)
-        sp.setContentsMargins(14, 12, 14, 12)
+        sp.setContentsMargins(14, 10, 14, 10)
         sp.setSpacing(0)
 
         self._steps_hdr = QLabel("PIPELINE STEPS")
@@ -182,9 +399,9 @@ class PipelineUI(QWidget):
         self._steps_sep = QWidget()
         self._steps_sep.setFixedHeight(1)
         sp.addWidget(self._steps_sep)
-        sp.addSpacing(6)
+        sp.addSpacing(4)
 
-        self._step_widgets = {}  
+        self._step_widgets = {}
         for key, label, note in [
             ("collect",    "01  ·  COLLECT DATA",    "Collect gesture samples with your camera"),
             ("preprocess", "02  ·  PREPROCESS",      "Requires: collected data"),
@@ -192,7 +409,7 @@ class PipelineUI(QWidget):
             ("review",     "04  ·  REVIEW SAMPLES",  "Requires: completed training"),
         ]:
             row = QWidget()
-            row.setFixedHeight(52)
+            row.setFixedHeight(48)
             rl = QHBoxLayout(row)
             rl.setContentsMargins(12, 0, 12, 0)
             rl.setSpacing(10)
@@ -225,33 +442,7 @@ class PipelineUI(QWidget):
             sp.addWidget(sep)
 
         sp.addStretch()
-        body.addWidget(self.steps_panel, stretch=1)
-        cl.addLayout(body)
-
-        self.progress_label = QLabel("TRAINING  ·  0 / 0")
-        self.progress_label.hide()
-        cl.addWidget(self.progress_label)
-
-        self.progress_bar_bg = QWidget()
-        self.progress_bar_bg.setFixedHeight(5)
-        self.progress_bar_bg.hide()
-        self.progress_bar_fill = QWidget(self.progress_bar_bg)
-        self.progress_bar_fill.setGeometry(0, 0, 0, 5)
-        cl.addWidget(self.progress_bar_bg)
-
-        self._log_hdr = QLabel("LOG OUTPUT")
-        cl.addWidget(self._log_hdr)
-        self._log_sep = QWidget()
-        self._log_sep.setFixedHeight(1)
-        cl.addWidget(self._log_sep)
-
-        self.log_area = QTextEdit()
-        self.log_area.setReadOnly(True)
-        self.log_area.setMinimumHeight(120)
-        self.log_area.setFont(QFont("Courier New", 9))
-        cl.addWidget(self.log_area, stretch=1)
-
-        root.addWidget(content, stretch=1)
+        return self.steps_panel
 
     def _load_conf(self):
         from logic.gesture_pipeline import load_conf
@@ -266,12 +457,10 @@ class PipelineUI(QWidget):
         self._refresh_counts()
 
     def _refresh_counts(self):
-
         while self._gc_layout.count():
             item = self._gc_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
-
         self._gesture_rows = []
 
         if not self._cfg:
@@ -283,8 +472,7 @@ class PipelineUI(QWidget):
         from logic.gesture_pipeline import count_existing
         counts = count_existing(self._cfg['raw_csv'], self._cfg['gestures'])
         target = self._cfg['target']
-        total_collected = sum(counts.values())
-        self._raw_ready = total_collected > 0
+        self._raw_ready = sum(counts.values()) > 0
         self._processed_ready = (
             os.path.exists(self._cfg['processed_csv']) and
             os.path.getsize(self._cfg['processed_csv']) > 0
@@ -296,7 +484,7 @@ class PipelineUI(QWidget):
             frac = min(n / target, 1.0)
 
             row = QWidget()
-            row.setFixedHeight(34)
+            row.setFixedHeight(32)
             rl = QHBoxLayout(row)
             rl.setContentsMargins(10, 4, 10, 4)
             rl.setSpacing(8)
@@ -358,6 +546,8 @@ class PipelineUI(QWidget):
             self.apply_theme(self.is_dark)
 
     def _switch_mode(self, mode):
+        if self._collect['worker'] is not None:
+            self._finish_collect()
         self.current_mode = mode
         self._log(f"Switched to {mode} mode.")
         self._load_conf()
@@ -381,29 +571,205 @@ class PipelineUI(QWidget):
     def _on_step_click(self, key: str):
         if not self._step_widgets[key]["row"].isEnabled():
             return
-        actions = {
-            "collect":    self._on_collect,
-            "preprocess": self._on_preprocess,
-            "train":      self._on_train,
-            "review":     self._on_review,
-        }
-        actions[key]()
+        {"collect": self._on_collect, "preprocess": self._on_preprocess,
+         "train": self._on_train, "review": self._on_review}[key]()
 
     def _on_collect(self):
-        if not self._cfg:
+        if not self._cfg or self._collect['worker'] is not None:
             return
-        from logic.gesture_pipeline import run_collection
-        self._log(f"Opening collection window for [{self._cfg['project']}] ...")
+        from logic.gesture_pipeline import _CameraWorker, _open_csv, count_existing
+
+        cfg = self._cfg
+        self._collect['cfg'] = cfg
+        self._collect['counts'] = count_existing(cfg['raw_csv'], cfg['gestures'])
+        self._collect['current_label'] = None
+        self._collect['collecting'] = False
+        self._collect['last_saved_pos'] = None
+        self._collect['confirm_delete'] = False
+
+        fh, cw = _open_csv(cfg['raw_csv'], cfg['gestures'])
+        self._collect['csv_file'] = fh
+        self._collect['csv_writer'] = cw
+
+        while self._gesture_btns_layout.count():
+            item = self._gesture_btns_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        self._gesture_btns = {}
+        for i, g in enumerate(cfg['gestures']):
+            btn = QPushButton(f"{i}  {g}")
+            btn.setFixedHeight(28)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.clicked.connect(lambda _, idx=i: self._select_gesture(idx))
+            self._gesture_btns[g] = btn
+            self._gesture_btns_layout.addWidget(btn)
+
+        self._update_collect_ui()
+        self.top_stack.setCurrentIndex(self._PAGE_COLLECT)
+
+        cam_idx = 0
         try:
-            run_collection(self._cfg)
-        except Exception as exc:
-            self._log(f"Collection error: {exc}")
+            from logic.app_config import get_camera_index
+            cam_idx = get_camera_index()
+        except Exception:
+            pass
+
+        worker = _CameraWorker(cam_idx=cam_idx)
+        worker.frame_ready.connect(self._on_collect_frame)
+        self._collect['worker'] = worker
+        worker.start()
+
+        for w in self._step_widgets.values():
+            w["row"].setEnabled(False)
+
+    def _select_gesture(self, idx: int):
+        self._collect['collecting'] = False
+        self._collect['current_label'] = idx
+        self._collect['last_saved_pos'] = None
+        self._collect['confirm_delete'] = False
+        self._delete_btn.setText("DELETE GESTURE")
+        self._update_collect_ui()
+
+    def _toggle_recording(self):
+        c = self._collect
+        if c['current_label'] is None:
+            self._collect_status.setText("SELECT A GESTURE FIRST")
+            return
+        c['collecting'] = not c['collecting']
+        c['last_saved_pos'] = None
+        c['confirm_delete'] = False
+        self._delete_btn.setText("DELETE GESTURE")
+        self._update_collect_ui()
+
+    def _on_delete_gesture(self):
+        c = self._collect
+        if c['current_label'] is None:
+            self._collect_status.setText("SELECT A GESTURE FIRST")
+            return
+        if not c['confirm_delete']:
+            c['confirm_delete'] = True
+            c['confirm_timer'] = time.time()
+            c['collecting'] = False
+            g = self._cfg['gestures'][c['current_label']]
+            self._delete_btn.setText("CONFIRM DELETE")
+            self._collect_status.setText(f"Tap again to delete '{g}'")
+        else:
+            from logic.gesture_pipeline import delete_label_from_csv, _open_csv
+            g = self._cfg['gestures'][c['current_label']]
+            c['collecting'] = False
+            c['csv_file'].flush()
+            c['csv_file'].close()
+            removed = delete_label_from_csv(self._cfg['raw_csv'], g)
+            c['counts'][g] = 0
+            c['confirm_delete'] = False
+            c['csv_file'], c['csv_writer'] = _open_csv(self._cfg['raw_csv'], self._cfg['gestures'])
+            self._delete_btn.setText("DELETE GESTURE")
+            self._collect_status.setText(f"Deleted {removed} rows for '{g}'")
+            self._update_collect_ui()
+
+    def _update_collect_ui(self):
+        c = self._collect
+        cfg = c['cfg']
+        target = cfg['target'] if cfg else 0
+
+        if c['confirm_delete'] and c['current_label'] is not None:
+            g   = cfg['gestures'][c['current_label']]
+            rem = max(0.0, 3.0 - (time.time() - c['confirm_timer']))
+            self._collect_status.setText(f"Confirm delete '{g}' ({rem:.0f}s)")
+        elif c['collecting'] and c['current_label'] is not None:
+            g = cfg['gestures'][c['current_label']]
+            n = c['counts'].get(g, 0)
+            self._collect_status.setText(f"● RECORDING  {g}\n[{n} / {target}]")
+        elif c['current_label'] is not None:
+            g = cfg['gestures'][c['current_label']]
+            n = c['counts'].get(g, 0)
+            self._collect_status.setText(f"Ready · {g}\n[{n} / {target}]")
+        else:
+            self._collect_status.setText("SELECT A GESTURE")
+
+        self._record_btn.setText("STOP RECORDING" if c['collecting'] else "RECORD")
+
+        gestures = cfg['gestures'] if cfg else []
+        for g, btn in self._gesture_btns.items():
+            n = c['counts'].get(g, 0)
+            done = n >= target if target else False
+            idx = gestures.index(g) if g in gestures else 0
+            btn.setText(f"{idx}  {g}  [{n}/{target}]")
+
+        if hasattr(self, '_theme_ready'):
+            self.apply_theme(self.is_dark)
+
+    def _on_collect_frame(self, frame_bgr, result):
+        import cv2
+        from logic.gesture_pipeline import wrist_dist, draw_landmarks_collect
+
+        c = self._collect
+        cfg = c['cfg']
+        if cfg is None:
+            return
+
+        has_hand = bool(result and result.hand_landmarks)
+        lms = result.hand_landmarks[0] if has_hand else None
+
+        if c['confirm_delete'] and (time.time() - c['confirm_timer']) > 3.0:
+            c['confirm_delete'] = False
+            self._delete_btn.setText("DELETE GESTURE")
+            self._update_collect_ui()
+
+        if lms and c['collecting'] and c['current_label'] is not None:
+            wx, wy = lms[0].x, lms[0].y
+            row = []
+            for lm in lms:
+                row.extend([lm.x - wx, lm.y - wy, lm.z - lms[0].z])
+            dist  = wrist_dist(lms, c['last_saved_pos'])
+            moved = (dist == float('inf') or dist >= cfg['min_record_dist'])
+            if moved:
+                c['csv_writer'].writerow(row + [cfg['gestures'][c['current_label']]])
+                c['csv_file'].flush()
+                g = cfg['gestures'][c['current_label']]
+                c['counts'][g] = c['counts'].get(g, 0) + 1
+                c['last_saved_pos'] = (lms[0].x, lms[0].y)
+                self._update_collect_ui()
+
+        if not lms:
+            c['last_saved_pos'] = None
+
+        display = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+        h, w = display.shape[:2]
+        if lms:
+            draw_landmarks_collect(display, lms, w, h)
+            if c['collecting'] and c['current_label'] is not None:
+                g = cfg['gestures'][c['current_label']]
+                n = c['counts'].get(g, 0)
+                bar_w = int((min(n, cfg['target']) / max(cfg['target'], 1)) * (w - 20))
+                cv2.rectangle(display, (10, h - 26), (w - 10, h - 10), (40, 40, 40), -1)
+                cv2.rectangle(display, (10, h - 26), (10 + bar_w, h - 10), (0, 180, 100), -1)
+
+        qimg = QImage(display.data, w, h, 3 * w, QImage.Format_RGB888).copy()
+        pixmap = QPixmap.fromImage(qimg)
+        size = self._collect_cam_lbl.size()
+        if size.width() > 0 and size.height() > 0:
+            self._collect_cam_lbl.setPixmap(
+                pixmap.scaled(size, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+
+    def _finish_collect(self):
+        c = self._collect
+        if c['worker'] and c['worker'].isRunning():
+            c['worker'].stop()
+            c['worker'].wait(2000)
+        c['worker'] = None
+        c['collecting'] = False
+        if c['csv_file'] and not c['csv_file'].closed:
+            c['csv_file'].close()
+        c['csv_file'] = None
+        c['csv_writer'] = None
+        self.top_stack.setCurrentIndex(self._PAGE_IDLE)
         self._refresh_counts()
-        self._log("Collection window closed.")
 
     def _on_preprocess(self):
         if not self._cfg:
             return
+        self.top_stack.setCurrentIndex(self._PAGE_LOG)
         self._set_busy(True)
         self._log("Starting preprocessing ...")
         from logic.gesture_pipeline import run_preprocess
@@ -420,16 +786,17 @@ class PipelineUI(QWidget):
     def _on_train(self):
         if not self._cfg:
             return
+        self.top_stack.setCurrentIndex(self._PAGE_LOG)
         self._set_busy(True)
         self._training_result = None
-        self._trained  = False
-        self._epoch    = 0
+        self._trained = False
+        self._epoch = 0
         self._total_epochs = self._cfg['epochs']
         self.progress_label.setText(f"TRAINING  ·  0 / {self._total_epochs}")
         self.progress_label.show()
         self.progress_bar_bg.show()
         self._set_progress(0.0)
-        self._log(f"Starting training — {self._total_epochs} epochs ...")
+        self._log(f"Starting training - {self._total_epochs} epochs ...")
         from logic.gesture_pipeline import run_training
         import numpy as np
         np.random.seed(42)
@@ -448,8 +815,7 @@ class PipelineUI(QWidget):
                     try:
                         ep = int(parts[i + 1])
                         self._epoch = ep
-                        self.progress_label.setText(
-                            f"TRAINING  ·  {ep} / {self._total_epochs}")
+                        self.progress_label.setText(f"TRAINING  ·  {ep} / {self._total_epochs}")
                         self._set_progress(ep / max(self._total_epochs, 1))
                     except ValueError:
                         pass
@@ -468,14 +834,92 @@ class PipelineUI(QWidget):
         if not self._cfg or not self._training_result:
             self._log("Run training first to generate flagged samples.")
             return
-        from logic.gesture_pipeline import run_visualizer
+        import pandas as pd
+
         flagged_idx, _, flagged_meta = self._training_result
-        self._log(f"Opening review window ({len(flagged_idx)} flagged samples) ...")
-        try:
-            run_visualizer(self._cfg, flagged_idx, flagged_meta)
-        except Exception as exc:
-            self._log(f"Review error: {exc}")
-        self._log("Review complete.")
+        if not flagged_idx:
+            self._log("No flagged samples to review.")
+            return
+
+        df = pd.read_csv(self._cfg['processed_csv'])
+        feature_cols = [c for c in df.columns if c != 'label']
+
+        r = self._review
+        r['flagged_idx']  = flagged_idx
+        r['flagged_meta'] = flagged_meta
+        r['df']           = df
+        r['feature_cols'] = feature_cols
+        r['current_idx']  = 0
+        r['to_remove']    = []
+
+        self._show_review_sample(0)
+        self.top_stack.setCurrentIndex(self._PAGE_REVIEW)
+
+    def _show_review_sample(self, i: int):
+        from logic.gesture_pipeline import _render_hand_pixmap
+        import numpy as np
+
+        r = self._review
+        n = len(r['flagged_idx'])
+
+        if i >= n:
+            self._finish_review()
+            return
+
+        r['current_idx'] = i
+        orig_idx = r['flagged_idx'][i]
+        meta     = r['flagged_meta'][i]
+
+        row = r['df'].iloc[orig_idx]
+        lms = np.array([row[c] for c in r['feature_cols']][:63], dtype=np.float32).reshape(21, 3)
+
+        self._review_counter.setText(f"{i + 1} / {n}")
+        self._review_badge.setText(meta['status'])
+        self._review_true.setText(meta['true'])
+        self._review_pred.setText(meta['pred'])
+        self._review_conf.setText(f"{meta['conf']:.1%}")
+        self._review_removed.setText(f"{len(r['to_remove'])} marked for removal")
+
+        self._review_pixmap = _render_hand_pixmap(lms)
+        self._scale_review_pixmap()
+
+        if hasattr(self, '_theme_ready'):
+            self.apply_theme(self.is_dark)
+
+    def _scale_review_pixmap(self):
+        if self._review_pixmap is None:
+            return
+        size = self._review_hand_lbl.size()
+        if size.width() > 0 and size.height() > 0:
+            self._review_hand_lbl.setPixmap(
+                self._review_pixmap.scaled(size, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        else:
+            self._review_hand_lbl.setPixmap(self._review_pixmap)
+
+    def _review_keep(self):
+        r = self._review
+        r['current_idx'] += 1
+        self._show_review_sample(r['current_idx'])
+
+    def _review_remove(self):
+        r = self._review
+        r['to_remove'].append(r['flagged_idx'][r['current_idx']])
+        r['current_idx'] += 1
+        self._show_review_sample(r['current_idx'])
+
+    def _finish_review(self):
+        import shutil
+        r = self._review
+        if r['to_remove'] and r['df'] is not None:
+            csv_path = self._cfg['processed_csv']
+            tmp = csv_path + '.tmp'
+            r['df'].drop(index=r['to_remove']).reset_index(drop=True).to_csv(tmp, index=False)
+            shutil.move(tmp, csv_path)
+            self._log(f"Removed {len(r['to_remove'])} samples.")
+        else:
+            self._log("Review complete - no samples removed.")
+        self._review_pixmap = None
+        self.top_stack.setCurrentIndex(self._PAGE_IDLE)
 
     def _step_done(self, msg: str):
         self._set_busy(False)
@@ -490,20 +934,20 @@ class PipelineUI(QWidget):
     def _set_progress(self, frac: float):
         w = self.progress_bar_bg.width()
         if w > 0:
-            self.progress_bar_fill.setGeometry(0, 0, int(frac * w), 5)
+            self.progress_bar_fill.setGeometry(0, 0, int(frac * w), 4)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if self.progress_bar_bg.isVisible() and self._total_epochs > 0:
             self._set_progress(self._epoch / self._total_epochs)
-
         for info in getattr(self, "_gesture_rows", []):
             w = info["bar_bg"].width()
             if w > 0:
                 info["bar_fill"].setGeometry(0, 0, int(info["frac"] * w), 6)
+        self._scale_review_pixmap()
 
     def apply_theme(self, is_dark: bool):
-        self.is_dark     = is_dark
+        self.is_dark      = is_dark
         self._theme_ready = True
 
         if is_dark:
@@ -512,16 +956,16 @@ class PipelineUI(QWidget):
             pri_bg = "#e8e8e8"; pri_txt = "#111111"; hover = "#161616"
             bar_fill_col = "#e8e8e8"; bar_bg_col = "#262626"
             log_bg = "#050508"; log_txt = "#9a9a9a"
-            success = "#00cc66"; locked_col = "#3a3a3a"
-            step_hover = "#1a1a1a"
+            success = "#00cc66"; locked_col = "#3a3a3a"; step_hover = "#1a1a1a"
+            warn = "#cc4444"; cam_bg = "#000000"
         else:
             bg   = "#F4F4F4"; panel = "#FFFFFF"; border = "#D8CEC7"
             text = "#111111"; dim   = "#6F655F"; muted  = "#B8B0AB"
             pri_bg = "#111111"; pri_txt = "#FFFFFF"; hover = "#EDE5DF"
             bar_fill_col = "#111111"; bar_bg_col = "#E8E0DA"
             log_bg = "#FAFAFA"; log_txt = "#4A4A4A"
-            success = "#00A36C"; locked_col = "#D8D0CA"
-            step_hover = "#F0EBE7"
+            success = "#00A36C"; locked_col = "#D8D0CA"; step_hover = "#F0EBE7"
+            warn = "#B44545"; cam_bg = "#000000"
 
         self.setStyleSheet(f"background-color: {bg};")
         self.header.setStyleSheet(f"background-color: {bg}; border-bottom: 1px solid {border};")
@@ -543,23 +987,174 @@ class PipelineUI(QWidget):
             f"color: {text}; font-size: 14px; font-weight: 800; letter-spacing: 1.5px; background: transparent; border: none;")
 
         for mode, btn in self.mode_tabs.items():
-            if mode == self.current_mode:
+            active = (mode == self.current_mode)
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {pri_bg if active else 'transparent'};
+                    color: {pri_txt if active else dim};
+                    border: 1px solid {pri_bg if active else border};
+                    font-size: 8px; font-weight: 700; letter-spacing: 1.3px; padding: 0 10px;
+                }}
+                {"" if active else f"QPushButton:hover {{ background-color: {hover}; color: {text}; }}"}
+            """)
+
+        self._idle_lbl.setStyleSheet(
+            f"color: {muted}; font-size: 11px; font-weight: 700; letter-spacing: 2px; background: transparent; border: none;")
+
+        self._collect_cam_lbl.setStyleSheet(f"background-color: {cam_bg}; border: 1px solid {border};")
+        self._collect_ctrl.setStyleSheet(f"background-color: {panel}; border: 1px solid {border};")
+        self._collect_scroll.setStyleSheet(f"background-color: {panel}; border: none;")
+        self._collect_scroll.viewport().setStyleSheet(f"background-color: {panel}; border: none;")
+        self._collect_sep1.setStyleSheet(f"background-color: {border};")
+        self._collect_sep2.setStyleSheet(f"background-color: {border};")
+
+        collecting = self._collect.get('collecting', False)
+        self._collect_status.setStyleSheet(
+            f"color: {warn if collecting else text}; font-size: 8px; font-weight: 700; "
+            f"letter-spacing: 1px; background: transparent; border: none;")
+
+        c   = self._collect
+        cfg = c.get('cfg')
+        gestures = cfg['gestures'] if cfg else []
+        target   = cfg['target'] if cfg else 0
+        cur_lbl  = c.get('current_label')
+        counts   = c.get('counts', {})
+
+        for g, btn in self._gesture_btns.items():
+            n       = counts.get(g, 0)
+            done    = n >= target if target else False
+            is_cur  = (cur_lbl is not None and cur_lbl < len(gestures) and gestures[cur_lbl] == g)
+            if is_cur:
                 btn.setStyleSheet(f"""
                     QPushButton {{
                         background-color: {pri_bg}; color: {pri_txt};
                         border: 1px solid {pri_bg};
-                        font-size: 8px; font-weight: 700; letter-spacing: 1.3px; padding: 0 10px;
+                        font-size: 8px; font-weight: 700; letter-spacing: 1px;
+                        text-align: left; padding: 2px 8px;
                     }}
+                """)
+            elif done:
+                btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: transparent; color: {success};
+                        border: 1px solid {border};
+                        font-size: 8px; font-weight: 700; letter-spacing: 1px;
+                        text-align: left; padding: 2px 8px;
+                    }}
+                    QPushButton:hover {{ background-color: {hover}; }}
                 """)
             else:
                 btn.setStyleSheet(f"""
                     QPushButton {{
                         background-color: transparent; color: {dim};
                         border: 1px solid {border};
-                        font-size: 8px; font-weight: 700; letter-spacing: 1.3px; padding: 0 10px;
+                        font-size: 8px; letter-spacing: 1px;
+                        text-align: left; padding: 2px 8px;
                     }}
                     QPushButton:hover {{ background-color: {hover}; color: {text}; }}
                 """)
+
+        if collecting:
+            self._record_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {warn}; color: #ffffff;
+                    border: 1px solid {warn};
+                    font-size: 8px; font-weight: 700; letter-spacing: 1.2px;
+                }}
+            """)
+        else:
+            self._record_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {pri_bg}; color: {pri_txt};
+                    border: 1px solid {pri_bg};
+                    font-size: 8px; font-weight: 700; letter-spacing: 1.2px;
+                }}
+                QPushButton:hover {{ background-color: {"#2A2A2A" if not is_dark else hover}; }}
+            """)
+
+        for btn in (self._delete_btn, self._collect_done_btn):
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: transparent; color: {dim};
+                    border: 1px solid {border};
+                    font-size: 8px; font-weight: 700; letter-spacing: 1.2px;
+                }}
+                QPushButton:hover {{ background-color: {hover}; color: {text}; }}
+            """)
+
+        self._log_hdr.setStyleSheet(
+            f"color: {muted}; font-size: 8px; font-weight: 700; letter-spacing: 1.4px; background: transparent; border: none;")
+        self._log_sep.setStyleSheet(f"background-color: {border};")
+        self.log_area.setStyleSheet(f"""
+            QTextEdit {{
+                background-color: {log_bg}; color: {log_txt};
+                border: 1px solid {border}; border-radius: 2px;
+                font-family: 'Courier New', monospace; font-size: 9px;
+            }}
+        """)
+
+        self._review_hand_lbl.setStyleSheet(f"background-color: {cam_bg}; border: 1px solid {border};")
+        self._review_ctrl.setStyleSheet(f"background-color: {panel}; border: 1px solid {border};")
+        self._review_scroll.setStyleSheet(f"background-color: {panel}; border: none;")
+        self._review_scroll.viewport().setStyleSheet(f"background-color: {panel}; border: none;")
+        self._review_sep1.setStyleSheet(f"background-color: {border};")
+        self._review_sep2.setStyleSheet(f"background-color: {border};")
+
+        self._review_counter.setStyleSheet(
+            f"color: {text}; font-size: 14px; font-weight: 800; background: transparent; border: none;")
+
+        r    = self._review
+        ri   = r.get('current_idx', 0)
+        meta = r['flagged_meta'][ri] if r['flagged_meta'] and ri < len(r['flagged_meta']) else None
+
+        is_wrong    = meta and meta['status'] == 'WRONG'
+        badge_color = "#cc88ff" if is_wrong else "#88aaff"
+        self._review_badge.setStyleSheet(
+            f"color: {badge_color}; font-size: 9px; font-weight: 700; background: transparent; border: none;")
+
+        for lbl in (self._review_true_hdr, self._review_pred_hdr, self._review_conf_hdr):
+            lbl.setStyleSheet(
+                f"color: {muted}; font-size: 7px; font-weight: 700; letter-spacing: 1.3px; background: transparent; border: none;")
+
+        self._review_true.setStyleSheet(
+            f"color: {success}; font-size: 12px; font-weight: 700; background: transparent; border: none;")
+
+        pred_color = warn if is_wrong else "#ccaa00"
+        self._review_pred.setStyleSheet(
+            f"color: {pred_color}; font-size: 12px; font-weight: 700; background: transparent; border: none;")
+
+        conf_val   = meta['conf'] if meta else 0.0
+        conf_color = success if conf_val >= 0.8 else ("#ccaa00" if conf_val >= 0.6 else warn)
+        self._review_conf.setStyleSheet(
+            f"color: {conf_color}; font-size: 12px; font-weight: 700; background: transparent; border: none;")
+
+        self._review_removed.setStyleSheet(
+            f"color: {dim}; font-size: 8px; background: transparent; border: none;")
+
+        self._keep_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {pri_bg}; color: {pri_txt};
+                border: 1px solid {pri_bg};
+                font-size: 8px; font-weight: 700; letter-spacing: 1.2px;
+            }}
+            QPushButton:hover {{ background-color: {"#2A2A2A" if not is_dark else hover}; }}
+        """)
+        self._remove_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent; color: {warn};
+                border: 1px solid {warn};
+                font-size: 8px; font-weight: 700; letter-spacing: 1.2px;
+            }}
+            QPushButton:hover {{ background-color: {hover}; }}
+        """)
+        self._review_done_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent; color: {dim};
+                border: 1px solid {border};
+                font-size: 8px; font-weight: 700; letter-spacing: 1.2px;
+            }}
+            QPushButton:hover {{ background-color: {hover}; color: {text}; }}
+        """)
 
         self.counts_panel.setStyleSheet(f"background-color: {panel}; border: 1px solid {border};")
         self._counts_hdr.setStyleSheet(
@@ -576,17 +1171,14 @@ class PipelineUI(QWidget):
 
         for info in getattr(self, "_gesture_rows", []):
             done = info["done"]
-            name_color = success if done else dim
-            count_color = success if done else muted
             info["name"].setStyleSheet(
-                f"color: {name_color}; font-size: 9px; font-weight: {'700' if done else '400'}; background: transparent; border: none;")
+                f"color: {success if done else dim}; font-size: 9px; font-weight: {'700' if done else '400'}; background: transparent; border: none;")
             info["count"].setStyleSheet(
-                f"color: {count_color}; font-size: 8px; letter-spacing: 1px; background: transparent; border: none;")
+                f"color: {success if done else muted}; font-size: 8px; letter-spacing: 1px; background: transparent; border: none;")
             info["bar_bg"].setStyleSheet(
                 f"background-color: {bar_bg_col}; border-radius: 2px; border: none;")
-            fill_color = success if done else bar_fill_col
             info["bar_fill"].setStyleSheet(
-                f"background-color: {fill_color}; border-radius: 2px; border: none;")
+                f"background-color: {success if done else bar_fill_col}; border-radius: 2px; border: none;")
             w = info["bar_bg"].width()
             if w > 0:
                 info["bar_fill"].setGeometry(0, 0, int(info["frac"] * w), 6)
@@ -597,58 +1189,33 @@ class PipelineUI(QWidget):
         self._steps_sep.setStyleSheet(f"background-color: {border};")
 
         states = {
-            "collect":    True,
-            "preprocess": self._raw_ready,
-            "train":      self._processed_ready,
-            "review":     self._trained,
+            "collect": True, "preprocess": self._raw_ready,
+            "train": self._processed_ready, "review": self._trained,
         }
-        for key, w in self._step_widgets.items():
+        for key, sw in self._step_widgets.items():
             enabled = states.get(key, False)
-            w["sep"].setStyleSheet(f"background-color: {border};")
+            sw["sep"].setStyleSheet(f"background-color: {border};")
             if enabled:
-                w["row"].setStyleSheet(f"""
-                    QWidget {{
-                        background-color: {panel};
-                    }}
-                    QWidget:hover {{
-                        background-color: {step_hover};
-                    }}
+                sw["row"].setStyleSheet(f"""
+                    QWidget {{ background-color: {panel}; }}
+                    QWidget:hover {{ background-color: {step_hover}; }}
                 """)
-                w["name"].setStyleSheet(
+                sw["name"].setStyleSheet(
                     f"color: {text}; font-size: 10px; font-weight: 700; letter-spacing: 1px; background: transparent; border: none;")
-                w["note"].setStyleSheet(
+                sw["note"].setStyleSheet(
                     f"color: {muted}; font-size: 8px; letter-spacing: 1px; background: transparent; border: none;")
-                status_txt = w["status"].text()
-                s_color = success if status_txt in ("READY", "DONE") else text
-                w["status"].setStyleSheet(
+                s_color = success if sw["status"].text() in ("READY", "DONE") else text
+                sw["status"].setStyleSheet(
                     f"color: {s_color}; font-size: 8px; font-weight: 700; letter-spacing: 1.2px; background: transparent; border: none;")
             else:
-                w["row"].setStyleSheet(f"QWidget {{ background-color: {panel}; }}")
-                w["name"].setStyleSheet(
-                    f"color: {locked_col}; font-size: 10px; font-weight: 700; letter-spacing: 1px; background: transparent; border: none;")
-                w["note"].setStyleSheet(
-                    f"color: {locked_col}; font-size: 8px; letter-spacing: 1px; background: transparent; border: none;")
-                w["status"].setStyleSheet(
-                    f"color: {locked_col}; font-size: 8px; font-weight: 700; letter-spacing: 1.2px; background: transparent; border: none;")
+                sw["row"].setStyleSheet(f"QWidget {{ background-color: {panel}; }}")
+                for lbl in (sw["name"], sw["note"], sw["status"]):
+                    lbl.setStyleSheet(
+                        f"color: {locked_col}; font-size: {'10' if lbl is sw['name'] else '8'}px; "
+                        f"font-weight: {'700' if lbl is not sw['note'] else '400'}; "
+                        f"letter-spacing: 1px; background: transparent; border: none;")
 
         self.progress_label.setStyleSheet(
             f"color: {muted}; font-size: 8px; font-weight: 700; letter-spacing: 1.4px; background: transparent; border: none;")
-        self.progress_bar_bg.setStyleSheet(
-            f"background-color: {border}; border-radius: 2px; border: none;")
-        self.progress_bar_fill.setStyleSheet(
-            f"background-color: {bar_fill_col}; border-radius: 2px; border: none;")
-
-        self._log_hdr.setStyleSheet(
-            f"color: {muted}; font-size: 8px; font-weight: 700; letter-spacing: 1.4px; background: transparent; border: none;")
-        self._log_sep.setStyleSheet(f"background-color: {border};")
-        self.log_area.setStyleSheet(f"""
-            QTextEdit {{
-                background-color: {log_bg};
-                color: {log_txt};
-                border: 1px solid {border};
-                border-radius: 2px;
-                font-family: 'Courier New', monospace;
-                font-size: 9px;
-            }}
-        """)
-
+        self.progress_bar_bg.setStyleSheet(f"background-color: {border}; border-radius: 2px; border: none;")
+        self.progress_bar_fill.setStyleSheet(f"background-color: {bar_fill_col}; border-radius: 2px; border: none;")

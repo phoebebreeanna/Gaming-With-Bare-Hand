@@ -36,14 +36,14 @@ SCREEN_W, SCREEN_H = pyautogui.size()
 LOGIC_DIR   = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR    = os.path.join(LOGIC_DIR, 'data')
 CUSTOM_DIR  = os.path.join(DATA_DIR, 'custom')
-MODEL_PATH  = os.path.join(LOGIC_DIR, 'hand_landmarker.task')
+MODEL_PATH  = os.path.join(DATA_DIR, 'hand_landmarker.task')
 
 MOUSE_WEIGHTS  = os.path.join(DATA_DIR, 'mouse_gesture_model_best.pt')
 MOUSE_ENCODER  = os.path.join(DATA_DIR, 'mouse_label_encoder.pkl')
 SUBWAY_WEIGHTS = os.path.join(DATA_DIR, 'subway_gesture_model_best.pt')
 SUBWAY_ENCODER = os.path.join(DATA_DIR, 'subway_label_encoder.pkl')
-RACING_WEIGHTS = os.path.join(DATA_DIR, 'gesture_model_racing.pt')
-RACING_ENCODER = os.path.join(DATA_DIR, 'label_encoder_racing.pkl')
+RACING_WEIGHTS = os.path.join(DATA_DIR, 'racing_gesture_model_best.pt')
+RACING_ENCODER = os.path.join(DATA_DIR, 'racing_label_encoder.pkl')
 
 MOUSE_WEIGHTS_CUSTOM  = os.path.join(CUSTOM_DIR, 'mouse_gesture_model_best.pt')
 MOUSE_ENCODER_CUSTOM  = os.path.join(CUSTOM_DIR, 'mouse_label_encoder.pkl')
@@ -130,7 +130,6 @@ def list_cameras(max_test=6):
     return available
 
 class CameraPreviewThread(QThread):
-    """Lightweight camera thread used during the setup wizard (calibration + zone steps)."""
     frame_ready    = Signal(QImage)
     distance_ready = Signal(float, bool)  
     fingers_ready  = Signal(int,   bool)  
@@ -248,7 +247,7 @@ def _load_nn(weights_path, encoder_path, tag):
         net = GestureNet(len(le.classes_))
         net.load_state_dict(torch.load(weights_path, map_location='cpu', weights_only=False))
         net.eval()
-        print(f"[NN:{tag}] Loaded — classes: {list(le.classes_)}")
+        print(f"[NN:{tag}] Loaded - classes: {list(le.classes_)}")
         return net, le
     except FileNotFoundError:
         print(f"[NN:{tag}] Model not found: {weights_path}")
@@ -425,7 +424,8 @@ class HandControllerThread(QThread):
     gesture_changed   = Signal(str, str)
     state_changed     = Signal(str)
     error_occurred    = Signal(str)
-    game_mode_changed = Signal(str)    # emits 'mouse', 'subway', 'racing'
+    game_mode_changed = Signal(str)
+    distance_live     = Signal(float, bool)
 
     slide_progress  = Signal(float, float)
     distance_update = Signal(float, bool, float)
@@ -439,7 +439,7 @@ class HandControllerThread(QThread):
         self.camera_index      = camera_index
         self.initial_zone      = initial_zone
         self.skip_intro        = skip_intro
-        self.initial_game_mode = initial_game_mode   # 'mouse' | 'subway' | 'racing'
+        self.initial_game_mode = initial_game_mode
         self._running          = False
         self._paused_event     = threading.Event()
         self._paused_event.set()
@@ -481,12 +481,13 @@ class HandControllerThread(QThread):
         self.game_option_pending = None
         self.game_opt_number     = None
         self.active_game_mode    = None
-        self._pending_mode       = None   # set from UI thread to switch mid-game
+        self._pending_mode       = None
 
         self.mouse_prev_row    = None
         self.left_click_entry_t = None
         self.right_click_armed  = True
         self.tm_drag_active     = False
+        self._devilhorn_mouse   = False
 
         self.ss_current_zone  = 'neutral'
         self.ss_last_key_t    = 0.0
@@ -522,6 +523,7 @@ class HandControllerThread(QThread):
         self.ss_prev_row      = None
         self.rc_prev_row_left  = None
         self.rc_prev_row_right = None
+        self._devilhorn_mouse  = False
 
     def _set_zone(self, zone_name):
         half = ZONE_PRESETS.get(zone_name, 0.55) / 2
@@ -557,6 +559,65 @@ class HandControllerThread(QThread):
             except: pass
         self.rc_held_keys.clear()
 
+    def _run_mouse_gesture(self, gesture, lms, now):
+        tx, ty = self._map_cursor(lms[8].x, lms[8].y)
+        self.smooth_x += (tx - self.smooth_x) * MOUSE_SMOOTHING
+        self.smooth_y += (ty - self.smooth_y) * MOUSE_SMOOTHING
+        _mouse_move(self.smooth_x, self.smooth_y)
+
+        if gesture == 'move':
+            self._release_drag()
+            self.left_click_entry_t = None
+            self.right_click_armed  = True
+            self.scroll_entry_t     = None
+            self.scroll_active      = False
+        elif gesture in ('pre_left_click', 'pre_right_click'):
+            pass
+        elif gesture == 'left_click':
+            self.scroll_entry_t = None
+            self.scroll_active  = False
+            if self.left_click_entry_t is None:
+                self.left_click_entry_t = now
+            if (now - self.left_click_entry_t) >= DRAG_HOLD_THRESH and not self.tm_drag_active:
+                _mouse_left_down()
+                self.tm_drag_active = True
+        elif gesture == 'right_click':
+            self._release_drag()
+            self.left_click_entry_t = None
+            if self.right_click_armed and now - self.last_click_t > CLICK_COOLDOWN:
+                _mouse_right_click()
+                self.last_click_t      = now
+                self.right_click_armed = False
+            self.scroll_entry_t = None
+            self.scroll_active  = False
+        elif gesture in ('scroll_up', 'scroll_down'):
+            self._release_drag()
+            self.left_click_entry_t = None
+            self.right_click_armed  = True
+            if self.scroll_entry_t is None:
+                self.scroll_entry_t = now
+                self.scroll_active  = False
+            elif not self.scroll_active:
+                self.scroll_active = True
+            if self.scroll_active:
+                _mouse_scroll(SCROLL_SPEED if gesture == 'scroll_up' else -SCROLL_SPEED)
+        else:
+            self._release_drag()
+            self.left_click_entry_t = None
+            self.right_click_armed  = True
+            self.scroll_entry_t     = None
+            self.scroll_active      = False
+
+        if gesture != 'left_click' and self.left_click_entry_t is not None and not self.tm_drag_active:
+            held = now - self.left_click_entry_t
+            if held < DRAG_HOLD_THRESH and now - self.last_click_t > CLICK_COOLDOWN:
+                _mouse_left_click()
+                self.last_click_t = now
+            self.left_click_entry_t = None
+
+        if gesture != 'right_click':
+            self.right_click_armed = True
+
     def _activate_game_mode(self, opt):
         self._release_drag()
         self._rc_release_all()
@@ -580,7 +641,6 @@ class HandControllerThread(QThread):
             self.active_game_mode = 4
 
     def switch_game_mode(self, mode: str):
-        """Called from the UI thread to switch mode mid-run (thread-safe via GIL)."""
         self._pending_mode = mode
 
     def set_camera(self, index):
@@ -802,7 +862,7 @@ class HandControllerThread(QThread):
                 self.distance_update.emit(dist, has_hand, hold_frac)
 
             elif self.app_state == 'running':
-                # UI-thread requested mode switch
+
                 if self._pending_mode is not None:
                     _opt_map = {'mouse': 1, 'subway': 2, 'racing': 3}
                     self._activate_game_mode(_opt_map.get(self._pending_mode, 1))
@@ -825,14 +885,15 @@ class HandControllerThread(QThread):
                     meta_hold_fracs = {k: 0.0 for k in ('start','stop','recal','close','guide','game_opt')}
                     triggered_meta  = None
 
-                    if lms:
-                        if is_open_palm(lms):
-                            if self.meta_hold['stop'] is None: self.meta_hold['stop'] = now
-                            meta_hold_fracs['stop'] = min((now - self.meta_hold['stop']) / HOLD_META, 1.0)
-                            if meta_hold_fracs['stop'] >= 1.0: triggered_meta = 'stop'
-                        else:
-                            self.meta_hold['stop'] = None
+                    both_open = lms is not None and lms2 is not None and is_open_palm(lms) and is_open_palm(lms2)
+                    if both_open:
+                        if self.meta_hold['stop'] is None: self.meta_hold['stop'] = now
+                        meta_hold_fracs['stop'] = min((now - self.meta_hold['stop']) / HOLD_META, 1.0)
+                        if meta_hold_fracs['stop'] >= 1.0: triggered_meta = 'stop'
+                    else:
+                        self.meta_hold['stop'] = None
 
+                    if lms:
                         if is_shaka(lms):
                             if self.meta_hold['recal'] is None: self.meta_hold['recal'] = now
                             meta_hold_fracs['recal'] = min((now - self.meta_hold['recal']) / HOLD_META, 1.0)
@@ -904,68 +965,7 @@ class HandControllerThread(QThread):
                                 lms, self.mouse_prev_row,
                                 self.mouse_model, self.mouse_le, MOUSE_CONF_THRESH)
 
-                        tx, ty = self._map_cursor(lms[8].x, lms[8].y)
-                        self.smooth_x += (tx - self.smooth_x) * MOUSE_SMOOTHING
-                        self.smooth_y += (ty - self.smooth_y) * MOUSE_SMOOTHING
-                        _mouse_move(self.smooth_x, self.smooth_y)
-
-                        if gesture == 'move':
-                            self._release_drag()
-                            self.left_click_entry_t = None
-                            self.right_click_armed  = True
-                            self.scroll_entry_t     = None
-                            self.scroll_active      = False
-
-                        elif gesture in ('pre_left_click', 'pre_right_click'):
-                            pass  
-
-                        elif gesture == 'left_click':
-                            self.scroll_entry_t = None
-                            self.scroll_active  = False
-                            if self.left_click_entry_t is None:
-                                self.left_click_entry_t = now
-                            if (now - self.left_click_entry_t) >= DRAG_HOLD_THRESH and not self.tm_drag_active:
-                                _mouse_left_down()
-                                self.tm_drag_active = True
-
-                        elif gesture == 'right_click':
-                            self._release_drag()
-                            self.left_click_entry_t = None
-                            if self.right_click_armed and now - self.last_click_t > CLICK_COOLDOWN:
-                                _mouse_right_click()
-                                self.last_click_t     = now
-                                self.right_click_armed = False
-                            self.scroll_entry_t = None
-                            self.scroll_active  = False
-
-                        elif gesture in ('scroll_up', 'scroll_down'):
-                            self._release_drag()
-                            self.left_click_entry_t = None
-                            self.right_click_armed  = True
-                            if self.scroll_entry_t is None:
-                                self.scroll_entry_t = now
-                                self.scroll_active  = False
-                            elif not self.scroll_active:
-                                self.scroll_active = True
-                            if self.scroll_active:
-                                _mouse_scroll(SCROLL_SPEED if gesture == 'scroll_up' else -SCROLL_SPEED)
-
-                        else:  
-                            self._release_drag()
-                            self.left_click_entry_t = None
-                            self.right_click_armed  = True
-                            self.scroll_entry_t     = None
-                            self.scroll_active      = False
-
-                        if gesture != 'left_click' and self.left_click_entry_t is not None and not self.tm_drag_active:
-                            held = now - self.left_click_entry_t
-                            if held < DRAG_HOLD_THRESH and now - self.last_click_t > CLICK_COOLDOWN:
-                                _mouse_left_click()
-                                self.last_click_t = now
-                            self.left_click_entry_t = None
-
-                        if gesture != 'right_click':
-                            self.right_click_armed = True
+                        self._run_mouse_gesture(gesture, lms, now)
 
                         draw_hand(display, lms)
                         if lms2: draw_hand(display, lms2)
@@ -1001,102 +1001,172 @@ class HandControllerThread(QThread):
 
                 elif self.active_game_mode == 2:
 
-                    gesture_ss = 'none'; conf_ss = 0.0
-                    if lms:
-                        gesture_ss, conf_ss, self.ss_prev_row = run_nn(
-                            lms, self.ss_prev_row, self.subway_model, self.subway_le, SS_CONFIDENCE_THRESH)
-                        if gesture_ss == 'space':
-                            if not self.ss_space_pressed and (now - self.ss_last_space_t) > SS_SPACE_COOLDOWN:
-                                pyautogui.press('space')
-                                self.ss_space_pressed = True; self.ss_last_space_t = now
-                            self.ss_current_zone = 'neutral'
-                        else:
-                            self.ss_space_pressed = False
-                            if gesture_ss in SS_GESTURE_KEY:
-                                if gesture_ss != self.ss_current_zone and (now - self.ss_last_key_t) > SS_KEY_COOLDOWN:
-                                    pyautogui.press(SS_GESTURE_KEY[gesture_ss])
-                                    self.ss_last_key_t = now; self.ss_current_zone = gesture_ss
-                            else:
-                                self.ss_current_zone = 'neutral'
+                    lms_left_dh = lms_right_dh = None
+                    if result and result.hand_landmarks:
+                        lms_left_dh, lms_right_dh = split_hands(result)
+
+                    devil_horn = lms_left_dh is not None and is_metal_sign(lms_left_dh)
+                    if devil_horn != self._devilhorn_mouse:
+                        self.mouse_prev_row     = None
+                        self.left_click_entry_t = None
+                        self.right_click_armed  = True
+                        self.scroll_entry_t     = None
+                        self.scroll_active      = False
+                        if not devil_horn:
+                            self._release_drag()
+                    self._devilhorn_mouse = devil_horn
+
+                    if devil_horn:
+                        gesture_m = 'idle'
+                        if lms_right_dh:
+                            gesture_m, _, self.mouse_prev_row = run_nn(
+                                lms_right_dh, self.mouse_prev_row,
+                                self.mouse_model, self.mouse_le, MOUSE_CONF_THRESH)
+                            self._run_mouse_gesture(gesture_m, lms_right_dh, now)
+                            draw_hand(display, lms_right_dh)
+                            draw_finger_dot(display, lms_right_dh, gesture_m, self.tm_drag_active)
+                        draw_hand(display, lms_left_dh, (255, 100, 0))
+                        self.gesture_changed.emit(
+                            f'MOUSE: {gesture_m.upper().replace("_", " ")}', 'Devil horn mouse mode')
+                        self.running_data.emit({
+                            'mode': 'subway', 'devilhorn': True,
+                            'gesture': gesture_m,
+                            'game_opt_num': self.game_opt_number or 0,
+                            'game_opt_frac': game_opt_frac,
+                            'meta': {'game_opt': game_opt_frac},
+                        })
                     else:
-                        self.ss_prev_row = None
+                        gesture_ss = 'none'; conf_ss = 0.0
+                        if lms:
+                            gesture_ss, conf_ss, self.ss_prev_row = run_nn(
+                                lms, self.ss_prev_row, self.subway_model, self.subway_le, SS_CONFIDENCE_THRESH)
+                            if gesture_ss == 'space':
+                                if not self.ss_space_pressed and (now - self.ss_last_space_t) > SS_SPACE_COOLDOWN:
+                                    pyautogui.press('space')
+                                    self.ss_space_pressed = True; self.ss_last_space_t = now
+                                self.ss_current_zone = 'neutral'
+                            else:
+                                self.ss_space_pressed = False
+                                if gesture_ss in SS_GESTURE_KEY:
+                                    if gesture_ss != self.ss_current_zone and (now - self.ss_last_key_t) > SS_KEY_COOLDOWN:
+                                        pyautogui.press(SS_GESTURE_KEY[gesture_ss])
+                                        self.ss_last_key_t = now; self.ss_current_zone = gesture_ss
+                                else:
+                                    self.ss_current_zone = 'neutral'
+                        else:
+                            self.ss_prev_row = None
 
-                    if lms:  draw_hand(display, lms)
-                    if lms2: draw_hand(display, lms2)
+                        if lms:  draw_hand(display, lms)
+                        if lms2: draw_hand(display, lms2)
 
-                    _ss_action = {
-                        'jump':  'Arrow UP',
-                        'roll':  'Arrow DOWN',
-                        'left':  'Arrow LEFT',
-                        'right': 'Arrow RIGHT',
-                        'space': 'SPACE / Jump',
-                        'idle':  'Idle',
-                        'none':  'Idle',
-                    }
-                    self.gesture_changed.emit(gesture_ss.upper(), _ss_action.get(gesture_ss, gesture_ss))
-                    self.running_data.emit({
-                        'mode': 'subway',
-                        'gesture': gesture_ss,
-                        'conf': conf_ss,
-                        'game_opt_num': self.game_opt_number or 0,
-                        'game_opt_frac': game_opt_frac,
-                        'meta': {'game_opt': game_opt_frac},
-                    })
+                        _ss_action = {
+                            'jump':  'Arrow UP',
+                            'roll':  'Arrow DOWN',
+                            'left':  'Arrow LEFT',
+                            'right': 'Arrow RIGHT',
+                            'space': 'SPACE / Jump',
+                            'idle':  'Idle',
+                            'none':  'Idle',
+                        }
+                        self.gesture_changed.emit(gesture_ss.upper(), _ss_action.get(gesture_ss, gesture_ss))
+                        self.running_data.emit({
+                            'mode': 'subway',
+                            'gesture': gesture_ss,
+                            'conf': conf_ss,
+                            'game_opt_num': self.game_opt_number or 0,
+                            'game_opt_frac': game_opt_frac,
+                            'meta': {'game_opt': game_opt_frac},
+                        })
 
                 elif self.active_game_mode == 3:
 
                     lms_left = lms_right = None
                     if result and result.hand_landmarks:
                         lms_left, lms_right = split_hands(result)
-                    if lms_left  is None: self.rc_prev_row_left  = None
-                    if lms_right is None: self.rc_prev_row_right = None
-                    desired   = set(); angle = 0.0; steer_dir = 'none'
-                    accel = brake = False; gest_l = gest_r = 'none'; conf_l = conf_r = 0.0
-                    if lms_left:
-                        gest_l, conf_l, self.rc_prev_row_left = run_nn(
-                            lms_left, self.rc_prev_row_left, self.racing_model, self.racing_le, RC_CONF_THRESH)
-                    if lms_right:
-                        gest_r, conf_r, self.rc_prev_row_right = run_nn(
-                            lms_right, self.rc_prev_row_right, self.racing_model, self.racing_le, RC_CONF_THRESH)
-                    accel = gest_r == 'thumbs'
-                    brake = gest_l == 'thumbs'
-                    if lms_left and lms_right:
-                        angle = get_steer_angle(lms_left, lms_right)
-                        if   angle < -RC_STEER_DEADZONE: steer_dir = 'left'
-                        elif angle >  RC_STEER_DEADZONE: steer_dir = 'right'
-                    if steer_dir == 'left'  or gest_l == 'steer_left'  or gest_r == 'steer_left':
-                        desired.add('left')
-                    if steer_dir == 'right' or gest_l == 'steer_right' or gest_r == 'steer_right':
-                        desired.add('right')
-                    if accel: desired.add('up')
-                    if brake: desired.add('down')
-                    self._rc_set_held_keys(desired)
-                    if lms_left:  draw_hand(display, lms_left,  (255, 180, 80))
-                    if lms_right: draw_hand(display, lms_right, (255, 80, 180))
-                    _sl = {'left': 'LEFT ←', 'right': 'RIGHT →', 'none': 'Straight'}[steer_dir]
-                    self.gesture_changed.emit(f'STEER {_sl}', 'Racing mode')
-                    self.running_data.emit({
-                        'mode': 'racing',
-                        'steer': steer_dir,
-                        'angle': round(angle, 1),
-                        'accel': accel,
-                        'brake': brake,
-                        'gest_l': gest_l, 'conf_l': round(conf_l, 2),
-                        'gest_r': gest_r, 'conf_r': round(conf_r, 2),
-                        'game_opt_num': self.game_opt_number or 0,
-                        'game_opt_frac': game_opt_frac,
-                        'meta': {'game_opt': game_opt_frac},
-                    })
+
+                    devil_horn = lms_left is not None and is_metal_sign(lms_left)
+                    if devil_horn != self._devilhorn_mouse:
+                        self.mouse_prev_row     = None
+                        self.left_click_entry_t = None
+                        self.right_click_armed  = True
+                        self.scroll_entry_t     = None
+                        self.scroll_active      = False
+                        if not devil_horn:
+                            self._release_drag()
+                        self._rc_release_all()
+                    self._devilhorn_mouse = devil_horn
+
+                    if devil_horn:
+                        gesture_m = 'idle'
+                        if lms_right:
+                            gesture_m, _, self.mouse_prev_row = run_nn(
+                                lms_right, self.mouse_prev_row,
+                                self.mouse_model, self.mouse_le, MOUSE_CONF_THRESH)
+                            self._run_mouse_gesture(gesture_m, lms_right, now)
+                            draw_hand(display, lms_right)
+                            draw_finger_dot(display, lms_right, gesture_m, self.tm_drag_active)
+                        draw_hand(display, lms_left, (255, 100, 0))
+                        self.gesture_changed.emit(
+                            f'MOUSE: {gesture_m.upper().replace("_", " ")}', 'Devil horn mouse mode')
+                        self.running_data.emit({
+                            'mode': 'racing', 'devilhorn': True,
+                            'gesture': gesture_m,
+                            'game_opt_num': self.game_opt_number or 0,
+                            'game_opt_frac': game_opt_frac,
+                            'meta': {'game_opt': game_opt_frac},
+                        })
+                    else:
+                        if lms_left  is None: self.rc_prev_row_left  = None
+                        if lms_right is None: self.rc_prev_row_right = None
+                        desired   = set(); angle = 0.0; steer_dir = 'none'
+                        accel = brake = False; gest_l = gest_r = 'none'; conf_l = conf_r = 0.0
+                        if lms_left:
+                            gest_l, conf_l, self.rc_prev_row_left = run_nn(
+                                lms_left, self.rc_prev_row_left, self.racing_model, self.racing_le, RC_CONF_THRESH)
+                        if lms_right:
+                            gest_r, conf_r, self.rc_prev_row_right = run_nn(
+                                lms_right, self.rc_prev_row_right, self.racing_model, self.racing_le, RC_CONF_THRESH)
+                        accel = gest_r == 'thumbs'
+                        brake = gest_l == 'thumbs'
+                        if lms_left and lms_right:
+                            angle = get_steer_angle(lms_left, lms_right)
+                            if   angle < -RC_STEER_DEADZONE: steer_dir = 'left'
+                            elif angle >  RC_STEER_DEADZONE: steer_dir = 'right'
+                        if steer_dir == 'left':  desired.add('left')
+                        if steer_dir == 'right': desired.add('right')
+                        if accel: desired.add('up')
+                        if brake: desired.add('down')
+                        self._rc_set_held_keys(desired)
+                        if lms_left:  draw_hand(display, lms_left,  (255, 180, 80))
+                        if lms_right: draw_hand(display, lms_right, (255, 80, 180))
+                        _sl  = {'left': 'LEFT ←', 'right': 'RIGHT →', 'none': 'Straight'}[steer_dir]
+                        _ped = ' · ACCEL' if accel else (' · BRAKE' if brake else '')
+                        _act = ('Accelerate' if accel else ('Brake' if brake else 'Idle')) + f'  ·  Steer {_sl}'
+                        self.gesture_changed.emit(f'STEER {_sl}{_ped}', _act)
+                        self.running_data.emit({
+                            'mode': 'racing',
+                            'steer': steer_dir,
+                            'angle': round(angle, 1),
+                            'accel': accel,
+                            'brake': brake,
+                            'gest_l': gest_l, 'conf_l': round(conf_l, 2),
+                            'gest_r': gest_r, 'conf_r': round(conf_r, 2),
+                            'game_opt_num': self.game_opt_number or 0,
+                            'game_opt_frac': game_opt_frac,
+                            'meta': {'game_opt': game_opt_frac},
+                        })
 
                 elif self.active_game_mode == 4:
                     if lms:  draw_hand(display, lms)
                     if lms2: draw_hand(display, lms2)
-                    self.gesture_changed.emit('FREE MODE', 'Opt 4 — custom slot')
+                    self.gesture_changed.emit('FREE MODE', 'Opt 4 - custom slot')
                     self.running_data.emit({
                         'mode': 'free',
                         'game_opt_num': self.game_opt_number or 0,
                         'game_opt_frac': game_opt_frac,
                     })
+
+                self.distance_live.emit(hand_size(lms) if lms else 0.0, lms is not None)
 
             elif self.app_state == 'stopped':
                 both_peace = lms and lms2 and is_peace_sign(lms) and is_peace_sign(lms2)

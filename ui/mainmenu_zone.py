@@ -60,9 +60,10 @@ class MainMenuZone(QWidget):
         self.progress_steps_data = []
         self.progress_lines = []
         _progress_steps = [
-            ("✓", "GUIDE",     "done"),
-            ("✓", "CALIBRATE", "done"),
-            ("03", "ZONE",     "active"),
+            ("✓",  "GUIDE",     "done"),
+            ("✓",  "CAMERA",    "done"),
+            ("✓",  "CALIBRATE", "done"),
+            ("04", "ZONE",      "active"),
         ]
         for index, (num, label_text, state) in enumerate(_progress_steps):
             step_widget = QWidget()
@@ -96,7 +97,7 @@ class MainMenuZone(QWidget):
         content_layout.setContentsMargins(24, 20, 20, 12)
         content_layout.setSpacing(8)
 
-        self.meta = QLabel("03 / 03 - ZONE")
+        self.meta = QLabel("04 / 04 - ZONE")
         content_layout.addWidget(self.meta)
         self.title = QLabel("Zone Setup")
         content_layout.addWidget(self.title)
@@ -165,9 +166,9 @@ class MainMenuZone(QWidget):
 
         self.zone_buttons = {}
         zone_options = [
-            ('small',  'SMALL',  '1 finger — precise area'),
-            ('medium', 'MEDIUM', '2 fingers — balanced'),
-            ('large',  'LARGE',  '3 fingers — wide area'),
+            ('small',  'SMALL',  '1 finger - precise area'),
+            ('medium', 'MEDIUM', '2 fingers - balanced'),
+            ('large',  'LARGE',  '3 fingers - wide area'),
         ]
         for name, label, hint in zone_options:
             btn = QPushButton()
@@ -313,7 +314,7 @@ class MainMenuZone(QWidget):
             self._pending_zone = pending_zone
             self.gesture_progress.setValue(int(frac * 100))
             self.gesture_progress_label.setText(
-                f"HOLD — {pending_zone.upper()} ({int(frac * 100)}%)"
+                f"HOLD - {pending_zone.upper()} ({int(frac * 100)}%)"
             )
         self._restyle_zone_buttons()
 

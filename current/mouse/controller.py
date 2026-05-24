@@ -19,14 +19,26 @@ pyautogui.FAILSAFE = False
 pyautogui.PAUSE = 0
 SCREEN_W, SCREEN_H = pyautogui.size()
 
+# ══════════════════════════════════════════════════════════════════════════════
+# TRACKING POINT MACRO
+#   'tip'    → lms[8]  index fingertip   (more precise, moves a lot)
+#   'knuckle'→ lms[5]  index MCP knuckle (more stable, less jitter)
+# ══════════════════════════════════════════════════════════════════════════════
+TRACKING_POINT = 'knuckle'
+
+TRACK_LM = {
+    'tip':     8,
+    'knuckle': 5,
+}[TRACKING_POINT]
+
 # ── Tuning ────────────────────────────────────────────────────────────────────
-SMOOTHING          = 0.45   # FIXED: was 0.12 (too low = very lagged). Higher = more responsive.
-CLICK_COOLDOWN     = 0.5
+SMOOTHING          = 0.45
+CLICK_COOLDOWN     = 0.35
 SCROLL_SPEED       = 3
 CONFIDENCE_THRESH  = 0.75
 DRAG_HOLD_THRESH   = 0.5
 MP_PRESENCE_THRESH = 0.7
-# FIXED: removed CURSOR_BUFFER_SIZE entirely — buffer averaging added latency
+IDLE_GRACE         = 0.12
 
 TARGET_DIST    = 0.18
 DIST_TOL       = 0.03
@@ -74,6 +86,7 @@ gesture_model = GestureNet(126, len(le.classes_))
 gesture_model.load_state_dict(torch.load('data/mouse_gesture_model.pt', map_location='cpu'))
 gesture_model.eval()
 print(f"[NN] classes: {list(le.classes_)}")
+print(f"[TRACK] Tracking point: {TRACKING_POINT.upper()} (landmark {TRACK_LM})")
 
 range_min_x = range_max_x = None
 range_min_y = range_max_y = None
@@ -86,13 +99,17 @@ calib_pts_y        = []
 calib_trail        = []
 calib_done_t       = None
 last_click_t       = 0.0
+last_right_click_t = 0.0
 prev_scroll_y      = None
+# right_click_armed: True = will fire on next right_click frame
+#                   False = already fired, waiting to leave gesture before firing again
 right_click_armed  = True
 left_click_entry_t = None
 drag_active        = False
 scroll_entry_t     = None
 scroll_active      = False
 prev_row           = None
+last_left_click_t  = None
 
 _latest_frame  = None
 _latest_result = None
@@ -100,7 +117,6 @@ _frame_lock    = threading.Lock()
 _result_lock   = threading.Lock()
 _stop_thread   = False
 
-# FIXED: single exponential smooth state only — no buffer deque
 smooth_x, smooth_y = SCREEN_W / 2, SCREEN_H / 2
 
 
@@ -141,7 +157,6 @@ def map_cursor(tip_x, tip_y):
 
 
 def move_cursor(x, y):
-    """Use pynput for lower-latency cursor movement."""
     mouse.position = (int(x), int(y))
 
 
@@ -160,6 +175,8 @@ def draw_hand(img, lms):
     for pt in pts:
         cv2.circle(img, pt, 5, (255, 255, 255), -1)
         cv2.circle(img, pt, 5, (0, 150, 80), 2)
+    tx, ty = pts[TRACK_LM]
+    cv2.circle(img, (tx, ty), 10, (0, 255, 255), 3)
 
 
 def draw_distance_ui(img, dist, has_hand):
@@ -187,7 +204,7 @@ def draw_distance_ui(img, dist, has_hand):
 def draw_calibration_ui(img, elapsed, total, trail, has_hand, calib_pts_x, calib_pts_y):
     h, w = img.shape[:2]
     cv2.rectangle(img, (0, 0), (w, 88), (20, 20, 20), -1)
-    cv2.putText(img, "CALIBRATION  Raise index finger & sweep your arm around",
+    cv2.putText(img, f"CALIBRATION  Move your {TRACKING_POINT.upper()} around all corners",
                 (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 220, 255), 2)
     cv2.putText(img, "Cover ALL corners of your comfortable reach area",
                 (10, 58), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (160, 160, 160), 1)
@@ -246,30 +263,31 @@ def draw_running_ui(img, gesture, conf, dist_ok, scroll_entry_t, scroll_active,
         color = GESTURE_COLOR['left_click']
     elif gesture == 'pre_left_click':  label, color = "PRE LEFT CLICK (no action)",  GESTURE_COLOR['pre_left_click']
     elif gesture == 'pre_right_click': label, color = "PRE RIGHT CLICK (no action)", GESTURE_COLOR['pre_right_click']
-    elif gesture == 'right_click':     label, color = "RIGHT CLICK",     GESTURE_COLOR['right_click']
-    elif gesture == 'move':            label, color = "MOVE",            GESTURE_COLOR['move']
-    elif gesture == 'scroll_up':       label, color = "SCROLL UP",       GESTURE_COLOR['scroll_up']
-    elif gesture == 'scroll_down':     label, color = "SCROLL DOWN",     GESTURE_COLOR['scroll_down']
-    else:                              label, color = "IDLE",            GESTURE_COLOR['idle']
+    elif gesture == 'right_click':     label, color = "RIGHT CLICK",                 GESTURE_COLOR['right_click']
+    elif gesture == 'move':            label, color = "MOVE",                        GESTURE_COLOR['move']
+    elif gesture == 'scroll_up':       label, color = "SCROLL UP",                   GESTURE_COLOR['scroll_up']
+    elif gesture == 'scroll_down':     label, color = "SCROLL DOWN",                 GESTURE_COLOR['scroll_down']
+    else:                              label, color = "IDLE",                        GESTURE_COLOR['idle']
 
-    cv2.rectangle(img, (0, 0), (520, 40), (30, 30, 30), -1)
-    cv2.putText(img, f"Gesture: {label}  [{conf:.2f}]", (10, 28),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+    cv2.rectangle(img, (0, 0), (580, 40), (30, 30, 30), -1)
+    cv2.putText(img, f"Gesture: {label}  [{conf:.2f}]  | Track: {TRACKING_POINT.upper()} [T]", (10, 28),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.62, color, 2)
 
     if mp_frozen:
         cv2.rectangle(img, (0, 42), (380, 72), (0, 0, 160), -1)
-        cv2.putText(img, "Hand unstable — cursor frozen", (10, 63),
+        cv2.putText(img, "Hand unstable - cursor frozen", (10, 63),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.55, (80, 150, 255), 2)
 
     legend = [
-        ("move / any non-idle = cursor follows index tip", GESTURE_COLOR['move']),
-        (f"left_click <{DRAG_HOLD_THRESH}s              = CLICK",  GESTURE_COLOR['left_click']),
-        (f"left_click >{DRAG_HOLD_THRESH}s              = DRAG",   GESTURE_COLOR['drag']),
-        ("right_click                    = RIGHT CLICK",           GESTURE_COLOR['right_click']),
-        ("scroll_up / scroll_down        = SCROLL",                GESTURE_COLOR['scroll_up']),
-        ("pre_left / pre_right           = no action",             GESTURE_COLOR['pre_left_click']),
-        ("idle                           = no cursor, no action",  GESTURE_COLOR['idle']),
-        ("R = recalibrate",                                        (100, 100, 100)),
+        (f"Tracking: index {TRACKING_POINT.upper()} (lm{TRACK_LM})  [T to toggle]", (0, 255, 255)),
+        ("move / any non-idle = cursor follows tracked point",                        GESTURE_COLOR['move']),
+        (f"left_click <{DRAG_HOLD_THRESH}s              = CLICK",                    GESTURE_COLOR['left_click']),
+        (f"left_click >{DRAG_HOLD_THRESH}s              = DRAG",                     GESTURE_COLOR['drag']),
+        ("right_click (enter gesture) = RIGHT CLICK, leave to re-arm",               GESTURE_COLOR['right_click']),
+        ("scroll_up / scroll_down        = SCROLL",                                  GESTURE_COLOR['scroll_up']),
+        ("pre_left / pre_right           = no action",                               GESTURE_COLOR['pre_left_click']),
+        ("idle                           = no cursor, no action",                    GESTURE_COLOR['idle']),
+        ("R = recalibrate   |   ESC = quit",                                         (100, 100, 100)),
     ]
     for i, (text, col) in enumerate(legend):
         cv2.putText(img, text, (10, h - 12 - (len(legend) - 1 - i) * 22),
@@ -310,7 +328,7 @@ def reset():
     global calib_trail, range_min_x, range_max_x, range_min_y, range_max_y
     global smooth_x, smooth_y, calib_done_t, prev_scroll_y, last_click_t
     global scroll_entry_t, scroll_active, drag_active, right_click_armed
-    global prev_row, left_click_entry_t
+    global prev_row, left_click_entry_t, last_left_click_t, last_right_click_t
     release_drag()
     app_state          = 'distance_check'
     dist_ok_since      = None
@@ -324,14 +342,28 @@ def reset():
     smooth_x, smooth_y = SCREEN_W / 2, SCREEN_H / 2
     prev_scroll_y      = None
     last_click_t       = 0.0
+    last_right_click_t = 0.0
     scroll_entry_t     = None
     scroll_active      = False
     right_click_armed  = True
     left_click_entry_t = None
+    last_left_click_t  = None
     prev_row           = None
 
 
-print("ESC to quit  |  R to recalibrate")
+def toggle_tracking():
+    global TRACKING_POINT, TRACK_LM
+    if TRACKING_POINT == 'tip':
+        TRACKING_POINT = 'knuckle'
+        TRACK_LM       = 5
+    else:
+        TRACKING_POINT = 'tip'
+        TRACK_LM       = 8
+    print(f"[TRACK] Switched to: {TRACKING_POINT.upper()} (landmark {TRACK_LM})")
+    reset()
+
+
+print("ESC to quit  |  R to recalibrate  |  T to toggle tip/knuckle tracking")
 
 while cap.isOpened():
     ret, frame = cap.read()
@@ -379,7 +411,7 @@ while cap.isOpened():
         elapsed = time.time() - calib_start_t
         if lms:
             draw_hand(display, lms)
-            tx, ty = lms[8].x, lms[8].y
+            tx, ty = lms[TRACK_LM].x, lms[TRACK_LM].y
             calib_pts_x.append(tx)
             calib_pts_y.append(ty)
             calib_trail.append((int(tx * fw), int(ty * fh)))
@@ -428,46 +460,64 @@ while cap.isOpened():
             else:
                 gesture, conf, low_conf = get_gesture(lms)
 
-                # ── cursor always follows index tip, even during idle ──────────
-                raw_x, raw_y = map_cursor(lms[8].x, lms[8].y)
+                # ── cursor follows TRACK_LM ───────────────────────────────────
+                raw_x, raw_y = map_cursor(lms[TRACK_LM].x, lms[TRACK_LM].y)
                 smooth_x += (raw_x - smooth_x) * SMOOTHING
                 smooth_y += (raw_y - smooth_y) * SMOOTHING
-                move_cursor(smooth_x, smooth_y)   # pynput — lower latency
+                move_cursor(smooth_x, smooth_y)
 
-                # ── gesture actions ────────────────────────────────────────────
-                if gesture == 'move':
-                    release_drag()
-                    left_click_entry_t = None
-                    right_click_armed  = True
-                    scroll_entry_t     = None
-                    scroll_active      = False
+                # ── gesture actions ───────────────────────────────────────────
 
-                elif gesture in ('pre_left_click', 'pre_right_click'):
-                    pass
-
-                elif gesture == 'left_click':
-                    scroll_entry_t = None
-                    scroll_active  = False
+                if gesture == 'left_click':
+                    scroll_entry_t    = None
+                    scroll_active     = False
+                    last_left_click_t = now
                     if left_click_entry_t is None:
                         left_click_entry_t = now
                     if (now - left_click_entry_t) >= DRAG_HOLD_THRESH and not drag_active:
                         mouse.press(Button.left)
                         drag_active = True
 
+                elif gesture in ('pre_left_click', 'pre_right_click'):
+                    if drag_active:
+                        release_drag()
+
+                elif gesture == 'move':
+                    release_drag()
+                    if left_click_entry_t is not None:
+                        held = now - left_click_entry_t
+                        if held < DRAG_HOLD_THRESH and now - last_click_t > CLICK_COOLDOWN:
+                            mouse.click(Button.left)
+                            last_click_t = now
+                        left_click_entry_t = None
+                    scroll_entry_t = None
+                    scroll_active  = False
+
                 elif gesture == 'right_click':
                     release_drag()
-                    left_click_entry_t = None
-                    if right_click_armed and now - last_click_t > CLICK_COOLDOWN:
+                    # fire any pending left click first
+                    if left_click_entry_t is not None:
+                        held = now - left_click_entry_t
+                        if held < DRAG_HOLD_THRESH and now - last_click_t > CLICK_COOLDOWN:
+                            mouse.click(Button.left)
+                            last_click_t = now
+                        left_click_entry_t = None
+                    # FIX: fire immediately on gesture entry (armed), disarm until gesture exits
+                    if right_click_armed:
                         mouse.click(Button.right)
-                        last_click_t      = now
-                        right_click_armed = False
+                        last_right_click_t = now
+                        right_click_armed  = False
                     scroll_entry_t = None
                     scroll_active  = False
 
                 elif gesture in ('scroll_up', 'scroll_down'):
                     release_drag()
-                    left_click_entry_t = None
-                    right_click_armed  = True
+                    if left_click_entry_t is not None:
+                        held = now - left_click_entry_t
+                        if held < DRAG_HOLD_THRESH and now - last_click_t > CLICK_COOLDOWN:
+                            mouse.click(Button.left)
+                            last_click_t = now
+                        left_click_entry_t = None
                     if scroll_entry_t is None:
                         scroll_entry_t = now
                         scroll_active  = False
@@ -477,24 +527,40 @@ while cap.isOpened():
                         mouse.scroll(0, SCROLL_SPEED if gesture == 'scroll_up' else -SCROLL_SPEED)
 
                 else:  # idle
-                    release_drag()
-                    left_click_entry_t = None
-                    right_click_armed  = True
-                    scroll_entry_t     = None
-                    scroll_active      = False
+                    if left_click_entry_t is not None and not drag_active:
+                        time_since_lc = (now - last_left_click_t) if last_left_click_t else 999
+                        if time_since_lc > IDLE_GRACE:
+                            held = now - left_click_entry_t
+                            if held < DRAG_HOLD_THRESH and now - last_click_t > CLICK_COOLDOWN:
+                                mouse.click(Button.left)
+                                last_click_t = now
+                            left_click_entry_t = None
+                    elif drag_active:
+                        time_since_lc = (now - last_left_click_t) if last_left_click_t else 999
+                        if time_since_lc > IDLE_GRACE:
+                            release_drag()
+                            left_click_entry_t = None
+                    scroll_entry_t = None
+                    scroll_active  = False
 
-                # fire left click on release
-                if gesture != 'left_click' and left_click_entry_t is not None and not drag_active:
-                    held = now - left_click_entry_t
-                    if held < DRAG_HOLD_THRESH and now - last_click_t > CLICK_COOLDOWN:
-                        mouse.click(Button.left)
-                        last_click_t = now
-                    left_click_entry_t = None
+                # ── fire left click on release ────────────────────────────────
+                if gesture != 'left_click' and gesture not in ('pre_left_click', 'pre_right_click'):
+                    if left_click_entry_t is not None and not drag_active:
+                        held = now - left_click_entry_t
+                        if held < DRAG_HOLD_THRESH:
+                            if now - last_click_t > CLICK_COOLDOWN:
+                                mouse.click(Button.left)
+                                last_click_t       = now
+                                left_click_entry_t = None
+                        else:
+                            left_click_entry_t = None
 
+                # FIX: re-arm right click the moment gesture leaves - no cooldown gate
+                # This guarantees every distinct right_click entry = one right click
                 if gesture != 'right_click':
                     right_click_armed = True
 
-            fx, fy    = int(lms[8].x * fw), int(lms[8].y * fh)
+            fx, fy    = int(lms[TRACK_LM].x * fw), int(lms[TRACK_LM].y * fh)
             dot_color = GESTURE_COLOR['drag'] if drag_active else GESTURE_COLOR.get(gesture, (255, 255, 255))
             cv2.circle(display, (fx, fy), 12, dot_color, 2)
             cv2.circle(display, (fx, fy),  4, dot_color, -1)
@@ -507,6 +573,7 @@ while cap.isOpened():
             left_click_entry_t = None
             scroll_entry_t     = None
             scroll_active      = False
+            right_click_armed  = True
             draw_running_ui(display, 'idle', 0.0, True, None, False, False, None)
 
     cv2.imshow('Mouse Controller', display)
@@ -516,6 +583,8 @@ while cap.isOpened():
         break
     elif key in (ord('r'), ord('R')):
         reset()
+    elif key in (ord('t'), ord('T')):
+        toggle_tracking()
 
 _stop_thread = True
 _det_thread.join(timeout=1.0)

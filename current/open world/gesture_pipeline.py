@@ -131,11 +131,11 @@ def open_csv(csv_path, gestures):
 
 def diversity_hint(count, diversity_every):
     hints = [
-        "vary your DISTANCE — move closer or further",
-        "vary your HEIGHT — raise or lower your hand",
-        "vary your ANGLE — tilt your wrist slightly",
-        "vary your POSITION — move left/right in frame",
-        "vary your LIGHTING — try different brightness",
+        "vary your DISTANCE - move closer or further",
+        "vary your HEIGHT - raise or lower your hand",
+        "vary your ANGLE - tilt your wrist slightly",
+        "vary your POSITION - move left/right in frame",
+        "vary your LIGHTING - try different brightness",
     ]
     return hints[(count // diversity_every) % len(hints)]
 
@@ -161,7 +161,7 @@ def run_collection(cfg, target_gestures=None):
     if target_gestures:
         gestures = [g for g in gestures if g in target_gestures]
 
-    banner(f"STEP 1 — DATA COLLECTION  [{cfg['project']}]")
+    banner(f"STEP 1 - DATA COLLECTION  [{cfg['project']}]")
     print(f"Gestures to collect: {gestures}")
     print(f"Target per gesture : {target} samples")
     print()
@@ -247,7 +247,7 @@ def run_collection(cfg, target_gestures=None):
 
         all_done = all(counts[g] >= target for g in gestures)
         if all_done:
-            cv2.putText(display, "ALL DONE  —  ESC to continue",
+            cv2.putText(display, "ALL DONE  -  ESC to continue",
                         (10, h - 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
         else:
             cv2.putText(display, "G = skip and continue with what you have",
@@ -299,7 +299,7 @@ def run_collection(cfg, target_gestures=None):
                 last_saved_pos = None
                 confirm_delete = False
                 state = "started" if collecting else "stopped"
-                print(f"Recording {state} — {gestures[current_label]}  ({counts[gestures[current_label]]} samples)")
+                print(f"Recording {state} - {gestures[current_label]}  ({counts[gestures[current_label]]} samples)")
 
         elif key in (ord('d'), ord('D')):
             if current_label is None:
@@ -382,7 +382,7 @@ def compute_delta(current, previous):
 
 
 def run_preprocess(cfg):
-    banner("STEP 2 — PREPROCESSING")
+    banner("STEP 2 - PREPROCESSING")
     raw_path  = cfg['raw_csv']
     out_path  = cfg['processed_csv']
 
@@ -477,7 +477,7 @@ class GestureNet(nn.Module):
 
 
 def run_training(cfg):
-    banner("STEP 3 — TRAINING")
+    banner("STEP 3 - TRAINING")
     data_path = cfg['processed_csv']
 
     if not os.path.exists(data_path):
@@ -661,7 +661,7 @@ def draw_hand_viz(frame, landmarks, cx, cy, scale=160):
 
 def run_visualizer(cfg, flagged_indices, flagged_meta):
     if not flagged_indices:
-        banner("No flagged samples — skipping review")
+        banner("No flagged samples - skipping review")
         return False
 
     csv_path     = cfg['processed_csv']
@@ -673,7 +673,7 @@ def run_visualizer(cfg, flagged_indices, flagged_meta):
     W, H = 700, 460
     font = cv2.FONT_HERSHEY_SIMPLEX
 
-    banner(f"STEP 4 — REVIEW  ({n} flagged samples)")
+    banner(f"STEP 4 - REVIEW  ({n} flagged samples)")
 
     cv2.namedWindow('Review', cv2.WINDOW_NORMAL)
     cv2.resizeWindow('Review', W, H)
@@ -746,7 +746,7 @@ def run_visualizer(cfg, flagged_indices, flagged_meta):
     tmp = csv_path + '.tmp'
     df.drop(index=to_remove).reset_index(drop=True).to_csv(tmp, index=False)
     shutil.move(tmp, csv_path)
-    banner(f"Removed {len(to_remove)} samples — {len(df) - len(to_remove)} remaining")
+    banner(f"Removed {len(to_remove)} samples - {len(df) - len(to_remove)} remaining")
     return True
 
 

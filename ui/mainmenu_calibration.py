@@ -64,9 +64,10 @@ class MainMenuCalibration(QWidget):
         progress_row.setAlignment(Qt.AlignVCenter)
 
         _progress_steps = [
-            ("✓", "GUIDE",     "done"),
-            ("02", "CALIBRATE", "active"),
-            ("03", "ZONE",      "idle"),
+            ("✓",  "GUIDE",     "done"),
+            ("✓",  "CAMERA",    "done"),
+            ("03", "CALIBRATE", "active"),
+            ("04", "ZONE",      "idle"),
         ]
         self.progress_steps_data = []
         self.progress_lines = []
@@ -108,7 +109,7 @@ class MainMenuCalibration(QWidget):
         content_layout.setContentsMargins(24, 20, 20, 12)
         content_layout.setSpacing(8)
 
-        self.meta = QLabel("02 / 04 - CALIBRATION")
+        self.meta = QLabel("03 / 04 - CALIBRATION")
         content_layout.addWidget(self.meta)
 
         self.title = QLabel("Set hand distance")
@@ -184,7 +185,7 @@ class MainMenuCalibration(QWidget):
             cell = QWidget()
             self.gauge_cells.append(cell)
             gauge_layout.addWidget(cell)
-        self.distance_value = QLabel("—")
+        self.distance_value = QLabel("-")
         self.distance_value.setAlignment(Qt.AlignCenter)
         self.distance_axis = QLabel("20cm                                      80cm")
         self.distance_badge = QLabel("NO HAND DETECTED")
@@ -514,13 +515,15 @@ class MainMenuCalibration(QWidget):
             warn        = "#B86A00"
 
         if not has_hand or norm_dist < 0.001:
-            self.distance_value.setText("—")
+            self.distance_value.setText("-")
             self.distance_badge.setText("NO HAND DETECTED")
             self.distance_badge.setStyleSheet(
                 f"color: {warn}; font-size: 8px; font-weight: 700; border: none;")
             for i, cell in enumerate(self.gauge_cells):
                 b = f"1px solid {border}" if i < 3 else "none"
                 cell.setStyleSheet(f"background-color: {dim_col}; border-right: {b};")
+            self.tracking_lbl.setText("NO HAND")
+            self.tracking_lbl.setStyleSheet(f"color: {warn}; font-size: 8px; letter-spacing: 1.2px; border: none;")
             return
 
         cm = round(4.8 / norm_dist, 1)
@@ -532,15 +535,15 @@ class MainMenuCalibration(QWidget):
 
         if too_close:
             colors = [close_col, close_col, dim_col, dim_col]
-            status = "TOO CLOSE — MOVE BACK"
+            status = "TOO CLOSE - MOVE BACK"
             badge_color = warn
         elif optimal:
             colors = [dim_col, optimal_col, optimal_col, dim_col]
-            status = "OPTIMAL — HOLD STEADY"
+            status = "OPTIMAL - HOLD STEADY"
             badge_color = success
         else:
             colors = [dim_col, dim_col, far_col, far_col]
-            status = "TOO FAR — MOVE CLOSER"
+            status = "TOO FAR - MOVE CLOSER"
             badge_color = warn
 
         for i, (cell, col) in enumerate(zip(self.gauge_cells, colors)):
@@ -550,4 +553,9 @@ class MainMenuCalibration(QWidget):
         self.distance_badge.setText(status)
         self.distance_badge.setStyleSheet(
             f"color: {badge_color}; font-size: 8px; font-weight: 700; border: none;")
+
+        alert_text = "● OPTIMAL" if optimal else ("● TOO CLOSE" if too_close else "● TOO FAR")
+        self.tracking_lbl.setText(alert_text)
+        self.tracking_lbl.setStyleSheet(
+            f"color: {success if optimal else warn}; font-size: 8px; font-weight: 700; letter-spacing: 1.2px; border: none;")
 

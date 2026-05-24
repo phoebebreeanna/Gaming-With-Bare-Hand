@@ -19,14 +19,17 @@ class GestureGuide(QWidget):
                 {
                     "label": "00  ·  SYSTEM CONTROLS",
                     "gestures": [
-                        {"img": "assets/gestures/general/one_finger.png",   "n": "01", "name": "One Finger - Navigate",       "desc": "Point with index finger to move cursor or highlight",        "tag": "ALL MODES"},
-                        {"img": "assets/gestures/general/two_finger.png",   "n": "02", "name": "Two Fingers - Confirm",        "desc": "Index + Middle fingers raised to confirm or select",         "tag": "ALL MODES"},
-                        {"img": "assets/gestures/general/three_finger.png", "n": "03", "name": "Three Fingers - Switch Mode",  "desc": "Index + Middle + Ring raised to cycle between modes",        "tag": "ALL MODES"},
-                        {"img": "assets/gestures/general/pause.png",        "n": "04", "name": "Pause Gesture",                "desc": "Hold open palm flat to pause the current session",           "tag": "SYSTEM"},
-                        {"img": "assets/gestures/general/continue.png",     "n": "05", "name": "Continue Gesture",             "desc": "Closed fist then open to resume from paused state",          "tag": "SYSTEM"},
-                        {"img": "assets/gestures/general/game_option.png",  "n": "06", "name": "Game Option",                  "desc": "Hold closed fist for 3 s to open game option menu",          "tag": "SYSTEM"},
-                        {"img": "assets/gestures/general/mouse_on_game.png","n": "07", "name": "Mouse in Game",                "desc": "Enable mouse-control overlay while in a game mode",          "tag": "SYSTEM"},
-                        {"img": "assets/gestures/general/exit.png",         "n": "08", "name": "Exit / Close",                 "desc": "Bring all fingers together pointing down to exit",           "tag": "SYSTEM"},
+                        {"img": "assets/gestures/general/one_finger.png",        "n": "01", "name": "One Finger - Choose Option",      "desc": "Raise index finger to navigate and select an option in a zone",                              "tag": "ALL MODES"},
+                        {"img": "assets/gestures/general/two_finger.png",        "n": "02", "name": "Two Fingers - Choose Option",      "desc": "Raise index and middle fingers to confirm or choose an option in a zone",                   "tag": "ALL MODES"},
+                        {"img": "assets/gestures/general/three_finger.png",      "n": "03", "name": "Three Fingers - Choose Option",    "desc": "Raise index, middle and ring fingers to choose an option in a zone",                        "tag": "ALL MODES"},
+                        {"img": "assets/gestures/general/pause.png",             "n": "04", "name": "Pause",                            "desc": "Open both hands with palms facing the camera to pause the current session",                  "tag": "SYSTEM"},
+                        {"img": "assets/gestures/general/continue.png",          "n": "05", "name": "Continue",                         "desc": "Show peace sign with both hands simultaneously to resume from paused state",                 "tag": "SYSTEM"},
+                        {"img": "assets/gestures/general/game_option_one.png",   "n": "06", "name": "Game Option 1 - Mouse Mode",       "desc": "One hand fist + other hand 1 finger raised, hold for 5 s to switch to Mouse mode",          "tag": "GAME OPTION"},
+                        {"img": "assets/gestures/general/game_option_two.png",   "n": "07", "name": "Game Option 2 - Subway Mode",      "desc": "One hand fist + other hand 2 fingers raised, hold for 5 s to switch to Subway mode",        "tag": "GAME OPTION"},
+                        {"img": "assets/gestures/general/game_option_three.png", "n": "08", "name": "Game Option 3 - Racing Mode",      "desc": "One hand fist + other hand 3 fingers raised, hold for 5 s to switch to Racing mode",        "tag": "GAME OPTION"},
+                        {"img": "assets/gestures/general/game_option_four.png",  "n": "09", "name": "Game Option 4 - Free Mode",        "desc": "One hand fist + other hand 4 fingers raised, hold for 5 s to switch to Free mode",          "tag": "GAME OPTION"},
+                        {"img": "assets/gestures/general/mouse_in_game.png",     "n": "10", "name": "Mouse in Game",                    "desc": "One hand devil horn + other hand index finger raised to navigate with mouse in game",       "tag": "SYSTEM"},
+                        {"img": "assets/gestures/general/exit.png",              "n": "11", "name": "Exit / Close",                     "desc": "Close both hands into fists simultaneously to exit the application",                        "tag": "SYSTEM"},
                     ],
                 },
             ],
@@ -34,12 +37,12 @@ class GestureGuide(QWidget):
                 {
                     "label": "01  ·  MOUSE MODE",
                     "gestures": [
-                        {"img": "assets/gestures/mouse/move.png",        "n": "01", "name": "Point - Move Cursor",    "desc": "Raise your index finger to move the cursor across the screen",  "tag": "ACTIVE IN MOUSE MODE"},
-                        {"img": "assets/gestures/mouse/left_click.png",  "n": "02", "name": "Quick Pinch - Left Click", "desc": "Thumb + Middle pinch, held under 0.5 s",                      "tag": "QUICK ACTION"},
-                        {"img": "assets/gestures/mouse/left_click.png",  "n": "03", "name": "Hold Pinch - Drag",       "desc": "Thumb + Middle pinch, held over 0.5 s",                        "tag": "HOLD 0.5S"},
-                        {"img": "assets/gestures/mouse/right_click.png", "n": "04", "name": "Ring Pinch - Right Click", "desc": "Thumb + Ring finger pinch",                                   "tag": "QUICK ACTION"},
-                        {"img": "assets/gestures/mouse/scroll_up.png",   "n": "05", "name": "Three Fingers - Scroll Up", "desc": "Index + Middle + Ring fingers raised",                       "tag": "ACTIVE"},
-                        {"img": "assets/gestures/mouse/scroll_down.png", "n": "06", "name": "Fist - Scroll Down",        "desc": "All fingers clenched into a fist",                           "tag": "ACTIVE"},
+                        {"img": "assets/gestures/mouse/move.png",        "n": "01", "name": "Point - Move Cursor",      "desc": "Raise your index finger to move the cursor across the screen",  "tag": "ACTIVE IN MOUSE MODE"},
+                        {"img": "assets/gestures/mouse/left_click.png",  "n": "02", "name": "Quick Pinch - Left Click", "desc": "Thumb + Middle pinch, held under 0.5 s",                        "tag": "QUICK ACTION"},
+                        {"img": "assets/gestures/mouse/left_click.png",  "n": "03", "name": "Hold Pinch - Drag",        "desc": "Thumb + Middle pinch, held over 0.5 s",                         "tag": "HOLD 0.5S"},
+                        {"img": "assets/gestures/mouse/right_click.png", "n": "04", "name": "Ring Pinch - Right Click", "desc": "Thumb + Ring finger pinch",                                     "tag": "QUICK ACTION"},
+                        {"img": "assets/gestures/mouse/scroll_up.png",   "n": "05", "name": "Three Fingers - Scroll Up","desc": "Index + Middle + Ring fingers raised",                          "tag": "ACTIVE"},
+                        {"img": "assets/gestures/mouse/scroll_down.png", "n": "06", "name": "Fist - Scroll Down",       "desc": "All fingers clenched into a fist",                              "tag": "ACTIVE"},
                     ],
                 },
             ],
@@ -47,11 +50,11 @@ class GestureGuide(QWidget):
                 {
                     "label": "02  ·  SUBWAY SURFERS",
                     "gestures": [
-                        {"img": "assets/gestures/subway/jump.jpg",        "n": "01", "name": "Wrist Up - Jump",         "desc": "Lean wrist upward to jump or swipe up",     "tag": "ACTIVE"},
-                        {"img": "assets/gestures/subway/slide.jpg",       "n": "02", "name": "Wrist Down - Slide",       "desc": "Lean wrist downward to slide or swipe down","tag": "ACTIVE"},
-                        {"img": "assets/gestures/subway/swipe_left.png",  "n": "03", "name": "Wrist Left - Swipe Left",  "desc": "Lean wrist to the left",                   "tag": "ACTIVE"},
-                        {"img": "assets/gestures/subway/swipe_right.png", "n": "04", "name": "Wrist Right - Swipe Right","desc": "Lean wrist to the right",                  "tag": "ACTIVE"},
-                        {"img": "assets/gestures/subway/space.png",       "n": "05", "name": "Open Hand - Space Bar",    "desc": "Open palm facing camera for space / jump", "tag": "ACTIVE"},
+                        {"img": "assets/gestures/subway/jump.jpg",        "n": "01", "name": "Two Fingers Up - Jump",        "desc": "Raise index and middle fingers pointing upward to jump",              "tag": "ACTIVE"},
+                        {"img": "assets/gestures/subway/slide.jpg",       "n": "02", "name": "Two Fingers Down - Slide",     "desc": "Point index and middle fingers downward to slide",                    "tag": "ACTIVE"},
+                        {"img": "assets/gestures/subway/swipe_left.png",  "n": "03", "name": "Two Fingers Left - Swipe Left","desc": "Point index and middle fingers to the left to swipe left",            "tag": "ACTIVE"},
+                        {"img": "assets/gestures/subway/swipe_right.png", "n": "04", "name": "Two Fingers Right - Swipe Right","desc": "Point index and middle fingers to the right to swipe right",        "tag": "ACTIVE"},
+                        {"img": "assets/gestures/subway/space.png",       "n": "05", "name": "Metal Sign - Space Bar",      "desc": "Raise index and pinky fingers (devil horn / metal sign) to activate space", "tag": "ACTIVE"},
                     ],
                 },
             ],
@@ -59,12 +62,14 @@ class GestureGuide(QWidget):
                 {
                     "label": "03  ·  RACING",
                     "gestures": [
-                        {"img": "assets/gestures/racing/accelerate.png",      "n": "01", "name": "Thumb Up - Accelerate",   "desc": "Right thumb up gesture to accelerate",      "tag": "ACTIVE"},
-                        {"img": "assets/gestures/racing/brake.png",           "n": "02", "name": "Thumb Down - Brake",      "desc": "Left thumb up gesture to brake",            "tag": "ACTIVE"},
-                        {"img": "assets/gestures/racing/steer_left.png",      "n": "03", "name": "Tilt Left - Steer Left",  "desc": "Tilt both hands to the left",               "tag": "ACTIVE"},
-                        {"img": "assets/gestures/racing/steer_right.png",     "n": "04", "name": "Tilt Right - Steer Right","desc": "Tilt both hands to the right",              "tag": "ACTIVE"},
-                        {"img": "assets/gestures/racing/steer_straight.png",  "n": "05", "name": "Level Hands - Straight",  "desc": "Both hands kept level to go straight",     "tag": "ACTIVE"},
-                        {"img": "assets/gestures/racing/brake_accelerate.png","n": "06", "name": "Brake + Accelerate",      "desc": "Both thumbs up simultaneously",             "tag": "COMBO"},
+                        {"img": "assets/gestures/racing/accelerate.png",      "n": "01", "name": "Right Thumb Up - Accelerate",    "desc": "Right hand thumb up to accelerate",                                                       "tag": "ACTIVE"},
+                        {"img": "assets/gestures/racing/brake.png",           "n": "02", "name": "Left Thumb Up - Brake",          "desc": "Left hand thumb up to brake",                                                             "tag": "ACTIVE"},
+                        {"img": "assets/gestures/racing/steer_left.png",      "n": "03", "name": "Tilt Left - Steer Left",         "desc": "Tilt both hands to the left to steer left",                                               "tag": "ACTIVE"},
+                        {"img": "assets/gestures/racing/steer_right.png",     "n": "04", "name": "Tilt Right - Steer Right",       "desc": "Tilt both hands to the right to steer right",                                             "tag": "ACTIVE"},
+                        {"img": "assets/gestures/racing/steer_straight.png",  "n": "05", "name": "Level Hands - Straight",         "desc": "Both hands kept level to go straight",                                                    "tag": "ACTIVE"},
+                        {"img": "assets/gestures/racing/brake_accelerate.png","n": "06", "name": "Brake + Accelerate",             "desc": "Both thumbs up simultaneously",                                                           "tag": "COMBO"},
+                        {"img": "assets/gestures/racing/camera.png",          "n": "07", "name": "Camera - Change Angle",          "desc": "Left hand index and middle fingers pointing forward to change the in-game camera angle",  "tag": "RACING"},
+                        {"img": "assets/gestures/racing/horn.png",            "n": "08", "name": "Horn",                           "desc": "Right hand index and middle fingers pointing forward to sound the horn",                  "tag": "RACING"},
                     ],
                 },
             ],
@@ -193,7 +198,7 @@ class GestureGuide(QWidget):
             else:
                 img.setText("NO IMAGE")
         else:
-            img.setText("—")
+            img.setText("-")
         self.image_placeholders.append(img)
         hl.addWidget(img)
 

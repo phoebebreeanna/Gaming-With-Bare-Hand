@@ -2,7 +2,7 @@ import os
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QPushButton, QSizePolicy,
+    QLabel, QPushButton, QSizePolicy, QComboBox,
 )
 from PySide6.QtCore import Qt, Signal
 
@@ -15,35 +15,36 @@ _CUSTOM_FILES = {
     'racing': ('racing_gesture_model_best.pt', 'racing_label_encoder.pkl'),
 }
 
-
 class GameMode(QWidget):
     on_menu_toggle    = Signal()
-    game_mode_changed = Signal(str)   # 'mouse' | 'subway' | 'racing'
+    game_mode_changed = Signal(str)
+    camera_changed    = Signal(int)
 
     def __init__(self):
         super().__init__()
         self.is_dark       = False
         self.selected_mode = 'mouse'
         self.mouse_enabled = False
+        self._camera_index = 0
         self._mode_sources = {k: 'default' for k in ('mouse', 'subway', 'racing')}
         self._source_btns  = {}
         self._mode_cards   = {}
+        self._camera_combo = None
 
         self._load_state()
         self._init_ui()
         self.apply_theme(False)
 
-    # ── State persistence ────────────────────────────────────────────
-
     def _load_state(self):
         try:
-            from logic.app_config import get_game_mode, get_mouse_enabled, get_model_source
+            from logic.app_config import get_game_mode, get_mouse_enabled, get_model_source, get_camera_index
             self.selected_mode = get_game_mode()
             self.mouse_enabled = get_mouse_enabled()
+            self._camera_index = get_camera_index()
             for m in ('mouse', 'subway', 'racing'):
                 self._mode_sources[m] = get_model_source(m)
         except Exception:
-            pass
+            self._camera_index = 0
 
     def _custom_exists(self, mode: str) -> bool:
         if mode not in _CUSTOM_FILES:
@@ -52,14 +53,11 @@ class GameMode(QWidget):
         return (os.path.exists(os.path.join(_CUSTOM_DIR, w)) and
                 os.path.exists(os.path.join(_CUSTOM_DIR, e)))
 
-    # ── UI construction ──────────────────────────────────────────────
-
     def _init_ui(self):
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # Header (mirrors pipeline_ui.py header)
         self.header = QWidget()
         self.header.setFixedHeight(42)
         hl = QHBoxLayout(self.header)
@@ -89,7 +87,6 @@ class GameMode(QWidget):
         self.header_rule.setFixedHeight(1)
         root.addWidget(self.header_rule)
 
-        # Content area
         content = QWidget()
         cl = QVBoxLayout(content)
         cl.setContentsMargins(24, 16, 24, 16)
@@ -98,7 +95,6 @@ class GameMode(QWidget):
         self.page_title = QLabel("GAME OPTION")
         cl.addWidget(self.page_title)
 
-        # Mouse Mode row
         self.mouse_panel = QWidget()
         self.mouse_panel.setFixedHeight(52)
         mp = QHBoxLayout(self.mouse_panel)
@@ -124,11 +120,34 @@ class GameMode(QWidget):
         self.div1.setFixedHeight(1)
         cl.addWidget(self.div1)
 
-        # Game Mode section header
+        self.camera_panel = QWidget()
+        self.camera_panel.setFixedHeight(52)
+        cp = QHBoxLayout(self.camera_panel)
+        cp.setContentsMargins(16, 0, 16, 0)
+        cp.setSpacing(0)
+
+        cam_text_col = QVBoxLayout()
+        cam_text_col.setSpacing(2)
+        self.camera_hdr_lbl = QLabel("CAMERA INPUT")
+        self.camera_sub_lbl = QLabel("Select which camera to use for hand tracking")
+        cam_text_col.addWidget(self.camera_hdr_lbl)
+        cam_text_col.addWidget(self.camera_sub_lbl)
+        cp.addLayout(cam_text_col, stretch=1)
+
+        self._camera_combo = QComboBox()
+        self._camera_combo.setFixedSize(140, 26)
+        self._camera_combo.currentIndexChanged.connect(self._on_camera_combo_changed)
+        cp.addWidget(self._camera_combo)
+        cl.addWidget(self.camera_panel)
+        self._populate_cameras()
+
+        self.div2 = QWidget()
+        self.div2.setFixedHeight(1)
+        cl.addWidget(self.div2)
+
         self.mode_section_hdr = QLabel("GAME MODE")
         cl.addWidget(self.mode_section_hdr)
 
-        # Game mode cards row
         mode_row = QHBoxLayout()
         mode_row.setSpacing(12)
 
@@ -166,7 +185,6 @@ class GameMode(QWidget):
             self._mode_cards[key] = {'card': card, 'name': name_lbl}
             card_col.addWidget(card)
 
-            # Model source buttons (Default / Custom)
             src_row = QHBoxLayout()
             src_row.setSpacing(4)
             src_row.setContentsMargins(0, 0, 0, 0)
@@ -196,10 +214,7 @@ class GameMode(QWidget):
 
         root.addWidget(content, stretch=1)
 
-    # ── Public API ───────────────────────────────────────────────────
-
     def select_mode(self, key: str):
-        """Select a game mode from the UI and persist it."""
         self.selected_mode = key
         try:
             from logic.app_config import set_game_mode
@@ -210,7 +225,6 @@ class GameMode(QWidget):
         self.game_mode_changed.emit(key)
 
     def set_selected_mode(self, key: str):
-        """Update the selected mode card from an external source (e.g. controller gesture)."""
         if key == self.selected_mode:
             return
         self.selected_mode = key
@@ -222,7 +236,6 @@ class GameMode(QWidget):
         self.apply_theme(self.is_dark)
 
     def refresh_custom_availability(self):
-        """Re-check which custom models exist; call after training completes."""
         for key, btns in self._source_btns.items():
             exists = self._custom_exists(key)
             btns['custom'].setEnabled(exists)
@@ -234,8 +247,6 @@ class GameMode(QWidget):
                 except Exception:
                     pass
         self.apply_theme(self.is_dark)
-
-    # ── Internal slots ───────────────────────────────────────────────
 
     def _toggle_mouse(self):
         self.mouse_enabled = not self.mouse_enabled
@@ -258,7 +269,51 @@ class GameMode(QWidget):
             pass
         self.apply_theme(self.is_dark)
 
-    # ── Theme ────────────────────────────────────────────────────────
+    def _populate_cameras(self):
+        if self._camera_combo is None:
+            return
+        try:
+            from logic.hand_controller import list_cameras
+            cameras = list_cameras()
+        except Exception:
+            cameras = []
+        self._camera_combo.blockSignals(True)
+        self._camera_combo.clear()
+        if not cameras:
+            self._camera_combo.addItem("No camera found", -1)
+        else:
+            for idx in cameras:
+                self._camera_combo.addItem(
+                    f"Camera {idx}" + (" (Default)" if idx == 0 else ""), idx)
+            for i in range(self._camera_combo.count()):
+                if self._camera_combo.itemData(i) == self._camera_index:
+                    self._camera_combo.setCurrentIndex(i)
+                    break
+        self._camera_combo.blockSignals(False)
+
+    def _on_camera_combo_changed(self, combo_idx: int):
+        if self._camera_combo is None:
+            return
+        d = self._camera_combo.itemData(combo_idx)
+        if d is not None and d >= 0:
+            self._camera_index = d
+            try:
+                from logic.app_config import set_camera_index
+                set_camera_index(d)
+            except Exception:
+                pass
+            self.camera_changed.emit(d)
+
+    def set_camera_index(self, idx: int):
+        self._camera_index = idx
+        if self._camera_combo is None:
+            return
+        self._camera_combo.blockSignals(True)
+        for i in range(self._camera_combo.count()):
+            if self._camera_combo.itemData(i) == idx:
+                self._camera_combo.setCurrentIndex(i)
+                break
+        self._camera_combo.blockSignals(False)
 
     def apply_theme(self, is_dark: bool):
         self.is_dark = is_dark
@@ -302,7 +357,6 @@ class GameMode(QWidget):
         self.page_title.setStyleSheet(
             f"color: {text}; font-size: 14px; font-weight: 800; letter-spacing: 1.5px; background: transparent; border: none;")
 
-        # Mouse panel
         self.mouse_panel.setStyleSheet(
             f"background-color: {panel}; border: 1px solid {border};")
         self.mouse_hdr_lbl.setStyleSheet(
@@ -328,10 +382,40 @@ class GameMode(QWidget):
             """)
 
         self.div1.setStyleSheet(f"background-color: {border};")
+        self.div2.setStyleSheet(f"background-color: {border};")
+
+        self.camera_panel.setStyleSheet(
+            f"background-color: {panel}; border: 1px solid {border};")
+        self.camera_hdr_lbl.setStyleSheet(
+            f"font-size: 9px; font-weight: 700; color: {text}; letter-spacing: 1.5px; background: transparent; border: none;")
+        self.camera_sub_lbl.setStyleSheet(
+            f"font-size: 8px; color: {muted}; letter-spacing: 1px; background: transparent; border: none;")
+        if self._camera_combo:
+            self._camera_combo.setStyleSheet(f"""
+                QComboBox {{
+                    background: {panel}; color: {text};
+                    border: 1px solid {border};
+                    border-radius: 2px; padding: 2px 6px; font-size: 9px;
+                    letter-spacing: 1px;
+                }}
+                QComboBox::drop-down {{ border: none; width: 16px; }}
+                QComboBox::down-arrow {{
+                    border-left: 3px solid transparent;
+                    border-right: 3px solid transparent;
+                    border-top: 4px solid {dim};
+                    width: 0; height: 0; margin-right: 5px;
+                }}
+                QComboBox QAbstractItemView {{
+                    background: {panel}; color: {text};
+                    border: 1px solid {border};
+                    selection-background-color: {"#161616" if is_dark else "#EDE5DF"};
+                    selection-color: {text}; outline: none;
+                }}
+            """)
+
         self.mode_section_hdr.setStyleSheet(
             f"color: {muted}; font-size: 8px; font-weight: 700; letter-spacing: 1.4px; background: transparent; border: none;")
 
-        # Mode cards
         for key, widgets in self._mode_cards.items():
             card     = widgets['card']
             name_lbl = widgets['name']
@@ -362,7 +446,6 @@ class GameMode(QWidget):
                 name_lbl.setStyleSheet(
                     f"color: {unsel_txt}; font-size: 9px; font-weight: 700; letter-spacing: 1.2px; background: transparent; border: none;")
 
-        # Model source buttons
         for key, btns in self._source_btns.items():
             cur_src = self._mode_sources.get(key, 'default')
             for src, btn in btns.items():
