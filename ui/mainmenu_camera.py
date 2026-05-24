@@ -20,7 +20,6 @@ class MainMenuCamera(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        #Top nav bar with hamburger + brand
         self.nav_bar = QWidget()
         self.nav_bar.setObjectName("nav_bar")
         self.nav_bar.setFixedHeight(42)
@@ -47,10 +46,8 @@ class MainMenuCamera(QWidget):
         nav_layout.addWidget(self.brand_box)
         nav_layout.addStretch()
 
-
         layout.addWidget(self.nav_bar)
 
-        #Progress / stepper bar
         self.progress_wrap = QWidget()
         self.progress_wrap.setObjectName("progress_wrap")
         self.progress_wrap.setFixedHeight(44)
@@ -105,7 +102,6 @@ class MainMenuCamera(QWidget):
         self.progress_rule.setFixedHeight(1)
         layout.addWidget(self.progress_rule)
 
-        #Content area
         self.content = QWidget()
         content_layout = QVBoxLayout(self.content)
         content_layout.setContentsMargins(24, 20, 20, 12)
@@ -114,11 +110,16 @@ class MainMenuCamera(QWidget):
         self.meta = QLabel("04 / 04 - CAMERA")
         content_layout.addWidget(self.meta)
 
-        self.title = QLabel("Camera Setup")
+        self.title = QLabel("Ready to Start")
         content_layout.addWidget(self.title)
 
-        self.desc = QLabel("Content coming soon.")
+        self.desc = QLabel("Setup complete. Click Start Tracking to begin gesture control.")
         content_layout.addWidget(self.desc)
+
+        content_layout.addSpacing(24)
+
+        self.ready_badge = QLabel("● SYSTEM READY")
+        content_layout.addWidget(self.ready_badge)
 
         content_layout.addStretch()
         layout.addWidget(self.content, stretch=1)
@@ -227,9 +228,12 @@ class MainMenuCamera(QWidget):
         for line in self.progress_lines:
             line.setStyleSheet(f"background-color: {border};")
 
+        success = "#00d084" if is_dark else "#00A36C"
         self.meta.setStyleSheet(f"color: {muted}; font-size: 8px; letter-spacing: 1.4px; border: none;")
         self.title.setStyleSheet(f"color: {text}; font-size: 19px; font-weight: 600; border: none;")
         self.desc.setStyleSheet(f"color: {dim}; font-size: 11px; border: none;")
+        self.ready_badge.setStyleSheet(
+            f"color: {success}; font-size: 10px; font-weight: 700; letter-spacing: 1.5px; border: none;")
 
         self.back_btn.setStyleSheet(f"""
             QPushButton {{

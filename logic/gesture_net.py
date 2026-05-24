@@ -1,8 +1,6 @@
-"""Shared GestureNet architecture and inference helpers."""
 import math
 import torch
 import torch.nn as nn
-
 
 class GestureNet(nn.Module):
     def __init__(self, input_size, num_classes):
@@ -17,7 +15,6 @@ class GestureNet(nn.Module):
     def forward(self, x):
         return self.net(x)
 
-
 def extract_features(lms, prev_row):
     """Normalise landmarks relative to wrist+scale and append delta from previous frame."""
     wx, wy, wz = lms[0].x, lms[0].y, lms[0].z
@@ -27,7 +24,6 @@ def extract_features(lms, prev_row):
         row.extend([(lm.x - wx) / scale, (lm.y - wy) / scale, (lm.z - wz) / scale])
     delta = [c - p for c, p in zip(row, prev_row)] if prev_row else [0.0] * 63
     return row + delta, row
-
 
 def run_nn(lms, prev_row, model, le, conf_thresh):
     """Run one inference step. Returns (gesture_str, confidence, new_prev_row)."""
@@ -41,7 +37,6 @@ def run_nn(lms, prev_row, model, le, conf_thresh):
     if conf.item() < conf_thresh:
         return 'none', conf.item(), new_prev
     return le.inverse_transform([idx.item()])[0], conf.item(), new_prev
-
 
 def load_nn(weights_path, encoder_path, input_size=126, tag='model'):
     """Load a GestureNet + label encoder. Returns (model, le) or (None, None) on failure."""
@@ -59,3 +54,4 @@ def load_nn(weights_path, encoder_path, input_size=126, tag='model'):
     except Exception as e:
         print(f"[NN:{tag}] Load error: {e}")
         return None, None
+

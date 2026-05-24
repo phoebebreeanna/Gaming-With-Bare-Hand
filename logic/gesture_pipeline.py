@@ -1,11 +1,19 @@
 import cv2
 import mediapipe as mp
-from mediapipe.tasks import python
-from mediapipe.tasks.python import vision
-import csv, os, shutil, time, sys, math, glob, argparse
+from mediapipe.tasks import python as mp_tasks
+from mediapipe.tasks.python import vision as mp_vision
+import csv
+import os
+import shutil
+import time
+import sys
+import math
+import glob
+import argparse
+from collections import defaultdict, Counter
+
 import pandas as pd
 import numpy as np
-from collections import defaultdict, Counter
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import classification_report
@@ -15,6 +23,15 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset, WeightedRandomSampler
 import joblib
 import configparser
+
+from PySide6.QtWidgets import (
+    QApplication, QWidget, QLabel, QVBoxLayout, QHBoxLayout,
+)
+from PySide6.QtCore import Qt, QThread, Signal, QEventLoop
+from PySide6.QtGui import QImage, QPixmap
+
+PIPELINE_DIR = os.path.dirname(os.path.abspath(__file__))
+TASK_PATH    = os.path.join(PIPELINE_DIR, 'hand_landmarker.task')
 
 HAND_CONNECTIONS = [
     (0,1),(1,2),(2,3),(3,4),
@@ -37,38 +54,46 @@ FINGER_LMS = [
     [1,2,3,4], [5,6,7,8], [9,10,11,12], [13,14,15,16], [17,18,19,20],
 ]
 
+_DARK_BG   = "#0f0f16"
+_DARK_CARD = "#1a1a26"
+_ACCENT    = "#00cc66"
+_WARN      = "#ff4444"
+_TEXT      = "#cccccc"
+_DIM       = "#666666"
 
 def load_conf(path):
     cfg = configparser.ConfigParser()
     cfg.read(path)
-    gestures = [g.strip() for g in cfg['gestures']['names'].split(',')]
-    data_dir  = cfg['files'].get('data_dir', 'data')
-    os.makedirs(data_dir, exist_ok=True)
-    def dp(name):
-        return os.path.join(data_dir, cfg['files'][name])
-    return {
-        'project':              cfg['project']['name'],
-        'gestures':             gestures,
-        'target':               cfg.getint('collection',    'target_per_gesture'),
-        'min_record_dist':      cfg.getfloat('collection',  'min_record_dist'),
-        'diversity_every':      cfg.getint('collection',    'diversity_every'),
-        'aug_per_sample':       cfg.getint('preprocessing', 'aug_per_sample'),
-        'noise_std':            cfg.getfloat('preprocessing','noise_std'),
-        'rot_max_deg':          cfg.getfloat('preprocessing','rot_max_deg'),
-        'scale_jitter':         cfg.getfloat('preprocessing','scale_jitter'),
-        'epochs':               cfg.getint('training',      'epochs'),
-        'batch_size':           cfg.getint('training',      'batch_size'),
-        'lr':                   cfg.getfloat('training',    'learning_rate'),
-        'focal_gamma':          cfg.getfloat('training',    'focal_gamma'),
-        'low_conf_threshold':   cfg.getfloat('training',    'low_conf_threshold'),
-        'weak_acc_threshold':   cfg.getfloat('training',    'weak_accuracy_threshold'),
-        'raw_csv':              dp('raw_csv'),
-        'processed_csv':        dp('processed_csv'),
-        'model_best':           dp('model_best'),
-        'model_out':            dp('model_out'),
-        'label_encoder':        dp('label_encoder'),
-    }
+    base         = os.path.dirname(os.path.abspath(path))
+    data_dir     = cfg['files'].get('data_dir', 'data')
+    full_data_dir = os.path.join(base, data_dir)
+    os.makedirs(full_data_dir, exist_ok=True)
 
+    def dp(name):
+        return os.path.join(full_data_dir, cfg['files'][name])
+
+    return {
+        'project':            cfg['project']['name'],
+        'gestures':           [g.strip() for g in cfg['gestures']['names'].split(',')],
+        'target':             cfg.getint('collection',    'target_per_gesture'),
+        'min_record_dist':    cfg.getfloat('collection',  'min_record_dist'),
+        'diversity_every':    cfg.getint('collection',    'diversity_every'),
+        'aug_per_sample':     cfg.getint('preprocessing', 'aug_per_sample'),
+        'noise_std':          cfg.getfloat('preprocessing','noise_std'),
+        'rot_max_deg':        cfg.getfloat('preprocessing','rot_max_deg'),
+        'scale_jitter':       cfg.getfloat('preprocessing','scale_jitter'),
+        'epochs':             cfg.getint('training',      'epochs'),
+        'batch_size':         cfg.getint('training',      'batch_size'),
+        'lr':                 cfg.getfloat('training',    'learning_rate'),
+        'focal_gamma':        cfg.getfloat('training',    'focal_gamma'),
+        'low_conf_threshold': cfg.getfloat('training',    'low_conf_threshold'),
+        'weak_acc_threshold': cfg.getfloat('training',    'weak_accuracy_threshold'),
+        'raw_csv':            dp('raw_csv'),
+        'processed_csv':      dp('processed_csv'),
+        'model_best':         dp('model_best'),
+        'model_out':          dp('model_out'),
+        'label_encoder':      dp('label_encoder'),
+    }
 
 def banner(text):
     w = 60
@@ -76,29 +101,25 @@ def banner(text):
     print(f"  {text}")
     print('='*w)
 
+def diversity_hint(count, diversity_every):
+    hints = [
+        "vary your DISTANCE — move closer or further",
+        "vary your HEIGHT — raise or lower your hand",
+        "vary your ANGLE — tilt your wrist slightly",
+        "vary your POSITION — move left/right in frame",
+        "vary your LIGHTING — try different brightness",
+    ]
+    return hints[(count // diversity_every) % len(hints)]
 
-def prompt_continue(msg="Press Enter to continue, or type 'skip' to skip this step: "):
-    r = input(msg).strip().lower()
-    return r != 'skip'
-
-
-def draw_landmarks_collect(frame, lms, w, h):
-    pts = [(int(lm.x * w), int(lm.y * h)) for lm in lms]
-    for a, b in HAND_CONNECTIONS:
-        cv2.line(frame, pts[a], pts[b], (0, 200, 255), 1, cv2.LINE_AA)
-    for idx, (px, py) in enumerate(pts):
-        r = 5 if idx in FINGERTIPS else 3
-        cv2.circle(frame, (px, py), r, (255, 255, 255), -1, cv2.LINE_AA)
-        cv2.circle(frame, (px, py), r, (0, 150, 255),   1, cv2.LINE_AA)
-
-
-def wrist_dist(lms, last_pos):
-    if last_pos is None:
-        return float('inf')
-    dx = lms[0].x - last_pos[0]
-    dy = lms[0].y - last_pos[1]
-    return math.sqrt(dx*dx + dy*dy)
-
+def count_existing(csv_path, gestures):
+    counts = {g: 0 for g in gestures}
+    if os.path.exists(csv_path) and os.path.getsize(csv_path) > 0:
+        with open(csv_path, 'r') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if row['label'] in counts:
+                    counts[row['label']] += 1
+    return counts
 
 def delete_label_from_csv(csv_path, label):
     if not os.path.exists(csv_path) or os.path.getsize(csv_path) == 0:
@@ -117,8 +138,24 @@ def delete_label_from_csv(csv_path, label):
     shutil.move(tmp, csv_path)
     return removed
 
+def wrist_dist(lms, last_pos):
+    if last_pos is None:
+        return float('inf')
+    dx = lms[0].x - last_pos[0]
+    dy = lms[0].y - last_pos[1]
+    return math.sqrt(dx*dx + dy*dy)
 
-def open_csv(csv_path, gestures):
+def draw_landmarks_collect(frame, lms, w, h):
+    """Draw hand skeleton overlay on a numpy RGB frame (cv2 drawing, not UI)."""
+    pts = [(int(lm.x * w), int(lm.y * h)) for lm in lms]
+    for a, b in HAND_CONNECTIONS:
+        cv2.line(frame, pts[a], pts[b], (0, 200, 255), 1, cv2.LINE_AA)
+    for idx, (px, py) in enumerate(pts):
+        r = 5 if idx in FINGERTIPS else 3
+        cv2.circle(frame, (px, py), r, (255, 255, 255), -1, cv2.LINE_AA)
+        cv2.circle(frame, (px, py), r, (0, 150, 255),   1, cv2.LINE_AA)
+
+def _open_csv(csv_path, gestures):
     header_coords = [f'{ax}{i}' for i in range(21) for ax in ['x','y','z']]
     header = header_coords + ['label']
     exists = os.path.exists(csv_path) and os.path.getsize(csv_path) > 0
@@ -128,241 +165,291 @@ def open_csv(csv_path, gestures):
         cw.writerow(header)
     return fh, cw
 
+def _qlabel(text, color=_TEXT, size=11, bold=False):
+    lbl = QLabel(text)
+    weight = "bold" if bold else "normal"
+    lbl.setStyleSheet(
+        f"color: {color}; font-size: {size}px; font-weight: {weight}; background: transparent;")
+    return lbl
 
-def diversity_hint(count, diversity_every):
-    hints = [
-        "vary your DISTANCE — move closer or further",
-        "vary your HEIGHT — raise or lower your hand",
-        "vary your ANGLE — tilt your wrist slightly",
-        "vary your POSITION — move left/right in frame",
-        "vary your LIGHTING — try different brightness",
-    ]
-    return hints[(count // diversity_every) % len(hints)]
+class _CameraWorker(QThread):
+    """Background thread: capture frames + run MediaPipe IMAGE-mode detection."""
+    frame_ready = Signal(object, object)  
 
+    def __init__(self, task_path=None, cam_idx=0):
+        super().__init__()
+        self._task_path = task_path or TASK_PATH
+        self._cam_idx   = cam_idx
+        self._running   = False
 
-def count_existing(csv_path, gestures):
-    counts = {g: 0 for g in gestures}
-    if os.path.exists(csv_path) and os.path.getsize(csv_path) > 0:
-        with open(csv_path, 'r') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                if row['label'] in counts:
-                    counts[row['label']] += 1
-    return counts
+    def stop(self):
+        self._running = False
 
+    def run(self):
+        base_opts = mp_tasks.BaseOptions(model_asset_path=self._task_path)
+        options   = mp_vision.HandLandmarkerOptions(base_options=base_opts, num_hands=1)
+        detector  = mp_vision.HandLandmarker.create_from_options(options)
 
-def run_collection(cfg, target_gestures=None):
-    gestures        = cfg['gestures']
-    target          = cfg['target']
-    min_record_dist = cfg['min_record_dist']
-    diversity_every = cfg['diversity_every']
-    csv_path        = cfg['raw_csv']
+        cap = cv2.VideoCapture(self._cam_idx)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH,  640)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        cap.set(cv2.CAP_PROP_FPS, 30)
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
-    if target_gestures:
-        gestures = [g for g in gestures if g in target_gestures]
+        self._running = True
+        while self._running and cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
+            frame = cv2.flip(frame, 1)
+            rgb   = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            try:
+                result = detector.detect(mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb))
+            except Exception:
+                result = None
+            self.frame_ready.emit(frame, result)
 
-    banner(f"STEP 1 — DATA COLLECTION  [{cfg['project']}]")
-    print(f"Gestures to collect: {gestures}")
-    print(f"Target per gesture : {target} samples")
-    print()
-    print("Controls:")
-    print("  0-9  select gesture by index")
-    print("  SPACE  start / stop recording")
-    print("  D      delete all samples for selected gesture (double-tap)")
-    print("  ESC    finish and move on")
-    print()
+        cap.release()
+        detector.close()
 
-    for i, g in enumerate(gestures):
-        print(f"  {i} = {g}")
-    print()
+class CollectionWindow(QWidget):
+    """PySide6 gesture collection window — no cv2.imshow."""
 
-    base_options = python.BaseOptions(model_asset_path='hand_landmarker.task')
-    options      = vision.HandLandmarkerOptions(base_options=base_options, num_hands=1)
-    detector     = vision.HandLandmarker.create_from_options(options)
+    closed_sig = Signal()
 
-    cap = cv2.VideoCapture(0)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH,  640)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-    cap.set(cv2.CAP_PROP_BUFFERSIZE,   1)
-    W_CAP, H_CAP = 640, 480
+    def __init__(self, cfg, target_gestures=None, cam_idx=0):
+        super().__init__()
+        self.cfg             = cfg
+        self.gestures        = cfg['gestures']
+        if target_gestures:
+            self.gestures    = [g for g in self.gestures if g in target_gestures]
+        self.target          = cfg['target']
+        self.min_record_dist = cfg['min_record_dist']
+        self.diversity_every = cfg['diversity_every']
+        self.csv_path        = cfg['raw_csv']
 
-    counts         = count_existing(csv_path, gestures)
-    current_label  = None
-    collecting     = False
-    last_saved_pos = None
-    confirm_delete = False
-    confirm_timer  = 0.0
-    CONFIRM_WINDOW = 3.0
+        self.counts          = count_existing(self.csv_path, self.gestures)
+        self.current_label   = None
+        self.collecting      = False
+        self.last_saved_pos  = None
+        self.confirm_delete  = False
+        self.confirm_timer   = 0.0
+        self.CONFIRM_WINDOW  = 3.0
 
-    csv_file, csv_writer = open_csv(csv_path, gestures)
+        self._csv_file, self._csv_writer = _open_csv(self.csv_path, self.gestures)
 
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            break
+        self._worker = _CameraWorker(cam_idx=cam_idx)
+        self._worker.frame_ready.connect(self._on_frame)
 
-        frame    = cv2.flip(frame, 1)
-        rgb      = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-        result   = detector.detect(mp_image)
-        h, w     = frame.shape[:2]
+        self._build_ui()
+        self._worker.start()
+        self.setFocus()
+
+    def _hsep(self):
+        sep = QWidget()
+        sep.setFixedHeight(1)
+        sep.setStyleSheet("background: #333344;")
+        return sep
+
+    def _build_ui(self):
+        self.setWindowTitle(f"Collect Gestures · {self.cfg['project']}")
+        self.setStyleSheet(f"background-color: {_DARK_BG};")
+        self.setMinimumSize(940, 520)
+
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(10, 10, 10, 10)
+        outer.setSpacing(10)
+
+        self.cam_lbl = QLabel("Loading camera…")
+        self.cam_lbl.setFixedSize(640, 480)
+        self.cam_lbl.setAlignment(Qt.AlignCenter)
+        self.cam_lbl.setStyleSheet("background: #050508; border: 1px solid #333;")
+        outer.addWidget(self.cam_lbl)
+
+        right = QWidget()
+        right.setStyleSheet(f"background: {_DARK_CARD}; border-radius: 6px;")
+        rv = QVBoxLayout(right)
+        rv.setContentsMargins(12, 12, 12, 12)
+        rv.setSpacing(5)
+
+        rv.addWidget(_qlabel(self.cfg['project'], size=14, bold=True))
+        rv.addWidget(_qlabel(f"Target: {self.target} per gesture", _DIM, size=10))
+        rv.addWidget(self._hsep())
+        rv.addWidget(_qlabel("GESTURES", _DIM, size=9, bold=True))
+
+        self._g_lbls = {}
+        for i, g in enumerate(self.gestures):
+            lbl = _qlabel(f"  {i}: {g}")
+            self._g_lbls[g] = lbl
+            rv.addWidget(lbl)
+
+        rv.addStretch()
+        rv.addWidget(self._hsep())
+
+        self._status_lbl = _qlabel("Select a gesture (0–9)", _DIM)
+        rv.addWidget(self._status_lbl)
+
+        rv.addWidget(self._hsep())
+        for line in ["0–9  select", "SPC  record", "D    delete (tap twice)", "G/ESC  finish"]:
+            rv.addWidget(_qlabel(line, _DIM, size=9))
+
+        outer.addWidget(right)
+        self._refresh_labels()
+
+    def _refresh_labels(self):
+        now = time.time()
+        for i, g in enumerate(self.gestures):
+            done   = self.counts[g] >= self.target
+            is_cur = (self.current_label == i)
+            prefix = "▶ " if is_cur else "  "
+            status = "✓" if done else f"{self.counts[g]}/{self.target}"
+            color  = _ACCENT if done else ("#ffcc00" if is_cur else _TEXT)
+            weight = "bold" if is_cur else "normal"
+            self._g_lbls[g].setText(f"{prefix}{i}: {g}  [{status}]")
+            self._g_lbls[g].setStyleSheet(
+                f"color: {color}; font-size: 11px; font-weight: {weight}; background: transparent;")
+
+        if self.confirm_delete and self.current_label is not None:
+            g   = self.gestures[self.current_label]
+            rem = max(0.0, self.CONFIRM_WINDOW - (now - self.confirm_timer))
+            self._status_lbl.setText(f"⚠ Press D again to DELETE '{g}' ({rem:.1f}s)")
+            self._status_lbl.setStyleSheet(f"color: {_WARN}; font-size: 11px; background: transparent;")
+        elif self.collecting and self.current_label is not None:
+            g = self.gestures[self.current_label]
+            self._status_lbl.setText(f"● RECORDING: {g}  [{self.counts[g]}/{self.target}]")
+            self._status_lbl.setStyleSheet(f"color: {_WARN}; font-size: 11px; background: transparent;")
+        elif self.current_label is not None:
+            g = self.gestures[self.current_label]
+            self._status_lbl.setText(f"Ready · {g}  (SPACE to record)")
+            self._status_lbl.setStyleSheet(f"color: {_ACCENT}; font-size: 11px; background: transparent;")
+        else:
+            self._status_lbl.setText("Select a gesture (0–9)")
+            self._status_lbl.setStyleSheet(f"color: {_DIM}; font-size: 11px; background: transparent;")
+
+    def _on_frame(self, frame_bgr, result):
         now      = time.time()
+        has_hand = bool(result and result.hand_landmarks)
+        lms      = result.hand_landmarks[0] if has_hand else None
 
-        if confirm_delete and (now - confirm_timer) > CONFIRM_WINDOW:
-            confirm_delete = False
+        if self.confirm_delete and (now - self.confirm_timer) > self.CONFIRM_WINDOW:
+            self.confirm_delete = False
 
-        moved = False
-
-        if result.hand_landmarks:
-            lms = result.hand_landmarks[0]
-            wx, wy, wz = lms[0].x, lms[0].y, lms[0].z
+        if lms:
+            wx, wy = lms[0].x, lms[0].y
             row = []
             for lm in lms:
-                row.extend([lm.x - wx, lm.y - wy, lm.z - wz])
+                row.extend([lm.x - wx, lm.y - wy, lm.z - lms[0].z])
 
-            dist  = wrist_dist(lms, last_saved_pos)
-            moved = dist == float('inf') or dist >= min_record_dist
+            dist  = wrist_dist(lms, self.last_saved_pos)
+            moved = (dist == float('inf') or dist >= self.min_record_dist)
 
-            if collecting and current_label is not None and moved:
-                csv_writer.writerow(row + [gestures[current_label]])
-                csv_file.flush()
-                counts[gestures[current_label]] += 1
-                last_saved_pos = (lms[0].x, lms[0].y)
-                c = counts[gestures[current_label]]
-                if c % diversity_every == 0 and c > 0:
-                    print(f"  [{c} samples] Tip: {diversity_hint(c, diversity_every)}")
+            if self.collecting and self.current_label is not None and moved:
+                self._csv_writer.writerow(row + [self.gestures[self.current_label]])
+                self._csv_file.flush()
+                g = self.gestures[self.current_label]
+                self.counts[g] += 1
+                self.last_saved_pos = (lms[0].x, lms[0].y)
+                c = self.counts[g]
+                if c % self.diversity_every == 0 and c > 0:
+                    print(f"  [{c} samples] Tip: {diversity_hint(c, self.diversity_every)}")
         else:
-            last_saved_pos = None
+            self.last_saved_pos = None
 
-        display = frame.copy()
+        display = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+        h, w    = display.shape[:2]
+        if lms:
+            draw_landmarks_collect(display, lms, w, h)
+            if self.collecting and self.current_label is not None:
+                g     = self.gestures[self.current_label]
+                bar_w = int((min(self.counts[g], self.target) / self.target) * (w - 20))
+                cv2.rectangle(display, (10, h-26), (w-10, h-10), (40, 40, 40), -1)
+                cv2.rectangle(display, (10, h-26), (10+bar_w, h-10), (0, 180, 100), -1)
 
-        for i, g in enumerate(gestures):
-            done   = counts[g] >= target
-            color  = (0, 255, 0) if done else (180, 180, 180)
-            tag    = "OK" if done else f"{counts[g]}/{target}"
-            prefix = ">> " if current_label == i else "   "
-            cv2.putText(display, f"{prefix}{i}:{g}  {tag}",
-                        (w - 310, 30 + i * 24),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+        qimg = QImage(display.data, w, h, 3*w, QImage.Format_RGB888).copy()
+        self.cam_lbl.setPixmap(QPixmap.fromImage(qimg))
+        self._refresh_labels()
 
-        all_done = all(counts[g] >= target for g in gestures)
-        if all_done:
-            cv2.putText(display, "ALL DONE  —  ESC to continue",
-                        (10, h - 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-        else:
-            cv2.putText(display, "G = skip and continue with what you have",
-                        (10, h - 50), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (120, 120, 120), 1)
+    def keyPressEvent(self, event):
+        key = event.key()
 
-        if confirm_delete and current_label is not None:
-            remaining = max(0.0, CONFIRM_WINDOW - (now - confirm_timer))
-            msg = f"Press D again to DELETE '{gestures[current_label]}' ({remaining:.1f}s)"
-            cv2.rectangle(display, (0, h - 80), (w, h - 55), (0, 0, 160), -1)
-            cv2.putText(display, msg, (10, h - 62),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 100, 255), 2)
+        if Qt.Key_0 <= key <= Qt.Key_9:
+            idx = key - Qt.Key_0
+            if idx < len(self.gestures):
+                self.collecting     = False
+                self.current_label  = idx
+                self.last_saved_pos = None
+                self.confirm_delete = False
+                g = self.gestures[idx]
+                print(f"Selected: {g}  ({self.counts[g]} samples)")
 
-        if result.hand_landmarks:
-            draw_landmarks_collect(display, result.hand_landmarks[0], w, h)
-            if collecting and current_label is not None:
-                label  = gestures[current_label]
-                bar_w  = int((counts[label] / target) * 300)
-                gate   = "  [move a bit]" if not moved else ""
-                cv2.rectangle(display, (10, h-30), (310, h-10), (60,60,60), -1)
-                cv2.rectangle(display, (10, h-30), (10+bar_w, h-10), (0,0,255), -1)
-                cv2.putText(display, f"RECORDING: {label}  [{counts[label]}/{target}]{gate}",
-                            (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0,0,255), 2)
-                c = counts[label]
-                if c > 0:
-                    cv2.putText(display, f"Tip: {diversity_hint(c, diversity_every)}",
-                                (10, 65), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 200, 200), 1)
-            else:
-                lname = gestures[current_label] if current_label is not None else 'none selected'
-                cv2.putText(display, f"Ready | {lname}  (SPACE=record  D=delete)",
-                            (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,200,0), 2)
-        else:
-            cv2.putText(display, "No hand detected",
-                        (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,80,255), 2)
-
-        cv2.imshow('Collect Gestures', display)
-        key = cv2.waitKey(1) & 0xFF
-
-        if key == 27:
-            break
-
-        elif key in (ord('g'), ord('G')):
-            break
-
-        elif key == ord(' '):
-            if current_label is None:
+        elif key == Qt.Key_Space:
+            if self.current_label is None:
                 print("Select a gesture first")
             else:
-                collecting     = not collecting
-                last_saved_pos = None
-                confirm_delete = False
-                state = "started" if collecting else "stopped"
-                print(f"Recording {state} — {gestures[current_label]}  ({counts[gestures[current_label]]} samples)")
+                self.collecting     = not self.collecting
+                self.last_saved_pos = None
+                self.confirm_delete = False
+                state = "started" if self.collecting else "stopped"
+                g     = self.gestures[self.current_label]
+                print(f"Recording {state} — {g}  ({self.counts[g]} samples)")
 
-        elif key in (ord('d'), ord('D')):
-            if current_label is None:
+        elif key == Qt.Key_D:
+            if self.current_label is None:
                 print("Select a gesture first")
-            elif not confirm_delete:
-                confirm_delete = True
-                confirm_timer  = now
-                collecting     = False
-                print(f"Press D again within {CONFIRM_WINDOW:.0f}s to DELETE '{gestures[current_label]}'")
+            elif not self.confirm_delete:
+                self.confirm_delete = True
+                self.confirm_timer  = time.time()
+                self.collecting     = False
+                g = self.gestures[self.current_label]
+                print(f"Press D again within {self.CONFIRM_WINDOW:.0f}s to DELETE '{g}'")
             else:
-                lbl        = gestures[current_label]
-                collecting = False
-                csv_file.flush()
-                csv_file.close()
-                removed = delete_label_from_csv(csv_path, lbl)
-                counts[lbl] = 0
-                confirm_delete  = False
-                last_saved_pos  = None
-                print(f"Deleted {removed} rows for '{lbl}'")
-                csv_file, csv_writer = open_csv(csv_path, gestures)
+                g = self.gestures[self.current_label]
+                self.collecting = False
+                self._csv_file.flush()
+                self._csv_file.close()
+                removed = delete_label_from_csv(self.csv_path, g)
+                self.counts[g]      = 0
+                self.confirm_delete = False
+                self.last_saved_pos = None
+                print(f"Deleted {removed} rows for '{g}'")
+                self._csv_file, self._csv_writer = _open_csv(self.csv_path, self.gestures)
 
-        elif ord('0') <= key <= ord('9'):
-            idx = key - ord('0')
-            if idx < len(gestures):
-                collecting     = False
-                current_label  = idx
-                last_saved_pos = None
-                confirm_delete = False
-                print(f"Selected: {gestures[idx]}  ({counts[gestures[idx]]} samples)")
+        elif key in (Qt.Key_G, Qt.Key_Escape):
+            self._finish()
+        else:
+            super().keyPressEvent(event)
 
-    csv_file.close()
-    cap.release()
-    cv2.destroyAllWindows()
-    detector.close()
+    def _finish(self):
+        self.collecting = False
+        if self._worker.isRunning():
+            self._worker.stop()
+            self._worker.wait(2000)
+        if not self._csv_file.closed:
+            self._csv_file.close()
+        self.close()
 
-    banner("Collection complete")
-    for g in gestures:
-        status = "OK" if counts[g] >= target else f"NEED {target - counts[g]} more"
-        print(f"  {g}: {counts[g]}  [{status}]")
-
-    return counts
-
+    def closeEvent(self, event):
+        if self._worker.isRunning():
+            self._worker.stop()
+            self._worker.wait(2000)
+        if not self._csv_file.closed:
+            self._csv_file.close()
+        self.closed_sig.emit()
+        event.accept()
 
 def normalize(raw_row):
     coords = np.array(raw_row, dtype=np.float32).reshape(21, 3)
-    scale  = np.sqrt(coords[9, 0]**2 + coords[9, 1]**2)
-    scale  = max(scale, 1e-6)
-    normalized = coords.copy()
-    normalized[:, 0] /= scale
-    normalized[:, 1] /= scale
-    normalized[:, 2] /= scale
-    return normalized.flatten().tolist()
-
+    scale  = max(math.sqrt(coords[9, 0]**2 + coords[9, 1]**2), 1e-6)
+    return (coords / scale).flatten().tolist()
 
 def rotate_2d(coords_63, angle_deg):
-    coords  = np.array(coords_63, dtype=np.float32).reshape(21, 3)
-    angle   = np.deg2rad(angle_deg)
-    cos_a, sin_a = np.cos(angle), np.sin(angle)
-    rotated = coords.copy()
+    coords        = np.array(coords_63, dtype=np.float32).reshape(21, 3)
+    angle         = np.deg2rad(angle_deg)
+    cos_a, sin_a  = np.cos(angle), np.sin(angle)
+    rotated       = coords.copy()
     rotated[:, 0] = coords[:, 0] * cos_a - coords[:, 1] * sin_a
     rotated[:, 1] = coords[:, 0] * sin_a + coords[:, 1] * cos_a
     return rotated.flatten().tolist()
-
 
 def augment(coords_63, aug_per_sample, noise_std, rot_max_deg, scale_jitter):
     variants = []
@@ -374,38 +461,32 @@ def augment(coords_63, aug_per_sample, noise_std, rot_max_deg, scale_jitter):
         variants.append(c.tolist())
     return variants
 
-
 def compute_delta(current, previous):
     if previous is None:
         return [0.0] * len(current)
     return [c - p for c, p in zip(current, previous)]
 
-
 def run_preprocess(cfg):
     banner("STEP 2 — PREPROCESSING")
-    raw_path  = cfg['raw_csv']
-    out_path  = cfg['processed_csv']
+    raw_path = cfg['raw_csv']
+    out_path = cfg['processed_csv']
 
     if not os.path.exists(raw_path):
         print(f"ERROR: {raw_path} not found.")
         return False
 
-    df = pd.read_csv(raw_path)
-    print(f"Loaded {len(df)} raw samples")
-
+    df           = pd.read_csv(raw_path)
     feature_cols = [c for c in df.columns if c != 'label']
-
-    raw_counts = df['label'].value_counts().to_dict()
+    raw_counts   = df['label'].value_counts().to_dict()
+    print(f"Loaded {len(df)} raw samples")
     print("Raw counts:")
     for g in cfg['gestures']:
         print(f"  {g}: {raw_counts.get(g, 0)}")
 
     class_rows = defaultdict(list)
     for _, row in df.iterrows():
-        raw_feats = row[feature_cols].tolist()
-        label     = row['label']
-        norm      = normalize(raw_feats)
-        class_rows[label].append(norm)
+        norm = normalize(row[feature_cols].tolist())
+        class_rows[row['label']].append(norm)
 
     HEADER = (
         [f'{ax}{i}' for i in range(21) for ax in ['x','y','z']] +
@@ -420,16 +501,11 @@ def run_preprocess(cfg):
             delta = compute_delta(norm, prev)
             prev  = norm
             out_rows.append(norm + delta + [label])
-            aug_variants = augment(norm,
-                                   cfg['aug_per_sample'],
-                                   cfg['noise_std'],
-                                   cfg['rot_max_deg'],
-                                   cfg['scale_jitter'])
             aug_prev = norm
-            for aug in aug_variants:
-                aug_delta = compute_delta(aug, aug_prev)
-                aug_prev  = aug
-                out_rows.append(aug + aug_delta + [label])
+            for aug in augment(norm, cfg['aug_per_sample'], cfg['noise_std'],
+                               cfg['rot_max_deg'], cfg['scale_jitter']):
+                out_rows.append(aug + compute_delta(aug, aug_prev) + [label])
+                aug_prev = aug
 
     with open(out_path, 'w', newline='') as f:
         writer = csv.writer(f)
@@ -445,9 +521,7 @@ def run_preprocess(cfg):
         raw   = raw_counts.get(g, 0)
         total = final_counts.get(g, 0)
         print(f"  {g}: {raw} raw → {total} total")
-
     return True
-
 
 class FocalLoss(nn.Module):
     def __init__(self, gamma=2.0, weight=None):
@@ -458,9 +532,7 @@ class FocalLoss(nn.Module):
     def forward(self, logits, targets):
         ce   = F.cross_entropy(logits, targets, weight=self.weight, reduction='none')
         pt   = torch.exp(-ce)
-        loss = ((1 - pt) ** self.gamma) * ce
-        return loss.mean()
-
+        return (((1 - pt) ** self.gamma) * ce).mean()
 
 class GestureNet(nn.Module):
     def __init__(self, input_size, num_classes):
@@ -469,12 +541,11 @@ class GestureNet(nn.Module):
             nn.Linear(input_size, 256), nn.BatchNorm1d(256), nn.ReLU(), nn.Dropout(0.3),
             nn.Linear(256, 128),        nn.BatchNorm1d(128), nn.ReLU(), nn.Dropout(0.3),
             nn.Linear(128, 64),         nn.BatchNorm1d(64),  nn.ReLU(), nn.Dropout(0.2),
-            nn.Linear(64, num_classes)
+            nn.Linear(64, num_classes),
         )
 
     def forward(self, x):
         return self.net(x)
-
 
 def run_training(cfg):
     banner("STEP 3 — TRAINING")
@@ -482,15 +553,14 @@ def run_training(cfg):
 
     if not os.path.exists(data_path):
         print(f"ERROR: {data_path} not found. Run preprocess first.")
-        return None, None
+        return None, None, None
 
-    df = pd.read_csv(data_path)
-    df = df[df['label'].isin(cfg['gestures'])].reset_index(drop=True)
+    df    = pd.read_csv(data_path)
+    df    = df[df['label'].isin(cfg['gestures'])].reset_index(drop=True)
+    X     = df.drop('label', axis=1).values.astype(np.float32)
+    y     = df['label'].values
 
-    X  = df.drop('label', axis=1).values.astype(np.float32)
-    y  = df['label'].values
-
-    print(f"Samples per gesture:")
+    print("Samples per gesture:")
     for label, count in sorted(Counter(y).items()):
         print(f"  {label}: {count}")
 
@@ -500,11 +570,9 @@ def run_training(cfg):
     print(f"\nClasses: {list(le.classes_)}")
     print(f"Features: {X.shape[1]}")
 
-    original_indices = np.arange(len(X))
-    X_train, X_test, y_train, y_test, idx_train, idx_test = train_test_split(
-        X, y_enc, original_indices,
-        test_size=0.2, random_state=42, stratify=y_enc
-    )
+    orig_idx = np.arange(len(X))
+    X_train, X_test, y_train, y_test, _, _ = train_test_split(
+        X, y_enc, orig_idx, test_size=0.2, random_state=42, stratify=y_enc)
 
     X_train_t = torch.tensor(X_train)
     y_train_t = torch.tensor(y_train, dtype=torch.long)
@@ -514,28 +582,23 @@ def run_training(cfg):
     class_counts = np.bincount(y_train)
     weights      = 1.0 / class_counts[y_train]
     sampler      = WeightedRandomSampler(weights, len(weights))
-    loader       = DataLoader(
-        TensorDataset(X_train_t, y_train_t),
-        batch_size=cfg['batch_size'],
-        sampler=sampler
-    )
+    loader       = DataLoader(TensorDataset(X_train_t, y_train_t),
+                              batch_size=cfg['batch_size'], sampler=sampler)
 
     model     = GestureNet(X_train.shape[1], len(le.classes_))
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg['lr'])
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=cfg['epochs'], eta_min=1e-5
-    )
+        optimizer, T_max=cfg['epochs'], eta_min=1e-5)
     cls_w     = torch.tensor(1.0 / class_counts, dtype=torch.float32)
     cls_w     = cls_w / cls_w.sum() * len(class_counts)
     criterion = FocalLoss(gamma=cfg['focal_gamma'], weight=cls_w)
 
     best_acc   = 0.0
     best_epoch = 0
-
     print(f"\nTraining for {cfg['epochs']} epochs...\n")
     for epoch in range(cfg['epochs']):
         model.train()
-        total_loss = 0
+        total_loss = 0.0
         for xb, yb in loader:
             optimizer.zero_grad()
             loss = criterion(model(xb), yb)
@@ -543,7 +606,6 @@ def run_training(cfg):
             optimizer.step()
             total_loss += loss.item()
         scheduler.step()
-
         if (epoch + 1) % 10 == 0:
             model.eval()
             with torch.no_grad():
@@ -557,16 +619,13 @@ def run_training(cfg):
                 torch.save(model.state_dict(), cfg['model_best'])
 
     print(f"\nBest val_acc={best_acc:.3f} at epoch {best_epoch}")
-
     model.load_state_dict(torch.load(cfg['model_best']))
     model.eval()
 
     with torch.no_grad():
         preds_test = model(X_test_t).argmax(1).numpy()
-
     y_test_labels = le.inverse_transform(y_test)
     y_pred_labels = le.inverse_transform(preds_test)
-
     print("\nPer-class report:")
     print(classification_report(y_test_labels, y_pred_labels, digits=3))
 
@@ -574,8 +633,7 @@ def run_training(cfg):
     print("Per-class accuracy:")
     for cls in le.classes_:
         mask = y_test_labels == cls
-        if mask.sum() == 0:
-            continue
+        if mask.sum() == 0: continue
         cls_acc = (y_pred_labels[mask] == cls).mean()
         status  = "OK" if cls_acc >= cfg['weak_acc_threshold'] else "WEAK"
         print(f"  {cls:<22} {cls_acc:.3f}  [{status}]")
@@ -584,55 +642,46 @@ def run_training(cfg):
 
     X_all_t = torch.tensor(X)
     with torch.no_grad():
-        logits_all = model(X_all_t)
-        probs_all  = torch.softmax(logits_all, dim=1).numpy()
-        preds_all  = probs_all.argmax(axis=1)
+        probs_all = torch.softmax(model(X_all_t), dim=1).numpy()
+        preds_all = probs_all.argmax(axis=1)
 
     y_all_labels = le.inverse_transform(y_enc)
     y_all_pred   = le.inverse_transform(preds_all)
     conf_all     = probs_all.max(axis=1)
 
-    wrong_mask   = y_all_pred != y_all_labels
-    lowconf_mask = (conf_all < cfg['low_conf_threshold']) & ~wrong_mask
-    flagged_mask = wrong_mask | lowconf_mask
+    wrong_mask    = y_all_pred != y_all_labels
+    lowconf_mask  = (conf_all < cfg['low_conf_threshold']) & ~wrong_mask
+    flagged_mask  = wrong_mask | lowconf_mask
+    flagged_idx   = list(np.where(flagged_mask)[0])
 
-    flagged_indices = list(np.where(flagged_mask)[0])
+    print(f"\nMisclassified:  {wrong_mask.sum()}")
+    print(f"Low confidence: {lowconf_mask.sum()}")
+    print(f"Total flagged:  {flagged_mask.sum()} / {len(X)}")
 
-    print(f"\nMisclassified:    {wrong_mask.sum()}")
-    print(f"Low confidence:   {lowconf_mask.sum()}")
-    print(f"Total flagged:    {flagged_mask.sum()} / {len(X)}")
-
-    if flagged_mask.sum() > 0:
-        print(f"\n  {'Row':<10} {'True':<22} {'Predicted':<22} {'Conf':>6}  Status")
-        print(f"  {'-'*70}")
-        for idx in flagged_indices:
-            true   = y_all_labels[idx]
-            pred   = y_all_pred[idx]
-            conf   = conf_all[idx]
-            status = "WRONG" if wrong_mask[idx] else "LOW_CONF"
-            print(f"  {idx:<10} {true:<22} {pred:<22} {conf:>5.1%}  {status}")
+    flagged_meta = [
+        {
+            'true':   y_all_labels[i],
+            'pred':   y_all_pred[i],
+            'conf':   float(conf_all[i]),
+            'status': 'WRONG' if wrong_mask[i] else 'LOW CONF',
+        }
+        for i in flagged_idx
+    ]
 
     torch.save(model.state_dict(), cfg['model_out'])
     print(f"\nSaved: {cfg['model_out']}  +  {cfg['label_encoder']}")
+    return flagged_idx, weak_gestures, flagged_meta
 
-    flagged_meta = []
-    for idx in flagged_indices:
-        flagged_meta.append({
-            'true':   y_all_labels[idx],
-            'pred':   y_all_pred[idx],
-            'conf':   float(conf_all[idx]),
-            'status': 'WRONG' if wrong_mask[idx] else 'LOW CONF',
-        })
+def _render_hand_pixmap(lms_array, W=400, H=400):
+    """Render a 21×3 hand landmark array to a QPixmap (cv2 drawing → QImage)."""
+    img = np.zeros((H, W, 3), dtype=np.uint8)
+    img[:] = (15, 15, 22)
 
-    return flagged_indices, weak_gestures, flagged_meta
-
-
-def draw_hand_viz(frame, landmarks, cx, cy, scale=160):
-    lms = landmarks
+    cx, cy, scale = W // 2, H // 2 + 40, 145
     pts = []
     for i in range(21):
-        px = int(cx + lms[i, 0] * scale)
-        py = int(cy + lms[i, 1] * scale)
+        px = int(cx + lms_array[i, 0] * scale)
+        py = int(cy + lms_array[i, 1] * scale)
         pts.append((px, py))
 
     finger_map = {}
@@ -643,21 +692,189 @@ def draw_hand_viz(frame, landmarks, cx, cy, scale=160):
     for a, b in HAND_CONNECTIONS:
         fi    = finger_map.get(a, finger_map.get(b, -1))
         color = FINGER_COLORS[fi] if fi >= 0 else (180, 180, 180)
-        cv2.line(frame, pts[a], pts[b], color, 2, cv2.LINE_AA)
+        cv2.line(img, pts[a], pts[b], color, 2, cv2.LINE_AA)
 
     for idx, (px, py) in enumerate(pts):
         if idx == 0:
-            cv2.circle(frame, (px, py), 7, (255, 255, 0), -1, cv2.LINE_AA)
-            cv2.circle(frame, (px, py), 7, (0, 0, 0),     1, cv2.LINE_AA)
+            cv2.circle(img, (px, py), 7, (255, 255, 0), -1, cv2.LINE_AA)
+            cv2.circle(img, (px, py), 7, (0, 0, 0),     1, cv2.LINE_AA)
         elif idx in FINGERTIPS:
             fi = finger_map.get(idx, 0)
-            cv2.circle(frame, (px, py), 6, FINGER_COLORS[fi], -1, cv2.LINE_AA)
-            cv2.circle(frame, (px, py), 6, (0, 0, 0),          1, cv2.LINE_AA)
+            cv2.circle(img, (px, py), 6, FINGER_COLORS[fi], -1, cv2.LINE_AA)
+            cv2.circle(img, (px, py), 6, (0, 0, 0),          1, cv2.LINE_AA)
         else:
-            cv2.circle(frame, (px, py), 4, (220, 220, 220), -1, cv2.LINE_AA)
-            cv2.circle(frame, (px, py), 4, (80,  80,  80),  1, cv2.LINE_AA)
-    return pts
+            cv2.circle(img, (px, py), 4, (220, 220, 220), -1, cv2.LINE_AA)
+            cv2.circle(img, (px, py), 4, (80,  80,  80),  1, cv2.LINE_AA)
 
+    rgb  = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    qimg = QImage(rgb.tobytes(), W, H, 3*W, QImage.Format_RGB888)
+    return QPixmap.fromImage(qimg)
+
+class VisualizerWindow(QWidget):
+    """PySide6 sample review window — no cv2.imshow."""
+
+    closed_sig = Signal()
+
+    def __init__(self, cfg, flagged_indices, flagged_meta, df, feature_cols):
+        super().__init__()
+        self.flagged_indices = flagged_indices
+        self.flagged_meta    = flagged_meta
+        self.df              = df
+        self.feature_cols    = feature_cols
+        self.to_remove       = []
+        self.current_idx     = 0
+        self.n               = len(flagged_indices)
+        self._build_ui()
+        self._show_sample(0)
+        self.setFocus()
+
+    def _hsep(self):
+        sep = QWidget()
+        sep.setFixedHeight(1)
+        sep.setStyleSheet("background: #333344;")
+        return sep
+
+    def _build_ui(self):
+        self.setWindowTitle("Review Flagged Samples")
+        self.setStyleSheet(f"background-color: {_DARK_BG};")
+        self.setMinimumSize(760, 460)
+
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(10, 10, 10, 10)
+        outer.setSpacing(10)
+
+        self.hand_lbl = QLabel()
+        self.hand_lbl.setFixedSize(400, 400)
+        self.hand_lbl.setAlignment(Qt.AlignCenter)
+        self.hand_lbl.setStyleSheet("background: #0a0a10; border: 1px solid #333;")
+        outer.addWidget(self.hand_lbl)
+
+        right = QWidget()
+        right.setStyleSheet(f"background: {_DARK_CARD}; border-radius: 6px;")
+        rv = QVBoxLayout(right)
+        rv.setContentsMargins(14, 14, 14, 14)
+        rv.setSpacing(8)
+
+        self.counter_lbl = _qlabel("", size=16, bold=True)
+        rv.addWidget(self.counter_lbl)
+
+        self.badge_lbl = _qlabel("")
+        rv.addWidget(self.badge_lbl)
+        rv.addWidget(self._hsep())
+
+        rv.addWidget(_qlabel("TRUE LABEL", _DIM, size=9, bold=True))
+        self.true_lbl = _qlabel("", _ACCENT, size=15, bold=True)
+        rv.addWidget(self.true_lbl)
+
+        rv.addWidget(_qlabel("PREDICTED", _DIM, size=9, bold=True))
+        self.pred_lbl = _qlabel("", size=15, bold=True)
+        rv.addWidget(self.pred_lbl)
+
+        rv.addWidget(_qlabel("CONFIDENCE", _DIM, size=9, bold=True))
+        self.conf_lbl = _qlabel("", size=15, bold=True)
+        rv.addWidget(self.conf_lbl)
+
+        rv.addStretch()
+        rv.addWidget(self._hsep())
+
+        self.removed_lbl = _qlabel("0 marked for removal", _DIM, size=10)
+        rv.addWidget(self.removed_lbl)
+        rv.addWidget(self._hsep())
+
+        for line in ["SPACE  keep", "X      remove", "ESC    stop review"]:
+            rv.addWidget(_qlabel(line, _DIM, size=9))
+
+        outer.addWidget(right)
+
+    def _show_sample(self, i):
+        if i >= self.n:
+            self.close()
+            return
+
+        orig_idx = self.flagged_indices[i]
+        meta     = self.flagged_meta[i]
+        is_wrong = meta['status'] == 'WRONG'
+
+        row = self.df.iloc[orig_idx]
+        lms = np.array([row[c] for c in self.feature_cols][:63], dtype=np.float32).reshape(21, 3)
+
+        self.counter_lbl.setText(f"{i+1} / {self.n}")
+
+        badge_style = (
+            "color: #cc88ff; background: #2a1040; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: bold;"
+            if is_wrong else
+            "color: #88aaff; background: #101840; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: bold;"
+        )
+        self.badge_lbl.setText(meta['status'])
+        self.badge_lbl.setStyleSheet(badge_style)
+
+        self.true_lbl.setText(meta['true'])
+
+        pred_color = _WARN if is_wrong else "#ccaa00"
+        self.pred_lbl.setText(meta['pred'])
+        self.pred_lbl.setStyleSheet(
+            f"color: {pred_color}; font-size: 15px; font-weight: bold; background: transparent;")
+
+        conf       = meta['conf']
+        conf_color = _ACCENT if conf >= 0.8 else "#ccaa00" if conf >= 0.6 else _WARN
+        self.conf_lbl.setText(f"{conf:.1%}")
+        self.conf_lbl.setStyleSheet(
+            f"color: {conf_color}; font-size: 15px; font-weight: bold; background: transparent;")
+
+        self.removed_lbl.setText(f"{len(self.to_remove)} marked for removal")
+        self.hand_lbl.setPixmap(_render_hand_pixmap(lms))
+
+    def keyPressEvent(self, event):
+        key = event.key()
+        if key == Qt.Key_Space:
+            self.current_idx += 1
+            self._show_sample(self.current_idx)
+        elif key == Qt.Key_X:
+            self.to_remove.append(self.flagged_indices[self.current_idx])
+            self.current_idx += 1
+            self._show_sample(self.current_idx)
+        elif key == Qt.Key_Escape:
+            self.close()
+        else:
+            super().keyPressEvent(event)
+
+    def closeEvent(self, event):
+        self.closed_sig.emit()
+        event.accept()
+
+    def get_removed(self):
+        return self.to_remove
+
+def run_collection(cfg, target_gestures=None):
+    banner(f"STEP 1 — DATA COLLECTION  [{cfg['project']}]")
+    gestures = cfg['gestures']
+    if target_gestures:
+        gestures = [g for g in gestures if g in target_gestures]
+    print(f"Gestures to collect: {gestures}")
+    print(f"Target per gesture : {cfg['target']} samples")
+    print("\nControls (in collection window):")
+    print("  0–9  select gesture by index")
+    print("  SPACE  start / stop recording")
+    print("  D      delete gesture samples (double-tap to confirm)")
+    print("  G / ESC  finish and continue\n")
+    for i, g in enumerate(gestures):
+        print(f"  {i} = {g}")
+    print()
+
+    loop = QEventLoop()
+    win  = CollectionWindow(cfg, target_gestures)
+    win.closed_sig.connect(loop.quit)
+    win.show()
+    loop.exec()
+
+    counts = win.counts
+    banner("Collection complete")
+    for g in cfg['gestures']:
+        if not target_gestures or g in target_gestures:
+            n      = counts.get(g, 0)
+            status = "OK" if n >= cfg['target'] else f"NEED {cfg['target'] - n} more"
+            print(f"  {g}: {n}  [{status}]")
+    return counts
 
 def run_visualizer(cfg, flagged_indices, flagged_meta):
     if not flagged_indices:
@@ -667,78 +884,16 @@ def run_visualizer(cfg, flagged_indices, flagged_meta):
     csv_path     = cfg['processed_csv']
     df           = pd.read_csv(csv_path)
     feature_cols = [c for c in df.columns if c != 'label']
-    n            = len(flagged_indices)
-    to_remove    = []
 
-    W, H = 700, 460
-    font = cv2.FONT_HERSHEY_SIMPLEX
+    banner(f"STEP 4 — REVIEW  ({len(flagged_indices)} flagged samples)")
 
-    banner(f"STEP 4 — REVIEW  ({n} flagged samples)")
+    loop = QEventLoop()
+    win  = VisualizerWindow(cfg, flagged_indices, flagged_meta, df, feature_cols)
+    win.closed_sig.connect(loop.quit)
+    win.show()
+    loop.exec()
 
-    cv2.namedWindow('Review', cv2.WINDOW_NORMAL)
-    cv2.resizeWindow('Review', W, H)
-
-    for i, (orig_idx, meta) in enumerate(zip(flagged_indices, flagged_meta)):
-        true_label = meta['true']
-        pred_label = meta['pred']
-        conf       = meta['conf']
-        status     = meta['status']
-        is_wrong   = status == 'WRONG'
-
-        row  = df.iloc[orig_idx]
-        lms  = np.array([row[c] for c in feature_cols][:63], dtype=np.float32).reshape(21, 3)
-
-        decision = None
-        while decision is None:
-            frame = np.zeros((H, W, 3), dtype=np.uint8)
-            frame[:] = (15, 15, 22)
-
-            draw_hand_viz(frame, lms, cx=210, cy=280, scale=145)
-
-            badge_col = (0, 60, 200) if is_wrong else (0, 110, 160)
-            cv2.rectangle(frame, (10, 10), (130, 38), badge_col, -1)
-            cv2.putText(frame, status, (16, 30), font, 0.55, (255, 255, 255), 2, cv2.LINE_AA)
-
-            cv2.putText(frame, f"{i + 1} / {n}", (W - 110, 28), font, 0.55, (100, 100, 120), 1)
-
-            cv2.putText(frame, "TRUE",      (420, 70),  font, 0.42, (100, 100, 120), 1)
-            cv2.putText(frame, "PREDICTED", (420, 120), font, 0.42, (100, 100, 120), 1)
-            cv2.putText(frame, "CONF",      (420, 170), font, 0.42, (100, 100, 120), 1)
-
-            cv2.putText(frame, true_label, (420, 92), font, 0.65, (0, 210, 90), 2, cv2.LINE_AA)
-
-            pred_col = (0, 80, 220) if is_wrong else (200, 160, 0)
-            cv2.putText(frame, pred_label, (420, 142), font, 0.65, pred_col, 2, cv2.LINE_AA)
-
-            bar_max = 240
-            bar_fill = int(conf * bar_max)
-            bar_col = (0, 200, 80) if conf >= 0.8 else (0, 160, 200) if conf >= 0.6 else (0, 80, 200)
-            cv2.rectangle(frame, (420, 178), (420 + bar_max, 194), (40, 40, 40), -1)
-            cv2.rectangle(frame, (420, 178), (420 + bar_fill, 194), bar_col, -1)
-            cv2.putText(frame, f"{conf:.0%}", (420 + bar_max + 8, 192), font, 0.5, bar_col, 1)
-
-            cv2.line(frame, (0, H - 70), (W, H - 70), (35, 35, 50), 1)
-            cv2.putText(frame, "SPACE  keep      X  remove      ESC  stop review",
-                        (18, H - 42), font, 0.5, (160, 160, 160), 1, cv2.LINE_AA)
-            cv2.putText(frame, f"{len(to_remove)} marked for removal so far",
-                        (18, H - 18), font, 0.4, (80, 80, 100), 1)
-
-            cv2.imshow('Review', frame)
-            key = cv2.waitKey(30) & 0xFF
-
-            if key == ord(' '):
-                decision = 'keep'
-            elif key in (ord('x'), ord('X')):
-                decision = 'remove'
-                to_remove.append(orig_idx)
-            elif key == 27:
-                decision = 'stop'
-
-        if decision == 'stop':
-            break
-
-    cv2.destroyAllWindows()
-
+    to_remove = win.get_removed()
     if not to_remove:
         print("No samples removed.")
         return False
@@ -749,9 +904,12 @@ def run_visualizer(cfg, flagged_indices, flagged_meta):
     banner(f"Removed {len(to_remove)} samples — {len(df) - len(to_remove)} remaining")
     return True
 
-
-
 def main():
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
+    app.setStyle("Fusion")
+
     parser = argparse.ArgumentParser(description='Gesture Pipeline')
     parser.add_argument('conf', nargs='?', default=None)
     args = parser.parse_args()
@@ -785,12 +943,18 @@ def main():
         print("Preprocessing failed. Exiting.")
         sys.exit(1)
 
-    flagged_indices, weak_gestures, flagged_meta = run_training(cfg)
+    result = run_training(cfg)
+    if result is None or result[0] is None:
+        print("Training failed. Exiting.")
+        sys.exit(1)
+    flagged_indices, weak_gestures, flagged_meta = result
 
     if run_visualizer(cfg, flagged_indices, flagged_meta):
         banner("Retraining after review")
         np.random.seed(42)
-        flagged_indices, weak_gestures, flagged_meta = run_training(cfg)
+        result = run_training(cfg)
+        if result and result[0] is not None:
+            flagged_indices, weak_gestures, flagged_meta = result
 
     if weak_gestures:
         banner("Weak gestures detected")
@@ -810,6 +974,6 @@ def main():
         print(f"Label encoder: {cfg['label_encoder']}")
     print(f"Project:       {cfg['project']}")
 
-
 if __name__ == '__main__':
     main()
+

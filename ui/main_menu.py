@@ -11,24 +11,31 @@ from PySide6.QtGui import QPixmap
 from ui.user_guide import UserGuide
 from ui.gesture_guide import GestureGuide
 from ui.game_mode import GameMode
+from ui.pipeline_ui import PipelineUI
 from ui.mainmenu_setup import MainMenuSetup
 from ui.mainmenu_calibration import MainMenuCalibration
 from ui.mainmenu_zone import MainMenuZone
-from ui.mainmenu_camera import MainMenuCamera
 
-from logic.hand_controller import HandControllerThread, list_cameras
-
+from logic.hand_controller import HandControllerThread, CameraPreviewThread, list_cameras
+from logic.app_config import is_setup_done, get_saved_zone, mark_setup_done
 
 class MainMenu(QWidget):
     def __init__(self):
         super().__init__()
         self.is_dark = False
         self.controller = None
+        self._preview_thread = None
         self._is_running = False
         self._is_paused = False
         self._last_camera_pixmap = None
-        self.start_time = time.time() # For the time and uptime display in the camera feed and footer
+        self._optimal_since = None
+        self._zone_hold_since = None
+        self._zone_pending = None
+        self.start_time = time.time() 
         self.init_ui()
+
+        if not is_setup_done():
+            self.home_stack.setCurrentIndex(1)
 
         self.uptime_timer = QTimer()
         self.uptime_timer.timeout.connect(self.update_uptime)
@@ -52,35 +59,32 @@ class MainMenu(QWidget):
             }
         """)
 
-        #Horizontal layout:sidebar left, content right
         main_layout = QHBoxLayout(self)
         main_layout.setContentsMargins(10, 10, 10, 10)
         main_layout.setSpacing(10)
 
-        #Sidebar
         sidebar = self.create_sidebar()
         main_layout.addWidget(sidebar)
 
-        
         self.pages = QStackedWidget()
         self.pages.setStyleSheet("background: transparent;")
         main_layout.addWidget(self.pages)
 
-        #Home page 
         self.pages.addWidget(self.create_home_page())
 
-        #User guide page
         self.user_guide = UserGuide()
         self.user_guide.on_menu_toggle.connect(self.toggle_sidebar)
         self.pages.addWidget(self.user_guide)
 
-        #Gesture guide page
         self.gesture_guide = GestureGuide()
         self.gesture_guide.on_menu_toggle.connect(self.toggle_sidebar)
         self.pages.addWidget(self.gesture_guide)
 
-        #Game mode page
         self.pages.addWidget(GameMode())
+
+        self.pipeline_ui = PipelineUI(is_dark=self.is_dark)
+        self.pipeline_ui.on_menu_toggle.connect(self.toggle_sidebar)
+        self.pages.addWidget(self.pipeline_ui)
 
         self.pages.setCurrentIndex(0)
 
@@ -121,7 +125,6 @@ class MainMenu(QWidget):
         layout.setSpacing(0)
         self.sidebar_dividers = []
 
-        #Logo
         self.logo_box = QWidget()
         self.logo_box.setStyleSheet("""
             background: transparent;
@@ -154,8 +157,6 @@ class MainMenu(QWidget):
         ll.addStretch()
         layout.addWidget(self.logo_box)
 
-
-        #Divider line
         line = QWidget()
         line.setFixedHeight(1)
         line.setStyleSheet("background-color: #D4D4D4;")
@@ -163,10 +164,8 @@ class MainMenu(QWidget):
         layout.addWidget(line)
         layout.addSpacing(10)
 
-        #Sidebar buttons
         self.nav_buttons = []
 
-        #Menu section
         self.menu_lbl = QLabel("MENU")
         self.menu_lbl.setContentsMargins(6, 10, 0, 6)
         self.menu_lbl.setStyleSheet(
@@ -194,7 +193,6 @@ class MainMenu(QWidget):
         self.sidebar_dividers.append(line)
         layout.addWidget(line)
 
-        #Setup section
         self.setup_lbl = QLabel("SETUP")
         self.setup_lbl.setContentsMargins(6, 12, 0, 6)
         self.setup_lbl.setStyleSheet(
@@ -204,6 +202,7 @@ class MainMenu(QWidget):
 
         for label, index in [
             ("04      -     GAME OPTION", 3),
+            ("05      -     TRAIN MODEL", 4),
         ]:
             btn = QPushButton(label)
             btn.setCheckable(True)
@@ -212,11 +211,9 @@ class MainMenu(QWidget):
             self.nav_buttons.append(btn)
             layout.addWidget(btn)
 
-        #Set Home as active
         self.nav_buttons[0].setChecked(True)
         layout.addStretch()
 
-        #theme toggle button
         self.theme_btn = QPushButton("DARK MODE")
         self.theme_btn.setFixedWidth(132)
         self.theme_btn.setFixedHeight(30)
@@ -267,25 +264,19 @@ class MainMenu(QWidget):
         self.setup_guide = MainMenuSetup(is_dark=self.is_dark)
         self.setup_guide.on_lets_go.connect(self._on_setup_lets_go)
         self.setup_guide.on_menu_toggle.connect(self.toggle_sidebar)
-        self.home_stack.addWidget(self.setup_guide) #index 1
+        self.home_stack.addWidget(self.setup_guide) 
 
         self.calibration_guide = MainMenuCalibration(is_dark=self.is_dark)
         self.calibration_guide.on_continue.connect(self._on_distance_continue)
         self.calibration_guide.on_back.connect(self._on_distance_back)
         self.calibration_guide.on_menu_toggle.connect(self.toggle_sidebar)
-        self.home_stack.addWidget(self.calibration_guide) #index 2
+        self.home_stack.addWidget(self.calibration_guide) 
 
         self.zone_guide = MainMenuZone(is_dark=self.is_dark)
         self.zone_guide.on_zone_continue.connect(self._on_zone_continue)
         self.zone_guide.on_zone_back.connect(self._on_zone_back)
         self.zone_guide.on_menu_toggle.connect(self.toggle_sidebar)
-        self.home_stack.addWidget(self.zone_guide) #index 3
-
-        self.camera_guide = MainMenuCamera(is_dark=self.is_dark)
-        self.camera_guide.on_camera_continue.connect(self._on_camera_continue)
-        self.camera_guide.on_camera_back.connect(self._on_camera_back)
-        self.camera_guide.on_menu_toggle.connect(self.toggle_sidebar)
-        self.home_stack.addWidget(self.camera_guide) #index 4
+        self.home_stack.addWidget(self.zone_guide) 
 
         return page
 
@@ -297,8 +288,6 @@ class MainMenu(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
 
-        #camera selector row
-        #top bar — Home title left,other inform right
         top_row = QHBoxLayout()
         top_row.setSpacing(8)
 
@@ -337,7 +326,6 @@ class MainMenu(QWidget):
 
         top_row.addStretch()
 
-        # Right top system info
         self.top_info = QWidget()
         self.top_info.setStyleSheet("""
             QWidget {
@@ -392,7 +380,6 @@ class MainMenu(QWidget):
 
         layout.addLayout(top_row)
 
-        #Informaton cards row to let user view current gesture, action, mode and status
         top_row = QHBoxLayout()
         top_row.setSpacing(8)
         self.info_cards = {}
@@ -438,10 +425,9 @@ class MainMenu(QWidget):
             top_row.addWidget(card)
         layout.addLayout(top_row)
 
-        #Camera frame container
         self.camera_frame = QWidget()
         self.camera_frame.setStyleSheet("""
-            background-color: #F1F1F1;
+            background-color: #000000;
             border: 1px solid #D8D8D8;
             border-radius: 4px;
         """)
@@ -450,7 +436,6 @@ class MainMenu(QWidget):
         camera_layout.setContentsMargins(10, 8, 10, 8)
         camera_layout.setSpacing(0)
 
-        #Top row
         camera_top = QHBoxLayout()
 
         self.rec_lbl = QLabel("● REC  ·  00:00:00")
@@ -466,7 +451,6 @@ class MainMenu(QWidget):
         camera_top.addStretch()
         camera_layout.addLayout(camera_top)
 
-        #Center camera area
         self.camera_label = QLabel("LIVE CAMERA FEED")
         self.camera_label.setAlignment(Qt.AlignCenter)
         self.camera_label.setMinimumSize(0, 0)
@@ -481,13 +465,36 @@ class MainMenu(QWidget):
         """)
         camera_layout.addWidget(self.camera_label, stretch=1)
 
+        self.hold_bar_widget = QWidget()
+        self.hold_bar_widget.setFixedHeight(26)
+        hb_inner = QHBoxLayout(self.hold_bar_widget)
+        hb_inner.setContentsMargins(0, 4, 0, 4)
+        hb_inner.setSpacing(8)
+
+        self.hold_bar_label = QLabel("ACTION")
+        self.hold_bar_label.setFixedWidth(140)
+        self.hold_bar_label.setStyleSheet(
+            "color:#6F655F;font-size:8px;font-weight:700;letter-spacing:1.4px;"
+            "background:transparent;border:none;")
+
+        self.hold_bar_bg = QWidget()
+        self.hold_bar_bg.setFixedHeight(4)
+        self.hold_bar_bg.setStyleSheet(
+            "background-color:#E8E0DA;border-radius:2px;border:none;")
+        self.hold_bar_fill = QWidget(self.hold_bar_bg)
+        self.hold_bar_fill.setGeometry(0, 0, 0, 4)
+        self.hold_bar_fill.setStyleSheet(
+            "background-color:#1A1A1A;border-radius:2px;border:none;")
+
+        hb_inner.addWidget(self.hold_bar_label)
+        hb_inner.addWidget(self.hold_bar_bg, stretch=1)
+        layout.addWidget(self.hold_bar_widget)
+
         layout.addWidget(self.camera_frame, stretch=1)
 
-        #Buttons
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
 
-        #Footer status info
         self.footer_status = QLabel(
             "ZONE · MEDIUM    UPTIME · 00:00:00"
         )
@@ -612,7 +619,7 @@ class MainMenu(QWidget):
     def toggle_theme(self):
         self.is_dark = not self.is_dark
         if self.is_dark:
-            #update window background
+
             win = self.window()
             if win:
                 win.setStyleSheet("QMainWindow { background-color: #0a0a0a; }")
@@ -740,7 +747,7 @@ class MainMenu(QWidget):
                 border: none;
             """)
             self.camera_frame.setStyleSheet("""
-                background-color: #050505;
+                background-color: #000000;
                 border: 1px solid #262626;
                 border-radius: 4px;
             """)
@@ -799,7 +806,14 @@ class MainMenu(QWidget):
                 background: transparent;
                 border: none;
             """)
-                
+            self.hold_bar_label.setStyleSheet(
+                "color:#6b6b6b;font-size:8px;font-weight:700;letter-spacing:1.4px;"
+                "background:transparent;border:none;")
+            self.hold_bar_bg.setStyleSheet(
+                "background-color:#262626;border-radius:2px;border:none;")
+            self.hold_bar_fill.setStyleSheet(
+                "background-color:#e8e8e8;border-radius:2px;border:none;")
+
             self.start_btn.setStyleSheet("""
                 QPushButton {
                     background-color: #e8e8e8;
@@ -1008,7 +1022,7 @@ class MainMenu(QWidget):
                 font-size: 10px; letter-spacing: 2px; border: none;
             """)
             self.camera_frame.setStyleSheet("""
-                background-color: #F1F1F1;
+                background-color: #000000;
                 border: 1px solid #D8D8D8;
                 border-radius: 4px;
             """)
@@ -1072,6 +1086,13 @@ class MainMenu(QWidget):
                     background: transparent;
                     border: none;
                 """)
+            self.hold_bar_label.setStyleSheet(
+                "color:#6F655F;font-size:8px;font-weight:700;letter-spacing:1.4px;"
+                "background:transparent;border:none;")
+            self.hold_bar_bg.setStyleSheet(
+                "background-color:#E8E0DA;border-radius:2px;border:none;")
+            self.hold_bar_fill.setStyleSheet(
+                "background-color:#1A1A1A;border-radius:2px;border:none;")
             self.start_btn.setStyleSheet("""
                 QPushButton {
                     background-color: #1A1A1A;
@@ -1140,19 +1161,16 @@ class MainMenu(QWidget):
                     background-color: #F4E6E6;
                 }
             """)
-        
-        #apply theme to user guide page
+
         self.setup_guide.apply_theme(self.is_dark)
         self.calibration_guide.apply_theme(self.is_dark)
         self.zone_guide.apply_theme(self.is_dark)
-        self.camera_guide.apply_theme(self.is_dark)
         self.user_guide.apply_theme(self.is_dark)
         self.gesture_guide.apply_theme(self.is_dark)
+        self.pipeline_ui.apply_theme(self.is_dark)
         self.update()
         self.repaint()
 
-
-    #-------- Logic for camera control and hand gesture processing ---------
     def _refresh_cameras(self):
         self.camera_combo.blockSignals(True)
         self.camera_combo.clear()
@@ -1201,40 +1219,143 @@ class MainMenu(QWidget):
             self.start_btn.setText("Start")
             self.pause_btn.setText("Pause")
             return
-        if self._is_running: return
-
-        self.home_stack.setCurrentIndex(1)
+        if self._is_running:
+            return
+        if is_setup_done():
+            self._start_controller()
+        else:
+            self.home_stack.setCurrentIndex(1)
 
     def _on_setup_lets_go(self):
         self.home_stack.setCurrentIndex(2)
+        self._start_preview()
 
     def _on_distance_continue(self):
         self.home_stack.setCurrentIndex(3)
 
     def _on_distance_back(self):
+        self._optimal_since = None
+        self._stop_preview()
         self.home_stack.setCurrentIndex(1)
 
     def _on_zone_back(self):
+        self._zone_hold_since = None
+        self._zone_pending = None
         self.home_stack.setCurrentIndex(2)
 
     def _on_zone_continue(self):
-        self.home_stack.setCurrentIndex(4)
-
-    def _on_camera_back(self):
-        self.home_stack.setCurrentIndex(3)
-
-    def _on_camera_continue(self):
+        self._zone_hold_since = None
+        self._zone_pending = None
+        zone = getattr(self.zone_guide, 'selected_zone', 'medium')
+        mark_setup_done(zone)
+        self._stop_preview()
         self.home_stack.setCurrentIndex(0)
         self._start_controller()
 
-    def _start_controller(self):
-        self.controller = HandControllerThread(
+    def _start_preview(self):
+        if self._preview_thread and self._preview_thread.isRunning():
+            return
+        self._optimal_since = None
+        self._zone_hold_since = None
+        self._zone_pending = None
+        self._preview_thread = CameraPreviewThread(
             camera_index=self._get_selected_camera())
+        self._preview_thread.frame_ready.connect(self._on_preview_frame)
+        self._preview_thread.distance_ready.connect(self._on_preview_distance)
+        self._preview_thread.fingers_ready.connect(self._on_preview_fingers)
+        self._preview_thread.telemetry_ready.connect(self._on_preview_telemetry)
+        self._preview_thread.start()
+
+    def _stop_preview(self):
+        if self._preview_thread:
+            self._preview_thread.stop()
+            self._preview_thread.wait(3000)
+            self._preview_thread = None
+
+    @Slot(object)
+    def _on_preview_frame(self, image):
+        pixmap = QPixmap.fromImage(image)
+        if hasattr(self, "calibration_guide"):
+            self.calibration_guide.set_frame(pixmap)
+        if hasattr(self, "zone_guide"):
+            self.zone_guide.set_frame(pixmap)
+
+    @Slot(float, bool)
+    def _on_preview_distance(self, norm_dist, has_hand):
+        if hasattr(self, "calibration_guide"):
+            self.calibration_guide.set_distance(norm_dist, has_hand)
+
+        if self.home_stack.currentIndex() != 2:
+            return
+
+        _TARGET = 0.18
+        _TOL    = 0.03
+        optimal = has_hand and abs(norm_dist - _TARGET) <= _TOL
+
+        if optimal:
+            if self._optimal_since is None:
+                self._optimal_since = time.time()
+            frac = min((time.time() - self._optimal_since) / 3.0, 1.0)
+            self.calibration_guide.set_progress(frac)
+            if frac >= 1.0:
+                self._optimal_since = None
+                self.calibration_guide.set_progress(0.0)
+                self._on_distance_continue()
+        else:
+            self._optimal_since = None
+            self.calibration_guide.set_progress(0.0)
+
+    @Slot(str, str)
+    def _on_preview_telemetry(self, lighting, background):
+        if hasattr(self, "calibration_guide"):
+            self.calibration_guide.set_telemetry(lighting, background)
+
+    @Slot(int, bool)
+    def _on_preview_fingers(self, count, has_hand):
+        if self.home_stack.currentIndex() != 3:
+            self._zone_hold_since = None
+            self._zone_pending = None
+            return
+
+        if not has_hand or count < 1 or count > 3:
+            self._zone_hold_since = None
+            self._zone_pending = None
+            if hasattr(self, "zone_guide"):
+                self.zone_guide.set_zone_progress(None, 0.0)
+            return
+
+        zone_map = {1: 'small', 2: 'medium', 3: 'large'}
+        pending = zone_map[count]
+
+        if pending != self._zone_pending:
+            self._zone_pending = pending
+            self._zone_hold_since = time.time()
+
+        frac = min((time.time() - self._zone_hold_since) / 3.0, 1.0)
+        if hasattr(self, "zone_guide"):
+            self.zone_guide.set_zone_progress(pending, frac)
+
+        if frac >= 1.0:
+            self._zone_hold_since = None
+            self._zone_pending = None
+            if hasattr(self, "zone_guide"):
+                self.zone_guide._select_zone(pending)
+                self.zone_guide.set_zone_progress(None, 0.0)
+            self._on_zone_continue()
+
+    def _start_controller(self):
+        zone = getattr(self.zone_guide, 'selected_zone', None) or get_saved_zone()
+        self.controller = HandControllerThread(
+            camera_index=self._get_selected_camera(),
+            initial_zone=zone,
+            skip_intro=True)
         self.controller.frame_ready.connect(self._update_frame)
         self.controller.gesture_changed.connect(self._update_gesture)
         self.controller.state_changed.connect(self._update_state)
         self.controller.error_occurred.connect(self._on_error)
         self.controller.finished.connect(self._on_finished)
+        self.controller.running_data.connect(self._on_running_data)
+        self.controller.stopped_data.connect(self._on_stopped_data)
         self.controller.start()
 
         self._is_running = True
@@ -1245,7 +1366,8 @@ class MainMenu(QWidget):
         self.info_cards["STATUS"].setText("RUNNING")
 
     def _on_pause(self):
-        if not self._is_running or not self.controller: return
+        if not self._is_running or not self.controller:
+            return
         if self._is_paused:
             self.controller.resume()
             self._is_paused = False
@@ -1259,6 +1381,43 @@ class MainMenu(QWidget):
             self.start_btn.setEnabled(True)
             self.info_cards["STATUS"].setText("PAUSED")
 
+    @Slot(object)
+    def _on_running_data(self, data: dict):
+        meta = data.get('meta', {})
+        label_map = {
+            'stop':     'PAUSING',
+            'recal':    'RECALIBRATING',
+            'guide':    'OPENING GUIDE',
+            'close':    'CLOSING',
+            'game_opt': 'GAME OPTION',
+            'start':    'STARTING',
+        }
+        best_key  = max(meta, key=lambda k: meta[k], default=None)
+        best_frac = meta.get(best_key, 0.0) if best_key else 0.0
+        if best_frac > 0.0:
+            self._show_hold_bar(label_map.get(best_key, best_key.upper()), best_frac)
+        else:
+            self._hide_hold_bar()
+
+    @Slot(float, float)
+    def _on_stopped_data(self, resume_frac: float, close_frac: float):
+        if close_frac > 0.0:
+            self._show_hold_bar("CLOSING", close_frac)
+        elif resume_frac > 0.0:
+            self._show_hold_bar("RESUMING", resume_frac)
+        else:
+            self._hide_hold_bar()
+
+    def _show_hold_bar(self, label: str, frac: float):
+        self.hold_bar_label.setText(f"● {label}")
+        w = self.hold_bar_bg.width()
+        if w > 0:
+            self.hold_bar_fill.setGeometry(0, 0, int(frac * w), 4)
+
+    def _hide_hold_bar(self):
+        self.hold_bar_label.setText("ACTION")
+        self.hold_bar_fill.setGeometry(0, 0, 0, 4)
+
     def _on_stop(self):
         if hasattr(self, "home_stack"):
             self.home_stack.setCurrentIndex(0)
@@ -1269,6 +1428,7 @@ class MainMenu(QWidget):
 
     @Slot()
     def _on_finished(self):
+        self._hide_hold_bar()
         self._is_running = False
         self._is_paused  = False
         self.controller  = None
@@ -1290,7 +1450,7 @@ class MainMenu(QWidget):
                 border: none;
             """)
             self.camera_frame.setStyleSheet("""
-                background-color: #050505;
+                background-color: #000000;
                 border: 1px solid #262626;
                 border-radius: 4px;
             """)
@@ -1303,7 +1463,7 @@ class MainMenu(QWidget):
                 border: none;
             """)
             self.camera_frame.setStyleSheet("""
-                background-color: #F1F1F1;
+                background-color: #000000;
                 border: 1px solid #D8D8D8;
                 border-radius: 4px;
             """)
@@ -1313,8 +1473,6 @@ class MainMenu(QWidget):
         pixmap = QPixmap.fromImage(image)
         self._last_camera_pixmap = pixmap
         self._rescale_camera_frame()
-        if hasattr(self, "calibration_guide"):
-            self.calibration_guide.set_frame(pixmap)
 
     def _rescale_camera_frame(self):
         if self._last_camera_pixmap is None:
@@ -1322,15 +1480,13 @@ class MainMenu(QWidget):
         label_size = self.camera_label.size()
         if label_size.width() <= 0 or label_size.height() <= 0:
             return
-
-        scaled = self._last_camera_pixmap.scaled(
-            label_size,
-            Qt.KeepAspectRatioByExpanding,
-            Qt.SmoothTransformation
+        self.camera_label.setPixmap(
+            self._last_camera_pixmap.scaled(
+                label_size,
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation
+            )
         )
-        x = max(0, (scaled.width() - label_size.width()) // 2)
-        y = max(0, (scaled.height() - label_size.height()) // 2)
-        self.camera_label.setPixmap(scaled.copy(x, y, label_size.width(), label_size.height()))
 
     def eventFilter(self, obj, event):
         if obj is getattr(self, "camera_label", None) and event.type() == QEvent.Resize:

@@ -1,4 +1,3 @@
-"""Custom Gesture tab — lets users run the gesture_pipeline to train their own NN."""
 import os
 import sys
 import subprocess
@@ -9,7 +8,6 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QFont
-
 
 class _PipelineRunner(QThread):
     output_line = Signal(str)
@@ -32,7 +30,6 @@ class _PipelineRunner(QThread):
         proc.wait()
         self.finished_ok.emit()
 
-
 class CustomGesture(QWidget):
     def __init__(self):
         super().__init__()
@@ -41,14 +38,11 @@ class CustomGesture(QWidget):
         self.conf_path = ''
         self._build()
 
-    # ── build UI ──────────────────────────────────────────────────────────────
-
     def _build(self):
         root = QVBoxLayout(self)
         root.setContentsMargins(20, 20, 20, 20)
         root.setSpacing(14)
 
-        # title
         self.title = QLabel("Custom Gesture Trainer")
         self.title.setStyleSheet("font-size:22px;font-weight:bold;")
         root.addWidget(self.title)
@@ -58,7 +52,6 @@ class CustomGesture(QWidget):
         divider.setStyleSheet("background:#6B35C7;border:none;")
         root.addWidget(divider)
 
-        # info card
         self.info = QLabel(
             "Train your own gesture model using a .conf file.\n"
             "The pipeline collects samples, preprocesses, trains, and reviews flagged samples.\n"
@@ -70,7 +63,6 @@ class CustomGesture(QWidget):
             "background:rgba(107,53,199,0.12);color:#7C5CFC;")
         root.addWidget(self.info)
 
-        # conf file selector
         conf_row = QHBoxLayout()
         self.conf_lbl = QLabel("Config (.conf):")
         self.conf_lbl.setStyleSheet("font-size:12px;font-weight:600;")
@@ -95,7 +87,6 @@ class CustomGesture(QWidget):
         conf_row.addWidget(self.browse_btn)
         root.addLayout(conf_row)
 
-        # buttons row
         btn_row = QHBoxLayout()
         self.run_btn = QPushButton("▶  Run Pipeline")
         self.run_btn.setFixedHeight(38)
@@ -117,7 +108,6 @@ class CustomGesture(QWidget):
         btn_row.addStretch()
         root.addLayout(btn_row)
 
-        # log output
         log_lbl = QLabel("Pipeline Output")
         log_lbl.setStyleSheet("font-size:11px;font-weight:600;color:#9CA3AF;letter-spacing:0.5px;")
         root.addWidget(log_lbl)
@@ -133,8 +123,6 @@ class CustomGesture(QWidget):
         self.status_lbl = QLabel("")
         self.status_lbl.setStyleSheet("font-size:11px;color:#9CA3AF;")
         root.addWidget(self.status_lbl)
-
-    # ── slots ─────────────────────────────────────────────────────────────────
 
     def _browse(self):
         path, _ = QFileDialog.getOpenFileName(self, "Select .conf file", "", "Config (*.conf)")
@@ -177,8 +165,6 @@ class CustomGesture(QWidget):
                 "QPushButton{background:#4B5563;color:#9CA3AF;border:none;"
                 "border-radius:8px;padding:8px 22px;font-size:13px;font-weight:bold;}")
 
-    # ── theme ─────────────────────────────────────────────────────────────────
-
     def apply_theme(self, dark: bool):
         self.is_dark = dark
         if dark:
@@ -199,3 +185,4 @@ class CustomGesture(QWidget):
             self.conf_edit.setStyleSheet(
                 "border:1px solid #D1D5DB;border-radius:6px;"
                 "padding:4px 8px;font-size:12px;color:#111827;")
+

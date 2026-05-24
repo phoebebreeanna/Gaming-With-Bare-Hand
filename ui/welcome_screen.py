@@ -3,7 +3,6 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QTimer
 
-
 class WelcomeScreen(QWidget):
     def __init__(self, on_get_started):
         super().__init__()
@@ -92,3 +91,4 @@ class WelcomeScreen(QWidget):
     def on_get_main(self):
         self.timer.stop()
         self.on_get_started()
+

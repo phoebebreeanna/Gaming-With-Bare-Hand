@@ -4,7 +4,6 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal
 
-
 class UserGuide(QWidget):
 
     on_menu_toggle = Signal()
@@ -344,3 +343,4 @@ class UserGuide(QWidget):
         """
         self.prev_btn.setStyleSheet(btn_style)
         self.next_btn.setStyleSheet(btn_style)
+

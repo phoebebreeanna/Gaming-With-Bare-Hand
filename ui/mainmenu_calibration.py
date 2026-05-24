@@ -1,9 +1,8 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QPushButton, QSizePolicy
+    QLabel, QPushButton, QSizePolicy, QProgressBar
 )
 from PySide6.QtCore import Qt, Signal
-
 
 class MainMenuCalibration(QWidget):
 
@@ -22,7 +21,6 @@ class MainMenuCalibration(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        #Top nav bar with hamburger + brand
         self.nav_bar = QWidget()
         self.nav_bar.setObjectName("nav_bar")
         self.nav_bar.setFixedHeight(42)
@@ -49,10 +47,8 @@ class MainMenuCalibration(QWidget):
         nav_layout.addWidget(self.brand_box)
         nav_layout.addStretch()
 
-
         layout.addWidget(self.nav_bar)
 
-        #Progress / stepper bar
         self.progress_wrap = QWidget()
         self.progress_wrap.setObjectName("progress_wrap")
         self.progress_wrap.setFixedHeight(44)
@@ -67,14 +63,14 @@ class MainMenuCalibration(QWidget):
         progress_row.setSpacing(8)
         progress_row.setAlignment(Qt.AlignVCenter)
 
+        _progress_steps = [
+            ("✓", "GUIDE",     "done"),
+            ("02", "CALIBRATE", "active"),
+            ("03", "ZONE",      "idle"),
+        ]
         self.progress_steps_data = []
         self.progress_lines = []
-        for index, (num, label_text, state) in enumerate([
-            ("✓", "GUIDE", "done"),
-            ("02", "CALIBRATE", "active"),
-            ("03", "ZONE", "idle"),
-            ("04", "CAMERA", "idle"),
-        ]):
+        for index, (num, label_text, state) in enumerate(_progress_steps):
             step_widget = QWidget()
             step_h = QHBoxLayout(step_widget)
             step_h.setContentsMargins(0, 0, 0, 0)
@@ -93,7 +89,7 @@ class MainMenuCalibration(QWidget):
             self.progress_steps_data.append((num_lbl, text_lbl, state))
             progress_row.addWidget(step_widget)
 
-            if index < 3:
+            if index < len(_progress_steps) - 1:
                 line = QWidget()
                 line.setFixedSize(28, 1)
                 self.progress_lines.append(line)
@@ -188,22 +184,25 @@ class MainMenuCalibration(QWidget):
             cell = QWidget()
             self.gauge_cells.append(cell)
             gauge_layout.addWidget(cell)
-        self.optimal_lbl = QLabel("OPTIMAL")
-        self.optimal_lbl.setAlignment(Qt.AlignCenter)
-        self.optimal_lbl.setParent(self.distance_bar)
-        self.optimal_lbl.setGeometry(82, 6, 58, 12)
-        self.marker_lbl = QLabel("|")
-        self.marker_lbl.setAlignment(Qt.AlignCenter)
-        self.marker_lbl.setParent(self.distance_bar)
-        self.marker_lbl.setGeometry(104, 18, 18, 42)
-        self.distance_value = QLabel("39.4cm")
+        self.distance_value = QLabel("—")
         self.distance_value.setAlignment(Qt.AlignCenter)
         self.distance_axis = QLabel("20cm                                      80cm")
-        self.distance_badge = QLabel("* Optimal range")
+        self.distance_badge = QLabel("NO HAND DETECTED")
+
+        self.hold_label = QLabel("HOLD IN RANGE TO AUTO-ADVANCE")
+        self.hold_progress = QProgressBar()
+        self.hold_progress.setRange(0, 100)
+        self.hold_progress.setValue(0)
+        self.hold_progress.setFixedHeight(5)
+        self.hold_progress.setTextVisible(False)
+
         distance_body_layout.addWidget(self.distance_bar)
         distance_body_layout.addWidget(self.distance_value)
         distance_body_layout.addWidget(self.distance_axis)
         distance_body_layout.addWidget(self.distance_badge)
+        distance_body_layout.addSpacing(4)
+        distance_body_layout.addWidget(self.hold_label)
+        distance_body_layout.addWidget(self.hold_progress)
         distance_layout.addWidget(distance_body)
         right_col.addWidget(self.distance_panel)
 
@@ -389,7 +388,6 @@ class MainMenuCalibration(QWidget):
         for line in self.progress_lines:
             line.setStyleSheet(f"background-color: {border};")
 
-
         self.meta.setStyleSheet(f"color: {muted}; font-size: 8px; letter-spacing: 1.4px; border: none;")
         self.title.setStyleSheet(f"color: {text}; font-size: 19px; font-weight: 600; border: none;")
         self.desc.setStyleSheet(f"color: {dim}; font-size: 11px; border: none;")
@@ -401,7 +399,7 @@ class MainMenuCalibration(QWidget):
         self.tracking_lbl.setStyleSheet(f"color: {dim}; font-size: 8px; letter-spacing: 1.2px; border: none;")
         self.camera_body.setStyleSheet(f"background-color: {camera_bg}; border: none;")
         self.camera_label.setStyleSheet(f"""
-            background-color: {camera_bg};
+            background-color: #000000;
             color: {muted};
             font-size: 10px;
             letter-spacing: 2px;
@@ -429,13 +427,21 @@ class MainMenuCalibration(QWidget):
                 background-color: {panel};
                 border-right: {'1px solid ' + border if index < len(self.gauge_cells) - 1 else 'none'};
             """)
-        self.optimal_lbl.setStyleSheet(f"color: {dim}; font-size: 7px; letter-spacing: 1.2px; border: none;")
-        self.marker_lbl.setStyleSheet(f"color: {text}; font-size: 20px; border: none;")
         self.distance_value.setStyleSheet(f"color: {dim}; font-size: 8px; border: none;")
         self.distance_axis.setStyleSheet(f"color: {muted}; font-size: 7px; border: none;")
-        self.distance_badge.setStyleSheet(f"color: {success}; font-size: 8px; font-weight: 700; border: 1px solid {success}; padding: 4px 8px;")
-        self.lighting_lbl.setStyleSheet(f"color: {success}; font-size: 9px; letter-spacing: 1px; border: none;")
-        self.background_lbl.setStyleSheet(f"color: {success}; font-size: 9px; letter-spacing: 1px; border: none;")
+        self.distance_badge.setStyleSheet(f"color: {muted}; font-size: 8px; font-weight: 700; border: none; padding: 2px 0px;")
+        self.hold_label.setStyleSheet(f"color: {muted}; font-size: 7px; letter-spacing: 1.2px; border: none;")
+        self.hold_progress.setStyleSheet(f"""
+            QProgressBar {{
+                background-color: {border};
+                border: none;
+            }}
+            QProgressBar::chunk {{
+                background-color: {success};
+            }}
+        """)
+        self.lighting_lbl.setStyleSheet(f"color: {dim}; font-size: 9px; letter-spacing: 1px; border: none;")
+        self.background_lbl.setStyleSheet(f"color: {dim}; font-size: 9px; letter-spacing: 1px; border: none;")
 
         self.back_btn.setStyleSheet(f"""
             QPushButton {{
@@ -464,7 +470,84 @@ class MainMenuCalibration(QWidget):
         self.camera_label.setPixmap(
             pixmap.scaled(
                 self.camera_label.size(),
-                Qt.KeepAspectRatioByExpanding,
+                Qt.KeepAspectRatio,
                 Qt.SmoothTransformation
             )
         )
+
+    def set_progress(self, frac: float):
+        self.hold_progress.setValue(int(frac * 100))
+
+    def set_telemetry(self, lighting: str, background: str):
+        good  = "#00d084" if self.is_dark else "#00A36C"
+        warn  = "#d08400" if self.is_dark else "#B86A00"
+        light_ok = (lighting == "GOOD")
+        bg_ok    = (background in ("CLEAR", "OK"))
+        self.lighting_lbl.setText(
+            f"LIGHTING{'':>20}{lighting}")
+        self.lighting_lbl.setStyleSheet(
+            f"color: {good if light_ok else warn}; font-size: 9px; letter-spacing: 1px; border: none;")
+        self.background_lbl.setText(
+            f"BACKGROUND{'':>15}{background}")
+        self.background_lbl.setStyleSheet(
+            f"color: {good if bg_ok else warn}; font-size: 9px; letter-spacing: 1px; border: none;")
+
+    def set_distance(self, norm_dist: float, has_hand: bool):
+        _TARGET = 0.18
+        _TOL    = 0.03
+
+        if self.is_dark:
+            close_col   = "#5a1a1a"
+            optimal_col = "#0d3d20"
+            far_col     = "#1a3a5a"
+            dim_col     = "#161616"
+            border      = "#262626"
+            success     = "#00d084"
+            warn        = "#d08400"
+        else:
+            close_col   = "#FFDDDD"
+            optimal_col = "#CCFFE8"
+            far_col     = "#DDEEFF"
+            dim_col     = "#F4F4F4"
+            border      = "#D8CEC7"
+            success     = "#00A36C"
+            warn        = "#B86A00"
+
+        if not has_hand or norm_dist < 0.001:
+            self.distance_value.setText("—")
+            self.distance_badge.setText("NO HAND DETECTED")
+            self.distance_badge.setStyleSheet(
+                f"color: {warn}; font-size: 8px; font-weight: 700; border: none;")
+            for i, cell in enumerate(self.gauge_cells):
+                b = f"1px solid {border}" if i < 3 else "none"
+                cell.setStyleSheet(f"background-color: {dim_col}; border-right: {b};")
+            return
+
+        cm = round(4.8 / norm_dist, 1)
+        self.distance_value.setText(f"{cm:.1f}cm")
+
+        too_close = norm_dist > _TARGET + _TOL
+        too_far   = norm_dist < _TARGET - _TOL
+        optimal   = not too_close and not too_far
+
+        if too_close:
+            colors = [close_col, close_col, dim_col, dim_col]
+            status = "TOO CLOSE — MOVE BACK"
+            badge_color = warn
+        elif optimal:
+            colors = [dim_col, optimal_col, optimal_col, dim_col]
+            status = "OPTIMAL — HOLD STEADY"
+            badge_color = success
+        else:
+            colors = [dim_col, dim_col, far_col, far_col]
+            status = "TOO FAR — MOVE CLOSER"
+            badge_color = warn
+
+        for i, (cell, col) in enumerate(zip(self.gauge_cells, colors)):
+            b = f"1px solid {border}" if i < 3 else "none"
+            cell.setStyleSheet(f"background-color: {col}; border-right: {b};")
+
+        self.distance_badge.setText(status)
+        self.distance_badge.setStyleSheet(
+            f"color: {badge_color}; font-size: 8px; font-weight: 700; border: none;")
+

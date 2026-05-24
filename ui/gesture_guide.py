@@ -5,7 +5,6 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPixmap
 
-
 class GestureGuide(QWidget):
 
     on_menu_toggle = Signal()
@@ -13,19 +12,34 @@ class GestureGuide(QWidget):
     def __init__(self):
         super().__init__()
         self.is_dark = False
-        self.current_mode = "Mouse"
+        self.current_mode = "General"
 
         self.mode_sections = {
+            "General": [
+                {
+                    "label": "00  ·  SYSTEM CONTROLS",
+                    "gestures": [
+                        {"img": "assets/gestures/general/one_finger.png",   "n": "01", "name": "One Finger - Navigate",       "desc": "Point with index finger to move cursor or highlight",        "tag": "ALL MODES"},
+                        {"img": "assets/gestures/general/two_finger.png",   "n": "02", "name": "Two Fingers - Confirm",        "desc": "Index + Middle fingers raised to confirm or select",         "tag": "ALL MODES"},
+                        {"img": "assets/gestures/general/three_finger.png", "n": "03", "name": "Three Fingers - Switch Mode",  "desc": "Index + Middle + Ring raised to cycle between modes",        "tag": "ALL MODES"},
+                        {"img": "assets/gestures/general/pause.png",        "n": "04", "name": "Pause Gesture",                "desc": "Hold open palm flat to pause the current session",           "tag": "SYSTEM"},
+                        {"img": "assets/gestures/general/continue.png",     "n": "05", "name": "Continue Gesture",             "desc": "Closed fist then open to resume from paused state",          "tag": "SYSTEM"},
+                        {"img": "assets/gestures/general/game_option.png",  "n": "06", "name": "Game Option",                  "desc": "Hold closed fist for 3 s to open game option menu",          "tag": "SYSTEM"},
+                        {"img": "assets/gestures/general/mouse_on_game.png","n": "07", "name": "Mouse in Game",                "desc": "Enable mouse-control overlay while in a game mode",          "tag": "SYSTEM"},
+                        {"img": "assets/gestures/general/exit.png",         "n": "08", "name": "Exit / Close",                 "desc": "Bring all fingers together pointing down to exit",           "tag": "SYSTEM"},
+                    ],
+                },
+            ],
             "Mouse": [
                 {
                     "label": "01  ·  MOUSE MODE",
                     "gestures": [
-                        {"n": "01", "name": "Point - Move Cursor", "desc": "Raise your index finger to move the cursor across the screen", "tag": "ACTIVE IN MOUSE MODE"},
-                        {"n": "02", "name": "Quick Pinch - Left Click", "desc": "Thumb + Middle pinch, held under 0.5s", "tag": "QUICK ACTION"},
-                        {"n": "03", "name": "Hold Pinch - Drag", "desc": "Thumb + Middle pinch, held over 0.5s", "tag": "HOLD 0.5S"},
-                        {"n": "04", "name": "Ring Pinch - Right Click", "desc": "Thumb + Ring finger pinch", "tag": "QUICK ACTION"},
-                        {"img": "pic/three_finger.png", "n": "05", "name": "Three Fingers - Scroll Up", "desc": "Index + Middle + Ring fingers raised up", "tag": "ACTIVE"},
-                        {"n": "06", "name": "Fist - Scroll Down", "desc": "All fingers clenched into a fist", "tag": "ACTIVE"},
+                        {"img": "assets/gestures/mouse/move.png",        "n": "01", "name": "Point - Move Cursor",    "desc": "Raise your index finger to move the cursor across the screen",  "tag": "ACTIVE IN MOUSE MODE"},
+                        {"img": "assets/gestures/mouse/left_click.png",  "n": "02", "name": "Quick Pinch - Left Click", "desc": "Thumb + Middle pinch, held under 0.5 s",                      "tag": "QUICK ACTION"},
+                        {"img": "assets/gestures/mouse/left_click.png",  "n": "03", "name": "Hold Pinch - Drag",       "desc": "Thumb + Middle pinch, held over 0.5 s",                        "tag": "HOLD 0.5S"},
+                        {"img": "assets/gestures/mouse/right_click.png", "n": "04", "name": "Ring Pinch - Right Click", "desc": "Thumb + Ring finger pinch",                                   "tag": "QUICK ACTION"},
+                        {"img": "assets/gestures/mouse/scroll_up.png",   "n": "05", "name": "Three Fingers - Scroll Up", "desc": "Index + Middle + Ring fingers raised",                       "tag": "ACTIVE"},
+                        {"img": "assets/gestures/mouse/scroll_down.png", "n": "06", "name": "Fist - Scroll Down",        "desc": "All fingers clenched into a fist",                           "tag": "ACTIVE"},
                     ],
                 },
             ],
@@ -33,12 +47,11 @@ class GestureGuide(QWidget):
                 {
                     "label": "02  ·  SUBWAY SURFERS",
                     "gestures": [
-                        {"n": "01", "name": "Wrist Up - Jump", "desc": "Lean wrist upward to jump or swipe up", "tag": "ACTIVE"},
-                        {"n": "02", "name": "Wrist Down - Slide", "desc": "Lean wrist downward to slide or swipe down", "tag": "ACTIVE"},
-                        {"n": "03", "name": "Wrist Left - Swipe Left", "desc": "Lean wrist to the left", "tag": "ACTIVE"},
-                        {"n": "04", "name": "Wrist Right - Swipe Right", "desc": "Lean wrist to the right", "tag": "ACTIVE"},
-                        {"n": "05", "name": "Open Hand - Space Bar", "desc": "Open palm facing camera for space bar / jump", "tag": "ACTIVE"},
-                        {"n": "06", "name": "Fist - Idle", "desc": "Relaxed or closed hand", "tag": "NEUTRAL"},
+                        {"img": "assets/gestures/subway/jump.jpg",        "n": "01", "name": "Wrist Up - Jump",         "desc": "Lean wrist upward to jump or swipe up",     "tag": "ACTIVE"},
+                        {"img": "assets/gestures/subway/slide.jpg",       "n": "02", "name": "Wrist Down - Slide",       "desc": "Lean wrist downward to slide or swipe down","tag": "ACTIVE"},
+                        {"img": "assets/gestures/subway/swipe_left.png",  "n": "03", "name": "Wrist Left - Swipe Left",  "desc": "Lean wrist to the left",                   "tag": "ACTIVE"},
+                        {"img": "assets/gestures/subway/swipe_right.png", "n": "04", "name": "Wrist Right - Swipe Right","desc": "Lean wrist to the right",                  "tag": "ACTIVE"},
+                        {"img": "assets/gestures/subway/space.png",       "n": "05", "name": "Open Hand - Space Bar",    "desc": "Open palm facing camera for space / jump", "tag": "ACTIVE"},
                     ],
                 },
             ],
@@ -46,11 +59,12 @@ class GestureGuide(QWidget):
                 {
                     "label": "03  ·  RACING",
                     "gestures": [
-                        {"n": "01", "name": "Thumb Up - Accelerate", "desc": "Right thumb up gesture to accelerate", "tag": "ACTIVE"},
-                        {"n": "02", "name": "Thumb Down - Brake", "desc": "Left thumb up gesture to brake", "tag": "ACTIVE"},
-                        {"n": "03", "name": "Tilt Left - Steer Left", "desc": "Tilt both hands to the left", "tag": "ACTIVE"},
-                        {"n": "04", "name": "Tilt Right - Steer Right", "desc": "Tilt both hands to the right", "tag": "ACTIVE"},
-                        {"n": "05", "name": "Level Hands - Go Straight", "desc": "Both hands kept level", "tag": "ACTIVE"},
+                        {"img": "assets/gestures/racing/accelerate.png",      "n": "01", "name": "Thumb Up - Accelerate",   "desc": "Right thumb up gesture to accelerate",      "tag": "ACTIVE"},
+                        {"img": "assets/gestures/racing/brake.png",           "n": "02", "name": "Thumb Down - Brake",      "desc": "Left thumb up gesture to brake",            "tag": "ACTIVE"},
+                        {"img": "assets/gestures/racing/steer_left.png",      "n": "03", "name": "Tilt Left - Steer Left",  "desc": "Tilt both hands to the left",               "tag": "ACTIVE"},
+                        {"img": "assets/gestures/racing/steer_right.png",     "n": "04", "name": "Tilt Right - Steer Right","desc": "Tilt both hands to the right",              "tag": "ACTIVE"},
+                        {"img": "assets/gestures/racing/steer_straight.png",  "n": "05", "name": "Level Hands - Straight",  "desc": "Both hands kept level to go straight",     "tag": "ACTIVE"},
+                        {"img": "assets/gestures/racing/brake_accelerate.png","n": "06", "name": "Brake + Accelerate",      "desc": "Both thumbs up simultaneously",             "tag": "COMBO"},
                     ],
                 },
             ],
@@ -89,12 +103,18 @@ class GestureGuide(QWidget):
         header_layout.addWidget(self.title_lbl)
         header_layout.addStretch()
 
-        self.mode_badge = QPushButton("MOUSE MODE")
-        self.mode_badge.setFixedHeight(28)
-        self.mode_badge.setCursor(Qt.PointingHandCursor)
-        self.mode_badge.clicked.connect(self._cycle_mode)
-        header_layout.addWidget(self.mode_badge)
+        self.mode_tab_row = QHBoxLayout()
+        self.mode_tab_row.setSpacing(4)
+        self.mode_tab_btns = {}
+        for mode in self.mode_sections:
+            btn = QPushButton(mode.upper())
+            btn.setFixedHeight(28)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.clicked.connect(lambda _, m=mode: self.switch_mode(m))
+            self.mode_tab_btns[mode] = btn
+            self.mode_tab_row.addWidget(btn)
 
+        header_layout.addLayout(self.mode_tab_row)
         layout.addWidget(self.header)
 
         self.scroll = QScrollArea()
@@ -131,7 +151,6 @@ class GestureGuide(QWidget):
         self.desc_labels.clear()
         self.tag_labels.clear()
 
-        total = 0
         for section in self.mode_sections[mode]:
             lbl = QLabel(section["label"])
             self.section_labels.append(lbl)
@@ -144,7 +163,6 @@ class GestureGuide(QWidget):
             self.scroll_layout.addSpacing(8)
 
             for g in section["gestures"]:
-                total += 1
                 card = self._make_card(g)
                 self.gesture_cards.append(card)
                 self.scroll_layout.addWidget(card)
@@ -153,11 +171,6 @@ class GestureGuide(QWidget):
             self.scroll_layout.addSpacing(8)
 
         self.scroll_layout.addStretch()
-
-        if mode == "Subway Surfers":
-            self.mode_badge.setText("SUBWAY MODE")
-        else:
-            self.mode_badge.setText(f"{mode.upper()} MODE")
 
         if hasattr(self, "_theme_ready"):
             self.apply_theme(self.is_dark)
@@ -172,13 +185,15 @@ class GestureGuide(QWidget):
         img = QLabel()
         img.setFixedSize(130, 100)
         img.setAlignment(Qt.AlignCenter)
-        if g.get("img"):
-            pix = QPixmap(g["img"]).scaled(
-                130, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation
-            )
-            img.setPixmap(pix)
+        img_path = g.get("img", "")
+        if img_path:
+            pix = QPixmap(img_path)
+            if not pix.isNull():
+                img.setPixmap(pix.scaled(130, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            else:
+                img.setText("NO IMAGE")
         else:
-            img.setText("IMAGE")
+            img.setText("—")
         self.image_placeholders.append(img)
         hl.addWidget(img)
 
@@ -215,11 +230,6 @@ class GestureGuide(QWidget):
         hl.addWidget(content, stretch=1)
         return card
 
-    def _cycle_mode(self):
-        modes = list(self.mode_sections.keys())
-        idx = modes.index(self.current_mode)
-        self.switch_mode(modes[(idx + 1) % len(modes)])
-
     def switch_mode(self, mode):
         if mode in self.mode_sections:
             self.current_mode = mode
@@ -230,22 +240,29 @@ class GestureGuide(QWidget):
         self._theme_ready = True
 
         if is_dark:
-            page_bg = "#0a0a0a"
-            panel  = "#111111"
-            border = "#262626"
-            text   = "#e8e8e8"
-            dim    = "#9a9a9a"
-            muted  = "#6b6b6b"
+            page_bg  = "#0a0a0a"
+            panel    = "#111111"
+            border   = "#262626"
+            text     = "#e8e8e8"
+            dim      = "#9a9a9a"
+            muted    = "#6b6b6b"
+            active_bg   = "#e8e8e8"
+            active_text = "#111111"
+            tab_hover   = "#161616"
         else:
-            page_bg = "#F4F4F4"
-            panel  = "#FFFFFF"
-            border = "#D8CEC7"
-            text   = "#111111"
-            dim    = "#6F655F"
-            muted  = "#B8B0AB"
+            page_bg  = "#F4F4F4"
+            panel    = "#FFFFFF"
+            border   = "#D8CEC7"
+            text     = "#111111"
+            dim      = "#6F655F"
+            muted    = "#B8B0AB"
+            active_bg   = "#111111"
+            active_text = "#FFFFFF"
+            tab_hover   = "#EDE5DF"
 
         self.setStyleSheet(f"background-color: {page_bg};")
-        self.header.setStyleSheet(f"background-color: {page_bg}; border-bottom: 1px solid {border};")
+        self.header.setStyleSheet(
+            f"background-color: {page_bg}; border-bottom: 1px solid {border};")
         self.menu_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: transparent;
@@ -254,21 +271,38 @@ class GestureGuide(QWidget):
                 border: none;
                 border-radius: 2px;
             }}
-            QPushButton:hover {{ background-color: {"#161616" if is_dark else "#EDE5DF"}; }}
+            QPushButton:hover {{ background-color: {tab_hover}; }}
         """)
-        self.title_lbl.setStyleSheet(f"color: {text}; font-size: 22px; font-weight: 800; background: transparent; border: none;")
-        self.mode_badge.setStyleSheet(f"""
-            QPushButton {{
-                color: {dim};
-                border: 1px solid {border};
-                font-size: 8px;
-                font-weight: 700;
-                letter-spacing: 1.5px;
-                background: transparent;
-                padding: 0 8px;
-            }}
-            QPushButton:hover {{ background-color: {"#161616" if is_dark else "#EDE5DF"}; }}
-        """)
+        self.title_lbl.setStyleSheet(
+            f"color: {text}; font-size: 22px; font-weight: 800; background: transparent; border: none;")
+
+        for mode, btn in self.mode_tab_btns.items():
+            is_active = (mode == self.current_mode)
+            if is_active:
+                btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {active_bg};
+                        color: {active_text};
+                        border: 1px solid {active_bg};
+                        font-size: 8px;
+                        font-weight: 700;
+                        letter-spacing: 1.3px;
+                        padding: 0 10px;
+                    }}
+                """)
+            else:
+                btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: transparent;
+                        color: {dim};
+                        border: 1px solid {border};
+                        font-size: 8px;
+                        font-weight: 700;
+                        letter-spacing: 1.3px;
+                        padding: 0 10px;
+                    }}
+                    QPushButton:hover {{ background-color: {tab_hover}; color: {text}; }}
+                """)
 
         self.scroll.setStyleSheet(f"""
             QScrollArea {{ background-color: {page_bg}; border: none; }}
@@ -290,29 +324,39 @@ class GestureGuide(QWidget):
             QScrollBar::sub-page:vertical {{ background: none; }}
         """)
         self.scroll_content.setStyleSheet(f"background-color: {page_bg};")
-
-        self.footer.setStyleSheet(f"background-color: {page_bg}; border-top: 1px solid {border};")
+        self.footer.setStyleSheet(
+            f"background-color: {page_bg}; border-top: 1px solid {border};")
 
         for lbl in self.section_labels:
-            lbl.setStyleSheet(f"color: {muted}; font-size: 8px; letter-spacing: 1.4px; background: transparent; border: none;")
+            lbl.setStyleSheet(
+                f"color: {muted}; font-size: 8px; letter-spacing: 1.4px; background: transparent; border: none;")
 
         for line in self.section_lines:
             line.setStyleSheet(f"background-color: {border};")
 
         for card in self.gesture_cards:
-            card.setStyleSheet(f"background-color: {panel}; border: 1px solid {border};")
+            card.setStyleSheet(
+                f"background-color: {panel}; border: 1px solid {border};")
 
         for img in self.image_placeholders:
-            img.setStyleSheet(f"color: {muted}; font-size: 8px; letter-spacing: 1.2px; border: 1px dashed {border}; background: transparent; margin: 12px;")
+            img.setStyleSheet(
+                f"color: {muted}; font-size: 8px; letter-spacing: 1.2px;"
+                f" border-right: 1px solid {border}; background: transparent;")
 
         for lbl in self.num_labels:
-            lbl.setStyleSheet(f"color: {muted}; font-size: 8px; letter-spacing: 1.2px; background: transparent; border: none;")
+            lbl.setStyleSheet(
+                f"color: {muted}; font-size: 8px; letter-spacing: 1.2px; background: transparent; border: none;")
 
         for lbl in self.name_labels:
-            lbl.setStyleSheet(f"color: {text}; font-size: 13px; font-weight: 700; background: transparent; border: none;")
+            lbl.setStyleSheet(
+                f"color: {text}; font-size: 13px; font-weight: 700; background: transparent; border: none;")
 
         for lbl in self.desc_labels:
-            lbl.setStyleSheet(f"color: {dim}; font-size: 10px; background: transparent; border: none;")
+            lbl.setStyleSheet(
+                f"color: {dim}; font-size: 10px; background: transparent; border: none;")
 
         for lbl in self.tag_labels:
-            lbl.setStyleSheet(f"color: {dim}; font-size: 8px; letter-spacing: 1.2px; background: transparent; border: 1px solid {border}; padding: 0 6px;")
+            lbl.setStyleSheet(
+                f"color: {dim}; font-size: 8px; letter-spacing: 1.2px;"
+                f" background: transparent; border: 1px solid {border}; padding: 0 6px;")
+

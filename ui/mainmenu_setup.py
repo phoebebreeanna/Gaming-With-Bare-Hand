@@ -4,7 +4,6 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal
 
-
 class MainMenuSetup(QWidget):
 
     on_lets_go = Signal()
@@ -27,7 +26,6 @@ class MainMenuSetup(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        #Top nav bar with hamburger + brand
         self.nav_bar = QWidget()
         self.nav_bar.setObjectName("nav_bar")
         self.nav_bar.setFixedHeight(42)
@@ -56,7 +54,6 @@ class MainMenuSetup(QWidget):
 
         layout.addWidget(self.nav_bar)
 
-        #Progress / stepper bar - sits below main_menu nav bar
         self.progress_wrap = QWidget()
         self.progress_wrap.setObjectName("progress_wrap")
         self.progress_wrap.setFixedHeight(44)
@@ -75,7 +72,6 @@ class MainMenuSetup(QWidget):
             ("01", "GUIDE", "active"),
             ("02", "CALIBRATE", "idle"),
             ("03", "ZONE", "idle"),
-            ("04", "CAMERA", "idle"),
         ]
 
         self.progress_steps_data = []
@@ -110,7 +106,6 @@ class MainMenuSetup(QWidget):
         progress_layout.addLayout(progress_row)
         layout.addWidget(self.progress_wrap)
 
-        #Content
         self.content = QWidget()
         content_layout = QVBoxLayout(self.content)
         content_layout.setContentsMargins(24, 20, 20, 24)
@@ -190,7 +185,6 @@ class MainMenuSetup(QWidget):
         content_layout.addStretch()
         layout.addWidget(self.content, stretch=1)
 
-        #Bottom action
         self.footer = QWidget()
         self.footer.setFixedHeight(58)
 
@@ -376,3 +370,4 @@ class MainMenuSetup(QWidget):
                 background-color: {button_hover};
             }}
         """)
+

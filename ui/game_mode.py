@@ -4,7 +4,6 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 
-
 class GameMode(QWidget):
     def __init__(self):
         super().__init__()
@@ -30,7 +29,6 @@ class GameMode(QWidget):
 
         layout.addSpacing(20)
 
-        #--------------------------Mouse Mode------------------------------------------
         mouse_box = QWidget()
         mouse_box.setFixedHeight(80)
         mouse_box.setStyleSheet("""
@@ -39,7 +37,6 @@ class GameMode(QWidget):
             border-radius: 10px;
         """)
 
-        #Horizontal layout in the mouse box from left to right
         mouse_layout = QHBoxLayout(mouse_box)
         mouse_layout.setContentsMargins(20, 10,20,10)
         mouse_layout.setSpacing(10)
@@ -52,7 +49,6 @@ class GameMode(QWidget):
             border: none;
         """)
 
-        #Toggle for mouse mode (on/off)
         self.mouse_toggle = QPushButton("OFF")
         self.mouse_toggle.setFixedSize(70, 35)
         self.mouse_toggle.setCursor(Qt.PointingHandCursor)
@@ -66,7 +62,6 @@ class GameMode(QWidget):
 
         layout.addWidget(mouse_box)
 
-        #divider line between mouse and game mode
         divider2 = QWidget()
         divider2.setFixedHeight(1)
         divider2.setStyleSheet("background-color: #6B35C7;")
@@ -74,7 +69,6 @@ class GameMode(QWidget):
 
         layout.addSpacing(20)
 
-        #--------------------------Game Selection------------------------------------------
         mode_label = QLabel("Select Game Mode")
         mode_label.setStyleSheet("""
             color: white;
@@ -85,9 +79,8 @@ class GameMode(QWidget):
 
         layout.addSpacing(10)
 
-        #Game mode options
         mode_row = QHBoxLayout()
-        mode_row.setSpacing(30) #Change spacing between game mode cards
+        mode_row.setSpacing(30) 
 
         self.mode_buttons = {}
 
@@ -110,14 +103,13 @@ class GameMode(QWidget):
         layout.addLayout(mode_row)
         layout.addStretch()
 
-    #--------------------------Mouse Mode------------------------------------------
     def toggle_mouse(self):
         self.mouse_enabled = not self.mouse_enabled
         self.mouse_toggle.setText("ON" if self.mouse_enabled else "OFF")
         self.update_toggle_style()
 
     def update_toggle_style(self):
-        if self.mouse_enabled: #When mouse mode is enable, the container is purple
+        if self.mouse_enabled: 
             self.mouse_toggle.setStyleSheet("""
                 QPushButton {
                     background-color: #6B35C7;
@@ -128,7 +120,7 @@ class GameMode(QWidget):
                 }
                 QPushButton:hover { background-color: #8B55E7; }
             """)
-        else: #When mouse mode is disable, the container is transparent with white border
+        else: 
             self.mouse_toggle.setStyleSheet("""
                 QPushButton {
                     background-color: rgba(255,255,255,0.15);
@@ -140,7 +132,6 @@ class GameMode(QWidget):
                 QPushButton:hover { background-color: rgba(255,255,255,0.25); }
             """)
 
-    #--------------------------Game Mode part------------------------------------------
     def create_mode_option(self, icon, name, desc, key):
         gamecard = QPushButton()
         gamecard.setFixedSize(180,160)
@@ -150,7 +141,6 @@ class GameMode(QWidget):
             lambda _, k=key: self.select_mode(k)
         )
 
-        #--------------Coming Soon (disabled and greyed out)----------------
         if key == "coming":
             gamecard.setEnabled(False)
 
@@ -218,3 +208,4 @@ class GameMode(QWidget):
                     border: 1px solid rgba(255,255,255,0.4);
                 }
             """)
+

@@ -33,11 +33,12 @@ class MainWindow(QMainWindow):
         self.stacked.setCurrentIndex(1)
 
     def closeEvent(self, event):
+        self.main_menu._stop_preview()
         ctrl = self.main_menu.controller
         if ctrl is not None and ctrl.isRunning():
             ctrl.stop()
             ctrl.wait(4000)
-            event.accept()
+        event.accept()
 
 
 if __name__ == "__main__":
