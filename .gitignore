@@ -5,3 +5,5 @@ __pycache__/
 .env
 .vscode/
 .DS_Store
+logic/app_config.json
+logic/data/custom
