@@ -14,6 +14,7 @@ class MainMenuZone(QWidget):
         self.is_dark = is_dark
         self.selected_zone = 'large'
         self._pending_zone = None
+        self.zone_cards = {}
         self.init_ui()
         self.apply_theme(self.is_dark)
 
@@ -108,8 +109,9 @@ class MainMenuZone(QWidget):
         panel_row.setSpacing(14)
 
         self.camera_panel = QWidget()
+        self.camera_panel.setObjectName("camera_panel")
         camera_layout = QVBoxLayout(self.camera_panel)
-        camera_layout.setContentsMargins(0, 0, 0, 0)
+        camera_layout.setContentsMargins(1, 1, 1, 1)
         camera_layout.setSpacing(0)
 
         self.camera_header = QWidget()
@@ -143,8 +145,9 @@ class MainMenuZone(QWidget):
         right_col.setContentsMargins(0, 0, 0, 0)
 
         self.zone_panel = QWidget()
+        self.zone_panel.setObjectName("zone_panel")
         zone_layout = QVBoxLayout(self.zone_panel)
-        zone_layout.setContentsMargins(0, 0, 0, 0)
+        zone_layout.setContentsMargins(1, 1, 1, 1)
         zone_layout.setSpacing(0)
 
         self.zone_header = QWidget()
@@ -159,28 +162,23 @@ class MainMenuZone(QWidget):
         self.zone_header_line.setFixedHeight(1)
         zone_layout.addWidget(self.zone_header_line)
 
-        zone_body = QWidget()
-        zone_body_layout = QVBoxLayout(zone_body)
+        self.zone_body = QWidget()
+        self.zone_body.setObjectName("zone_body")
+        zone_body_layout = QVBoxLayout(self.zone_body)
         zone_body_layout.setContentsMargins(12, 12, 12, 12)
-        zone_body_layout.setSpacing(6)
+        zone_body_layout.setSpacing(8)
 
-        self.zone_buttons = {}
-        zone_options = [
-            ('small',  'SMALL',  '1 finger - small area'),
-            ('medium', 'MEDIUM', '2 fingers - medium area'),
-            ('large',  'LARGE',  '3 fingers - wide area'),
+        zone_defs = [
+            ("small",  "SMALL",  "1 finger - small area",   (44, 32)),
+            ("medium", "MEDIUM", "2 fingers - medium area",  (56, 40)),
+            ("large",  "LARGE",  "3 fingers - wide area",    (68, 48)),
         ]
-        for name, label, hint in zone_options:
-            btn = QPushButton()
-            btn.setCheckable(True)
-            btn.setText(f"{label}\n{hint}")
-            btn.setFixedHeight(48)
-            btn.setCursor(Qt.PointingHandCursor)
-            btn.clicked.connect(lambda checked, n=name: self._select_zone(n))
-            self.zone_buttons[name] = btn
-            zone_body_layout.addWidget(btn)
+        for key, label, hint, preview_size in zone_defs:
+            card = self._build_zone_card(key, label, hint, preview_size)
+            self.zone_cards[key] = card
+            zone_body_layout.addWidget(card)
 
-        zone_body_layout.addSpacing(6)
+        zone_body_layout.addSpacing(4)
 
         self.gesture_hint = QLabel("OR HOLD FINGERS IN VIEW")
         zone_body_layout.addWidget(self.gesture_hint)
@@ -196,11 +194,12 @@ class MainMenuZone(QWidget):
         zone_body_layout.addWidget(self.gesture_progress)
 
         zone_body_layout.addStretch()
-        zone_layout.addWidget(zone_body)
+        zone_layout.addWidget(self.zone_body)
+
+        self.zone_panel.setFixedWidth(225)
         right_col.addWidget(self.zone_panel)
         right_col.addStretch()
 
-        self.zone_panel.setFixedWidth(225)
         panel_row.addLayout(right_col, stretch=0)
         content_layout.addLayout(panel_row, stretch=1)
         layout.addWidget(self.content, stretch=1)
@@ -224,79 +223,63 @@ class MainMenuZone(QWidget):
         footer_layout.addWidget(self.continue_btn)
         layout.addWidget(self.footer)
 
-    def _select_zone(self, name):
-        self.selected_zone = name
+    def _build_zone_card(self, key, label, hint, preview_size):
+        card = QWidget()
+        card.setObjectName(f"zone_card_{key}")
+        card.setCursor(Qt.PointingHandCursor)
+        card.setFixedHeight(68)
+
+        row = QHBoxLayout(card)
+        row.setContentsMargins(10, 1, 10, 1)
+        row.setSpacing(10)
+
+        radio = QWidget()
+        radio.setObjectName(f"radio_{key}")
+        radio.setFixedSize(12, 12)
+        row.addWidget(radio)
+
+        text_col = QWidget()
+        text_col.setAttribute(Qt.WA_TransparentForMouseEvents)
+        text_v = QVBoxLayout(text_col)
+        text_v.setContentsMargins(0, 0, 0, 0)
+        text_v.setSpacing(2)
+        text_v.setAlignment(Qt.AlignVCenter)
+        card._text_col = text_col
+
+        name_lbl = QLabel(label)
+        name_lbl.setObjectName(f"zone_name_{key}")
+        hint_lbl = QLabel(hint)
+        hint_lbl.setObjectName(f"zone_hint_{key}")
+        text_v.addWidget(name_lbl)
+        text_v.addWidget(hint_lbl)
+        row.addWidget(text_col, stretch=1)
+
+        iw, ih = preview_size
+        preview = QWidget()
+        preview.setObjectName(f"preview_{key}")
+        preview.setFixedSize(iw, ih)
+        preview.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        row.addWidget(preview)
+
+        card._zone_key = key
+        card._name_lbl = name_lbl
+        card._hint_lbl = hint_lbl
+        card._radio = radio
+        card._preview = preview
+
+        def on_click(event, k=key):
+            self._select_zone(k)
+        card.mousePressEvent = on_click
+
+        return card
+
+    def _select_zone(self, key):
+        self.selected_zone = key
         self._pending_zone = None
-        for zone_name, btn in self.zone_buttons.items():
-            btn.setChecked(zone_name == name)
-        self._restyle_zone_buttons()
+        self._refresh_card_styles()
 
-    def _restyle_zone_buttons(self):
-        if self.is_dark:
-            normal_bg     = "#111111"
-            normal_border = "#262626"
-            normal_text   = "#9a9a9a"
-            sel_bg        = "#1a2a1a"
-            sel_border    = "#00d084"
-            sel_text      = "#00d084"
-            pend_bg       = "#2a2010"
-            pend_border   = "#d08400"
-            pend_text     = "#d08400"
-            hover_bg      = "#161616"
-        else:
-            normal_bg     = "#FFFFFF"
-            normal_border = "#D8CEC7"
-            normal_text   = "#7A706C"
-            sel_bg        = "#F0FFF8"
-            sel_border    = "#00A36C"
-            sel_text      = "#00A36C"
-            pend_bg       = "#FFFBEE"
-            pend_border   = "#B86A00"
-            pend_text     = "#B86A00"
-            hover_bg      = "#F4F4F4"
-
-        for name, btn in self.zone_buttons.items():
-            is_selected = btn.isChecked()
-            is_pending  = (name == self._pending_zone) and not is_selected
-            if is_selected:
-                btn.setStyleSheet(f"""
-                    QPushButton {{
-                        background-color: {sel_bg};
-                        color: {sel_text};
-                        border: 1px solid {sel_border};
-                        font-size: 9px;
-                        font-weight: 700;
-                        letter-spacing: 1.2px;
-                        text-align: left;
-                        padding: 8px 12px;
-                    }}
-                """)
-            elif is_pending:
-                btn.setStyleSheet(f"""
-                    QPushButton {{
-                        background-color: {pend_bg};
-                        color: {pend_text};
-                        border: 1px solid {pend_border};
-                        font-size: 9px;
-                        font-weight: 700;
-                        letter-spacing: 1.2px;
-                        text-align: left;
-                        padding: 8px 12px;
-                    }}
-                """)
-            else:
-                btn.setStyleSheet(f"""
-                    QPushButton {{
-                        background-color: {normal_bg};
-                        color: {normal_text};
-                        border: 1px solid {normal_border};
-                        font-size: 9px;
-                        letter-spacing: 1.2px;
-                        text-align: left;
-                        padding: 8px 12px;
-                    }}
-                    QPushButton:hover {{ background-color: {hover_bg}; }}
-                """)
+    def _refresh_card_styles(self):
+        self.apply_theme(self.is_dark)
 
     def set_frame(self, pixmap):
         self.camera_label.setPixmap(
@@ -318,7 +301,7 @@ class MainMenuZone(QWidget):
             self.gesture_progress_label.setText(
                 f"HOLD - {pending_zone.upper()} ({int(frac * 100)}%)"
             )
-        self._restyle_zone_buttons()
+        self._refresh_card_styles()
 
     def apply_theme(self, is_dark):
         self.is_dark = is_dark
@@ -349,42 +332,26 @@ class MainMenuZone(QWidget):
             primary_text = "#FFFFFF"
 
         self.setStyleSheet(f"background-color: {page_bg};")
-        self.nav_bar.setStyleSheet(f"""
-            #nav_bar {{
-                background-color: {page_bg};
-                border-bottom: 1px solid {border};
-            }}
-        """)
-        self.progress_wrap.setStyleSheet(f"""
-            #progress_wrap {{
-                background-color: {page_bg};
-                border-bottom: 1px solid {border};
-            }}
-        """)
+        self.nav_bar.setStyleSheet(f"#nav_bar {{ background-color: {page_bg}; border-bottom: 1px solid {border}; }}")
+        self.progress_wrap.setStyleSheet(f"#progress_wrap {{ background-color: {page_bg}; border-bottom: 1px solid {border}; }}")
         self.progress_rule.setStyleSheet(f"background-color: {border};")
         self.content.setStyleSheet(f"background-color: {page_bg};")
         self.footer.setStyleSheet(f"background-color: {page_bg}; border-top: 1px solid {border};")
 
         self.menu_toggle_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: transparent;
-                color: {text};
-                font-size: 18px;
-                font-weight: 800;
-                border: none;
-                border-radius: 2px;
+                background-color: transparent; color: {text};
+                font-size: 18px; font-weight: 800;
+                border: none; border-radius: 2px;
             }}
             QPushButton:hover {{ background-color: {panel}; }}
         """)
-        self.brand_box.setStyleSheet(f"background: transparent; border-left: 1px solid {border}; border-right: 1px solid {border};")
-        self.brand_title.setStyleSheet(f"""
-            font-size: 11px; font-weight: 800; color: {text};
-            letter-spacing: 1.5px; background: transparent; border: none;
-        """)
-        self.brand_version.setStyleSheet(f"""
-            font-size: 8px; color: {muted};
-            letter-spacing: 1px; background: transparent; border: none;
-        """)
+        self.brand_box.setStyleSheet(
+            f"background: transparent; border-left: 1px solid {border}; border-right: 1px solid {border};")
+        self.brand_title.setStyleSheet(
+            f"font-size: 11px; font-weight: 800; color: {text}; letter-spacing: 1.5px; background: transparent; border: none;")
+        self.brand_version.setStyleSheet(
+            f"font-size: 8px; color: {muted}; letter-spacing: 1px; background: transparent; border: none;")
 
         for num_lbl, text_lbl, state in self.progress_steps_data:
             if state == "done":
@@ -404,54 +371,122 @@ class MainMenuZone(QWidget):
         self.title.setStyleSheet(f"color: {text}; font-size: 19px; font-weight: 600; border: none;")
         self.desc.setStyleSheet(f"color: {dim}; font-size: 11px; border: none;")
 
-        self.camera_panel.setStyleSheet(f"background-color: {camera_bg}; border: 1px solid {border};")
+        self.camera_panel.setStyleSheet(f"QWidget#camera_panel {{ background-color: {camera_bg}; border: 1px solid {border}; }}")
         self.camera_header.setStyleSheet(f"background-color: {panel2}; border: none;")
         self.camera_header_line.setStyleSheet(f"background-color: {border}; border: none;")
         self.camera_title.setStyleSheet(f"color: {text}; font-size: 9px; font-weight: 700; letter-spacing: 1.4px; border: none;")
         self.tracking_lbl.setStyleSheet(f"color: {dim}; font-size: 8px; letter-spacing: 1.2px; border: none;")
         self.camera_body.setStyleSheet(f"background-color: {camera_bg}; border: none;")
-        self.camera_label.setStyleSheet(f"""
-            background-color: transparent;
-            color: {muted};
-            font-size: 10px;
-            letter-spacing: 2px;
-            border: none;
-        """)
+        self.camera_label.setStyleSheet(f"background-color: transparent; color: {muted}; font-size: 10px; letter-spacing: 2px; border: none;")
 
-        self.zone_panel.setStyleSheet(f"background-color: {panel}; border: 1px solid {border};")
+        self.zone_panel.setStyleSheet(f"QWidget#zone_panel {{ background-color: {panel}; border: 1px solid {border}; }}")
         self.zone_header.setStyleSheet(f"background-color: {panel2}; border: none;")
         self.zone_header_line.setStyleSheet(f"background-color: {border}; border: none;")
         self.zone_title.setStyleSheet(f"color: {text}; font-size: 9px; font-weight: 700; letter-spacing: 1.4px; border: none;")
+        self.zone_body.setStyleSheet(f"QWidget#zone_body {{ background-color: {panel}; border: none; }}")
 
-        self.gesture_hint.setStyleSheet(f"color: {muted}; font-size: 7px; letter-spacing: 1.2px; border: none;")
-        self.gesture_progress_label.setStyleSheet(f"color: {dim}; font-size: 7px; letter-spacing: 1.2px; border: none;")
+        for key, card in self.zone_cards.items():
+            is_selected = (key == self.selected_zone)
+            is_pending  = (key == self._pending_zone) and not is_selected
+
+            if is_selected:
+                card_bg  = panel
+                card_bdr = text
+            elif is_pending:
+                card_bg  = "#2a2010" if is_dark else "#FFFBEE"
+                card_bdr = "#d08400" if is_dark else "#B86A00"
+            else:
+                card_bg  = panel
+                card_bdr = border
+
+            card._text_col.setStyleSheet("background: transparent; border: none;")
+            card.setStyleSheet(f"""
+                QWidget#zone_card_{key} {{
+                    background-color: {card_bg};
+                    border: 1px solid {card_bdr};
+                    border-radius: 4px;
+                }}
+            """)
+
+            if is_selected:
+                name_color = text
+                hint_color = dim
+            elif is_pending:
+                name_color = "#d08400" if is_dark else "#B86A00"
+                hint_color = name_color
+            else:
+                name_color = dim
+                hint_color = muted
+
+            card._name_lbl.setStyleSheet(
+                f"color: {name_color}; font-size: 9px; font-weight: 700; "
+                f"letter-spacing: 1.2px; background: transparent; border: none;"
+            )
+            card._hint_lbl.setStyleSheet(
+                f"color: {hint_color}; font-size: 8px; background: transparent; border: none;"
+            )
+
+            if is_selected:
+                card._radio.setStyleSheet(f"""
+                    background-color: {text};
+                    border: 1px solid {text};
+                    border-radius: 6px;
+                """)
+            else:
+                card._radio.setStyleSheet(f"""
+                    background-color: transparent;
+                    border: 1px solid {border};
+                    border-radius: 6px;
+                """)
+
+            if is_dark:
+                preview_border = "#FFFFFF"
+            else:
+                preview_border = dim if is_selected else border
+            card._preview.setStyleSheet(
+                f"QWidget#preview_{key} {{"
+                f"background: transparent; "
+                f"border: 1px dashed {preview_border}; "
+                f"border-radius: 2px; }}"
+            )
+
+        self.gesture_hint.setStyleSheet(
+            f"""
+            background: transparent;
+            color: {muted};
+            font-size: 7px;
+            letter-spacing: 1.2px;
+            border: none;
+            """
+        )
+        self.gesture_progress_label.setStyleSheet(
+            f"""
+            background: transparent;
+            color: {dim};
+            font-size: 7px;
+            letter-spacing: 1.2px;
+            border: none;
+            """
+        )
         success = "#00d084" if is_dark else "#00A36C"
         self.gesture_progress.setStyleSheet(f"""
             QProgressBar {{ background-color: {border}; border: none; }}
             QProgressBar::chunk {{ background-color: {success}; }}
         """)
 
-        self._restyle_zone_buttons()
-
         self.back_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: transparent;
-                color: {dim};
+                background-color: transparent; color: {dim};
                 border: 1px solid {border};
-                font-size: 8px;
-                font-weight: 700;
-                letter-spacing: 1.4px;
+                font-size: 8px; font-weight: 700; letter-spacing: 1.4px;
             }}
             QPushButton:hover {{ background-color: {panel}; }}
         """)
         self.continue_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: {primary_bg};
-                color: {primary_text};
+                background-color: {primary_bg}; color: {primary_text};
                 border: 1px solid {primary_bg};
-                font-size: 8px;
-                font-weight: 700;
-                letter-spacing: 1.4px;
+                font-size: 8px; font-weight: 700; letter-spacing: 1.4px;
             }}
             QPushButton:hover {{ background-color: {strong}; }}
         """)

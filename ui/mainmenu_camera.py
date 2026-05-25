@@ -58,7 +58,6 @@ class MainMenuCamera(QWidget):
         progress_row.setContentsMargins(18, 0, 18, 0)
         progress_row.setSpacing(8)
         progress_row.setAlignment(Qt.AlignVCenter)
-
         self.progress_steps_data = []
         self.progress_lines = []
         for index, (num, label_text, state) in enumerate([
@@ -85,7 +84,6 @@ class MainMenuCamera(QWidget):
                 line.setFixedSize(28, 1)
                 self.progress_lines.append(line)
                 progress_row.addWidget(line)
-
         progress_row.addStretch()
         progress_layout.addLayout(progress_row)
         layout.addWidget(self.progress_wrap)
@@ -101,32 +99,18 @@ class MainMenuCamera(QWidget):
 
         self.meta = QLabel("02 / 04 - CAMERA SETUP")
         content_layout.addWidget(self.meta)
-
         self.title = QLabel("Select Your Camera")
         content_layout.addWidget(self.title)
-
         self.desc = QLabel("Choose your camera input and verify the preview below.")
         content_layout.addWidget(self.desc)
 
-        content_layout.addSpacing(12)
-
-        cam_row = QHBoxLayout()
-        cam_row.setSpacing(10)
-        self.cam_label = QLabel("CAMERA INPUT")
-        self.cam_combo = QComboBox()
-        self.cam_combo.setFixedHeight(30)
-        self.cam_combo.setMinimumWidth(190)
-        self.cam_combo.currentIndexChanged.connect(self._on_combo_changed)
-        cam_row.addWidget(self.cam_label)
-        cam_row.addWidget(self.cam_combo)
-        cam_row.addStretch()
-        content_layout.addLayout(cam_row)
-
-        content_layout.addSpacing(8)
+        panel_row = QHBoxLayout()
+        panel_row.setSpacing(14)
 
         self.camera_panel = QWidget()
+        self.camera_panel.setObjectName("camera_panel")
         camera_layout = QVBoxLayout(self.camera_panel)
-        camera_layout.setContentsMargins(0, 0, 0, 0)
+        camera_layout.setContentsMargins(1, 1, 1, 1)
         camera_layout.setSpacing(0)
 
         self.camera_header = QWidget()
@@ -153,10 +137,57 @@ class MainMenuCamera(QWidget):
         self.camera_preview.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
         camera_body_layout.addWidget(self.camera_preview, stretch=1)
         camera_layout.addWidget(self.camera_body, stretch=1)
+        panel_row.addWidget(self.camera_panel, stretch=1)
 
-        content_layout.addWidget(self.camera_panel, stretch=1)
+        right_col = QVBoxLayout()
+        right_col.setSpacing(10)
+        right_col.setContentsMargins(0, 0, 0, 0)
+
+        self.input_panel = QWidget()
+        self.input_panel.setObjectName("input_panel")
+        input_layout = QVBoxLayout(self.input_panel)
+        input_layout.setContentsMargins(1, 1, 1, 1)
+        input_layout.setSpacing(0)
+
+        self.input_header = QWidget()
+        self.input_header.setFixedHeight(40)
+        input_header_layout = QHBoxLayout(self.input_header)
+        input_header_layout.setContentsMargins(12, 0, 12, 0)
+        self.input_title = QLabel("B   CAMERA INPUT")
+        input_header_layout.addWidget(self.input_title)
+        input_layout.addWidget(self.input_header)
+
+        self.input_header_line = QWidget()
+        self.input_header_line.setFixedHeight(1)
+        input_layout.addWidget(self.input_header_line)
+
+        self.input_body = QWidget()
+        self.input_body.setObjectName("input_body")
+        input_body_layout = QVBoxLayout(self.input_body)
+        input_body_layout.setContentsMargins(12, 12, 12, 12)
+        input_body_layout.setSpacing(10)
+
+        self.cam_label = QLabel("CAMERA INPUT")
+        self.cam_combo = QComboBox()
+        self.cam_combo.setFixedHeight(30)
+        self.cam_combo.setMinimumWidth(190)
+        self.cam_combo.currentIndexChanged.connect(self._on_combo_changed)
+        self.cam_status = QLabel("")
+        input_body_layout.addWidget(self.cam_label)
+        input_body_layout.addWidget(self.cam_combo)
+        input_body_layout.addWidget(self.cam_status)
+        input_body_layout.addStretch()
+        input_layout.addWidget(self.input_body, stretch=1)
+
+        self.input_panel.setFixedWidth(225)
+        right_col.addWidget(self.input_panel)
+        right_col.addStretch()
+
+        panel_row.addLayout(right_col, stretch=0)
+        content_layout.addLayout(panel_row, stretch=1)
         layout.addWidget(self.content, stretch=1)
 
+        # FOOTER
         self.footer = QWidget()
         self.footer.setFixedHeight(58)
         footer_layout = QHBoxLayout(self.footer)
@@ -181,10 +212,12 @@ class MainMenuCamera(QWidget):
         self.cam_combo.clear()
         if not cameras:
             self.cam_combo.addItem("No camera found", -1)
+            self.cam_status.setText("No cameras detected.")
         else:
             for idx in cameras:
                 self.cam_combo.addItem(
                     f"Camera {idx}" + (" (Default)" if idx == 0 else ""), idx)
+            self.cam_status.setText(f"{len(cameras)} camera(s) detected.")
         self.cam_combo.blockSignals(False)
 
     def get_selected_camera(self) -> int:
@@ -209,11 +242,11 @@ class MainMenuCamera(QWidget):
 
     def set_frame(self, pixmap: QPixmap):
         self._last_pixmap = pixmap
-        size = self.camera_preview.size()
-        if size.width() > 0 and size.height() > 0:
-            self.camera_preview.setText("")
-            self.camera_preview.setPixmap(
-                pixmap.scaled(size, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        self.camera_preview.setPixmap(
+            pixmap.scaled(
+                self.camera_preview.size(),
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation))
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -232,6 +265,7 @@ class MainMenuCamera(QWidget):
             text         = "#e8e8e8"
             dim          = "#9a9a9a"
             muted        = "#6b6b6b"
+            camera_bg    = "#111111"
             primary_bg   = "#e8e8e8"
             primary_text = "#111111"
         else:
@@ -243,6 +277,7 @@ class MainMenuCamera(QWidget):
             text         = "#111111"
             dim          = "#7A706C"
             muted        = "#B8B0AB"
+            camera_bg    = "#FFFFFF"
             primary_bg   = "#111111"
             primary_text = "#FFFFFF"
 
@@ -298,11 +333,35 @@ class MainMenuCamera(QWidget):
         self.meta.setStyleSheet(f"color: {muted}; font-size: 8px; letter-spacing: 1.4px; border: none;")
         self.title.setStyleSheet(f"color: {text}; font-size: 19px; font-weight: 600; border: none;")
         self.desc.setStyleSheet(f"color: {dim}; font-size: 11px; border: none;")
+
+        self.camera_panel.setStyleSheet(f"QWidget#camera_panel {{ background-color: {camera_bg}; border: 1px solid {border}; }}")
+        self.camera_header.setStyleSheet(f"background-color: {panel2}; border: none;")
+        self.camera_header_line.setStyleSheet(f"background-color: {border}; border: none;")
+        self.camera_title_lbl.setStyleSheet(
+            f"color: {text}; font-size: 9px; font-weight: 700; letter-spacing: 1.4px; border: none;")
+        self.camera_status_lbl.setStyleSheet(
+            f"color: {dim}; font-size: 8px; letter-spacing: 1.2px; border: none;")
+        self.camera_body.setStyleSheet(f"background-color: {camera_bg}; border: none;")
+        self.camera_preview.setStyleSheet(f"""
+            background-color: transparent;
+            color: {muted};
+            font-size: 10px;
+            letter-spacing: 2px;
+            border: none;
+        """)
+
+        self.input_panel.setStyleSheet(f"QWidget#input_panel {{ background-color: {border}; border: 1px solid {border}; }}")
+        self.input_header.setStyleSheet(f"background-color: {panel2}; border: none;")
+        self.input_header_line.setStyleSheet(f"background-color: {border}; border: none;")
+        self.input_title.setStyleSheet(
+            f"color: {text}; font-size: 9px; font-weight: 700; letter-spacing: 1.4px; border: none;")
+        self.input_body.setStyleSheet(f"background-color: {panel}; border: none;")
+
         self.cam_label.setStyleSheet(
             f"color: {muted}; font-size: 8px; font-weight: 700; letter-spacing: 1.4px; background: transparent; border: none;")
         self.cam_combo.setStyleSheet(f"""
             QComboBox {{
-                background: {panel}; color: {text};
+                background: {page_bg}; color: {text};
                 border: 1px solid {border};
                 border-radius: 2px; padding: 4px 8px; font-size: 10px;
                 letter-spacing: 1px;
@@ -321,22 +380,8 @@ class MainMenuCamera(QWidget):
                 selection-color: {text}; outline: none;
             }}
         """)
-
-        self.camera_panel.setStyleSheet(f"background-color: {panel}; border: 1px solid {border};")
-        self.camera_header.setStyleSheet(f"background-color: {panel2}; border: none;")
-        self.camera_header_line.setStyleSheet(f"background-color: {border}; border: none;")
-        self.camera_title_lbl.setStyleSheet(
-            f"color: {text}; font-size: 9px; font-weight: 700; letter-spacing: 1.4px; border: none;")
-        self.camera_status_lbl.setStyleSheet(
-            f"color: {dim}; font-size: 8px; letter-spacing: 1.2px; border: none;")
-        self.camera_body.setStyleSheet(f"background-color: {panel}; border: none;")
-        self.camera_preview.setStyleSheet(f"""
-            background-color: transparent;
-            color: {muted};
-            font-size: 10px;
-            letter-spacing: 2px;
-            border: none;
-        """)
+        self.cam_status.setStyleSheet(
+            f"color: {muted}; font-size: 8px; letter-spacing: 1px; background: transparent; border: none;")
 
         self.back_btn.setStyleSheet(f"""
             QPushButton {{

@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal
 
+
 class MainMenuCalibration(QWidget):
 
     on_continue = Signal()
@@ -26,17 +27,14 @@ class MainMenuCalibration(QWidget):
         self.nav_bar = QWidget()
         self.nav_bar.setObjectName("nav_bar")
         self.nav_bar.setFixedHeight(42)
-
         nav_layout = QHBoxLayout(self.nav_bar)
         nav_layout.setContentsMargins(0, 0, 0, 0)
         nav_layout.setSpacing(0)
-
         self.menu_toggle_btn = QPushButton("☰")
         self.menu_toggle_btn.setFixedSize(36, 42)
         self.menu_toggle_btn.setCursor(Qt.PointingHandCursor)
         self.menu_toggle_btn.clicked.connect(self.on_menu_toggle.emit)
         nav_layout.addWidget(self.menu_toggle_btn)
-
         self.brand_box = QWidget()
         self.brand_box.setFixedHeight(42)
         brand_layout = QHBoxLayout(self.brand_box)
@@ -48,23 +46,19 @@ class MainMenuCalibration(QWidget):
         brand_layout.addWidget(self.brand_version)
         nav_layout.addWidget(self.brand_box)
         nav_layout.addStretch()
-
         layout.addWidget(self.nav_bar)
 
         self.progress_wrap = QWidget()
         self.progress_wrap.setObjectName("progress_wrap")
         self.progress_wrap.setFixedHeight(44)
-
         progress_layout = QVBoxLayout(self.progress_wrap)
         progress_layout.setContentsMargins(0, 0, 0, 0)
         progress_layout.setSpacing(0)
         progress_layout.setAlignment(Qt.AlignVCenter)
-
         progress_row = QHBoxLayout()
         progress_row.setContentsMargins(18, 0, 18, 0)
         progress_row.setSpacing(8)
         progress_row.setAlignment(Qt.AlignVCenter)
-
         _progress_steps = [
             ("✓",  "GUIDE",     "done"),
             ("✓",  "CAMERA",    "done"),
@@ -79,25 +73,19 @@ class MainMenuCalibration(QWidget):
             step_h.setContentsMargins(0, 0, 0, 0)
             step_h.setSpacing(6)
             step_h.setAlignment(Qt.AlignVCenter)
-
             num_lbl = QLabel(num)
             num_lbl.setFixedSize(20, 20)
             num_lbl.setAlignment(Qt.AlignCenter)
-
             text_lbl = QLabel(label_text)
-
             step_h.addWidget(num_lbl)
             step_h.addWidget(text_lbl)
-
             self.progress_steps_data.append((num_lbl, text_lbl, state))
             progress_row.addWidget(step_widget)
-
             if index < len(_progress_steps) - 1:
                 line = QWidget()
                 line.setFixedSize(28, 1)
                 self.progress_lines.append(line)
                 progress_row.addWidget(line)
-
         progress_row.addStretch()
         progress_layout.addLayout(progress_row)
         layout.addWidget(self.progress_wrap)
@@ -113,10 +101,8 @@ class MainMenuCalibration(QWidget):
 
         self.meta = QLabel("03 / 04 - CALIBRATION")
         content_layout.addWidget(self.meta)
-
         self.title = QLabel("Set hand distance")
         content_layout.addWidget(self.title)
-
         self.desc = QLabel("Hold your dominant hand in front of camera, palm forward. Move until indicator reads OPTIMAL.")
         content_layout.addWidget(self.desc)
 
@@ -124,8 +110,9 @@ class MainMenuCalibration(QWidget):
         panel_row.setSpacing(14)
 
         self.camera_panel = QWidget()
+        self.camera_panel.setObjectName("camera_panel")
         camera_layout = QVBoxLayout(self.camera_panel)
-        camera_layout.setContentsMargins(0, 0, 0, 0)
+        camera_layout.setContentsMargins(1, 1, 1, 1)
         camera_layout.setSpacing(0)
 
         self.camera_header = QWidget()
@@ -138,6 +125,7 @@ class MainMenuCalibration(QWidget):
         camera_header_layout.addStretch()
         camera_header_layout.addWidget(self.tracking_lbl)
         camera_layout.addWidget(self.camera_header)
+
         self.camera_header_line = QWidget()
         self.camera_header_line.setFixedHeight(1)
         camera_layout.addWidget(self.camera_header_line)
@@ -146,7 +134,6 @@ class MainMenuCalibration(QWidget):
         camera_body_layout = QVBoxLayout(self.camera_body)
         camera_body_layout.setContentsMargins(8, 8, 8, 8)
         camera_body_layout.setSpacing(0)
-
         self.camera_label = QLabel("LIVE CAMERA FEED")
         self.camera_label.setAlignment(Qt.AlignCenter)
         self.camera_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
@@ -159,9 +146,11 @@ class MainMenuCalibration(QWidget):
         right_col.setContentsMargins(0, 0, 0, 0)
 
         self.distance_panel = QWidget()
+        self.distance_panel.setObjectName("distance_panel")
         distance_layout = QVBoxLayout(self.distance_panel)
-        distance_layout.setContentsMargins(0, 0, 0, 0)
+        distance_layout.setContentsMargins(1, 1, 1, 1)
         distance_layout.setSpacing(0)
+
         self.distance_header = QWidget()
         self.distance_header.setFixedHeight(40)
         distance_header_layout = QHBoxLayout(self.distance_header)
@@ -169,14 +158,17 @@ class MainMenuCalibration(QWidget):
         self.distance_title = QLabel("B   DISTANCE")
         distance_header_layout.addWidget(self.distance_title)
         distance_layout.addWidget(self.distance_header)
+
         self.distance_header_line = QWidget()
         self.distance_header_line.setFixedHeight(1)
         distance_layout.addWidget(self.distance_header_line)
 
-        distance_body = QWidget()
-        distance_body_layout = QVBoxLayout(distance_body)
+        self.distance_body = QWidget()
+        self.distance_body.setObjectName("distance_body")
+        distance_body_layout = QVBoxLayout(self.distance_body)
         distance_body_layout.setContentsMargins(12, 10, 12, 12)
         distance_body_layout.setSpacing(8)
+
         self.distance_bar = QWidget()
         self.distance_bar.setFixedHeight(66)
         gauge_layout = QHBoxLayout(self.distance_bar)
@@ -187,11 +179,21 @@ class MainMenuCalibration(QWidget):
             cell = QWidget()
             self.gauge_cells.append(cell)
             gauge_layout.addWidget(cell)
+
+        axis_row = QHBoxLayout()
+        axis_row.setContentsMargins(0, 0, 0, 0)
+        axis_row.setSpacing(0)
+        self.axis_near_lbl = QLabel("20cm")
         self.distance_value = QLabel("-")
         self.distance_value.setAlignment(Qt.AlignCenter)
-        self.distance_axis = QLabel("20cm                                      80cm")
-        self.distance_badge = QLabel("NO HAND DETECTED")
+        self.axis_far_lbl = QLabel("80cm")
+        axis_row.addWidget(self.axis_near_lbl)
+        axis_row.addStretch()
+        axis_row.addWidget(self.distance_value)
+        axis_row.addStretch()
+        axis_row.addWidget(self.axis_far_lbl)
 
+        self.distance_badge = QLabel("NO HAND DETECTED")
         self.hold_label = QLabel("HOLD IN RANGE TO AUTO-ADVANCE")
         self.hold_progress = QProgressBar()
         self.hold_progress.setRange(0, 100)
@@ -200,19 +202,20 @@ class MainMenuCalibration(QWidget):
         self.hold_progress.setTextVisible(False)
 
         distance_body_layout.addWidget(self.distance_bar)
-        distance_body_layout.addWidget(self.distance_value)
-        distance_body_layout.addWidget(self.distance_axis)
+        distance_body_layout.addLayout(axis_row)
         distance_body_layout.addWidget(self.distance_badge)
         distance_body_layout.addSpacing(4)
         distance_body_layout.addWidget(self.hold_label)
         distance_body_layout.addWidget(self.hold_progress)
-        distance_layout.addWidget(distance_body)
+        distance_layout.addWidget(self.distance_body)
         right_col.addWidget(self.distance_panel)
 
         self.telemetry_panel = QWidget()
+        self.telemetry_panel.setObjectName("telemetry_panel")
         telemetry_layout = QVBoxLayout(self.telemetry_panel)
-        telemetry_layout.setContentsMargins(0, 0, 0, 0)
+        telemetry_layout.setContentsMargins(1, 1, 1, 1)
         telemetry_layout.setSpacing(0)
+
         self.telemetry_header = QWidget()
         self.telemetry_header.setFixedHeight(40)
         telemetry_header_layout = QHBoxLayout(self.telemetry_header)
@@ -220,18 +223,37 @@ class MainMenuCalibration(QWidget):
         self.telemetry_title = QLabel("C   TELEMETRY")
         telemetry_header_layout.addWidget(self.telemetry_title)
         telemetry_layout.addWidget(self.telemetry_header)
+
         self.telemetry_header_line = QWidget()
         self.telemetry_header_line.setFixedHeight(1)
         telemetry_layout.addWidget(self.telemetry_header_line)
-        telemetry_body = QWidget()
-        telemetry_body_layout = QVBoxLayout(telemetry_body)
+
+        self.telemetry_body = QWidget()
+        self.telemetry_body.setObjectName("telemetry_body")
+        telemetry_body_layout = QVBoxLayout(self.telemetry_body)
         telemetry_body_layout.setContentsMargins(12, 12, 12, 12)
         telemetry_body_layout.setSpacing(12)
-        self.lighting_lbl = QLabel("LIGHTING                                      GOOD")
-        self.background_lbl = QLabel("BACKGROUND                                 CLEAR")
-        telemetry_body_layout.addWidget(self.lighting_lbl)
-        telemetry_body_layout.addWidget(self.background_lbl)
-        telemetry_layout.addWidget(telemetry_body)
+
+        lighting_row = QHBoxLayout()
+        lighting_row.setContentsMargins(0, 0, 0, 0)
+        self.lighting_key = QLabel("LIGHTING")
+        self.lighting_val = QLabel("GOOD")
+        lighting_row.addWidget(self.lighting_key)
+        lighting_row.addStretch()
+        lighting_row.addWidget(self.lighting_val)
+
+        background_row = QHBoxLayout()
+        background_row.setContentsMargins(0, 0, 0, 0)
+        self.background_key = QLabel("BACKGROUND")
+        self.background_val = QLabel("OK")
+        background_row.addWidget(self.background_key)
+        background_row.addStretch()
+        background_row.addWidget(self.background_val)
+
+        telemetry_body_layout.addLayout(lighting_row)
+        telemetry_body_layout.addLayout(background_row)
+        telemetry_layout.addWidget(self.telemetry_body)
+
         right_col.addWidget(self.telemetry_panel)
         right_col.addStretch()
 
@@ -245,150 +267,83 @@ class MainMenuCalibration(QWidget):
         self.footer.setFixedHeight(58)
         footer_layout = QHBoxLayout(self.footer)
         footer_layout.setContentsMargins(20, 0, 20, 0)
-
         self.back_btn = QPushButton("BACK")
         self.back_btn.setFixedHeight(34)
         self.back_btn.setMinimumWidth(76)
         self.back_btn.setCursor(Qt.PointingHandCursor)
         self.back_btn.clicked.connect(self.on_back.emit)
         footer_layout.addWidget(self.back_btn)
-
         footer_layout.addStretch()
-
         self.continue_btn = QPushButton("CONTINUE")
         self.continue_btn.setFixedHeight(34)
         self.continue_btn.setMinimumWidth(100)
         self.continue_btn.setCursor(Qt.PointingHandCursor)
         self.continue_btn.clicked.connect(self.on_continue.emit)
         footer_layout.addWidget(self.continue_btn)
-
         layout.addWidget(self.footer)
 
     def apply_theme(self, is_dark):
         self.is_dark = is_dark
 
         if is_dark:
-            page_bg = "#0a0a0a"
-            panel = "#111111"
-            panel2 = "#161616"
-            border = "#262626"
-            strong = "#3a3a3a"
-            text = "#e8e8e8"
-            dim = "#9a9a9a"
-            muted = "#6b6b6b"
-            camera_bg = "#111111"
-            primary_bg = "#e8e8e8"
+            page_bg      = "#0a0a0a"
+            panel        = "#111111"
+            panel2       = "#161616"
+            border       = "#262626"
+            strong       = "#3a3a3a"
+            text         = "#e8e8e8"
+            dim          = "#9a9a9a"
+            muted        = "#6b6b6b"
+            camera_bg    = "#111111"
+            primary_bg   = "#e8e8e8"
             primary_text = "#111111"
-            success = "#00d084"
+            success      = "#00d084"
         else:
-            page_bg = "#F4F4F4"
-            panel = "#FFFFFF"
-            panel2 = "#F4F4F4"
-            border = "#D8CEC7"
-            strong = "#111111"
-            text = "#111111"
-            dim = "#7A706C"
-            muted = "#B8B0AB"
-            camera_bg = "#FFFFFF"
-            primary_bg = "#111111"
+            page_bg      = "#F4F4F4"
+            panel        = "#FFFFFF"
+            panel2       = "#F4F4F4"
+            border       = "#D8CEC7"
+            strong       = "#111111"
+            text         = "#111111"
+            dim          = "#7A706C"
+            muted        = "#B8B0AB"
+            camera_bg    = "#FFFFFF"
+            primary_bg   = "#111111"
             primary_text = "#FFFFFF"
-            success = "#00A36C"
+            success      = "#00A36C"
 
         self.setStyleSheet(f"background-color: {page_bg};")
-        self.nav_bar.setStyleSheet(f"""
-            #nav_bar {{
-                background-color: {page_bg};
-                border-bottom: 1px solid {border};
-            }}
-        """)
-        self.progress_wrap.setStyleSheet(f"""
-            #progress_wrap {{
-                background-color: {page_bg};
-                border-bottom: 1px solid {border};
-            }}
-        """)
-        self.progress_rule.setStyleSheet(f"""
-            background-color: {border};
-        """)
+        self.nav_bar.setStyleSheet(f"#nav_bar {{ background-color: {page_bg}; border-bottom: 1px solid {border}; }}")
+        self.progress_wrap.setStyleSheet(f"#progress_wrap {{ background-color: {page_bg}; border-bottom: 1px solid {border}; }}")
+        self.progress_rule.setStyleSheet(f"background-color: {border};")
         self.content.setStyleSheet(f"background-color: {page_bg};")
         self.footer.setStyleSheet(f"background-color: {page_bg}; border-top: 1px solid {border};")
 
         self.menu_toggle_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: transparent;
-                color: {text};
-                font-size: 18px;
-                font-weight: 800;
-                border: none;
-                border-radius: 2px;
+                background-color: transparent; color: {text};
+                font-size: 18px; font-weight: 800;
+                border: none; border-radius: 2px;
             }}
             QPushButton:hover {{ background-color: {panel}; }}
         """)
-        self.brand_box.setStyleSheet(f"background: transparent; border-left: 1px solid {border}; border-right: 1px solid {border};")
-        self.brand_title.setStyleSheet(f"""
-            font-size: 11px;
-            font-weight: 800;
-            color: {text};
-            letter-spacing: 1.5px;
-            background: transparent;
-            border: none;
-        """)
-        self.brand_version.setStyleSheet(f"""
-            font-size: 8px;
-            color: {muted};
-            letter-spacing: 1px;
-            background: transparent;
-            border: none;
-        """)
+        self.brand_box.setStyleSheet(
+            f"background: transparent; border-left: 1px solid {border}; border-right: 1px solid {border};")
+        self.brand_title.setStyleSheet(
+            f"font-size: 11px; font-weight: 800; color: {text}; letter-spacing: 1.5px; background: transparent; border: none;")
+        self.brand_version.setStyleSheet(
+            f"font-size: 8px; color: {muted}; letter-spacing: 1px; background: transparent; border: none;")
 
         for num_lbl, text_lbl, state in self.progress_steps_data:
             if state == "done":
-                num_lbl.setStyleSheet(f"""
-                    background-color: transparent;
-                    border: 1px solid {border};
-                    color: {dim};
-                    font-size: 8px;
-                    font-weight: 700;
-                """)
-                text_lbl.setStyleSheet(f"""
-                    color: {dim};
-                    font-size: 8px;
-                    font-weight: 700;
-                    letter-spacing: 1.5px;
-                    background: transparent;
-                    border: none;
-                """)
+                num_lbl.setStyleSheet(f"background-color: transparent; border: 1px solid {border}; color: {dim}; font-size: 8px; font-weight: 700;")
+                text_lbl.setStyleSheet(f"color: {dim}; font-size: 8px; font-weight: 700; letter-spacing: 1.5px; background: transparent; border: none;")
             elif state == "active":
-                num_lbl.setStyleSheet(f"""
-                    background-color: {panel};
-                    border: 1px solid {strong};
-                    color: {strong};
-                    font-size: 8px;
-                    font-weight: 700;
-                """)
-                text_lbl.setStyleSheet(f"""
-                    color: {text};
-                    font-size: 8px;
-                    font-weight: 700;
-                    letter-spacing: 1.5px;
-                    background: transparent;
-                    border: none;
-                """)
+                num_lbl.setStyleSheet(f"background-color: {panel}; border: 1px solid {strong}; color: {strong}; font-size: 8px; font-weight: 700;")
+                text_lbl.setStyleSheet(f"color: {text}; font-size: 8px; font-weight: 700; letter-spacing: 1.5px; background: transparent; border: none;")
             else:
-                num_lbl.setStyleSheet(f"""
-                    background-color: transparent;
-                    border: 1px solid {border};
-                    color: {muted};
-                    font-size: 8px;
-                    font-weight: 700;
-                """)
-                text_lbl.setStyleSheet(f"""
-                    color: {muted};
-                    font-size: 8px;
-                    letter-spacing: 1.5px;
-                    background: transparent;
-                    border: none;
-                """)
+                num_lbl.setStyleSheet(f"background-color: transparent; border: 1px solid {border}; color: {muted}; font-size: 8px; font-weight: 700;")
+                text_lbl.setStyleSheet(f"color: {muted}; font-size: 8px; letter-spacing: 1.5px; background: transparent; border: none;")
 
         for line in self.progress_lines:
             line.setStyleSheet(f"background-color: {border};")
@@ -397,76 +352,58 @@ class MainMenuCalibration(QWidget):
         self.title.setStyleSheet(f"color: {text}; font-size: 19px; font-weight: 600; border: none;")
         self.desc.setStyleSheet(f"color: {dim}; font-size: 11px; border: none;")
 
-        self.camera_panel.setStyleSheet(f"background-color: {camera_bg}; border: 1px solid {border};")
+        self.camera_panel.setStyleSheet(f"QWidget#camera_panel {{ background-color: {camera_bg}; border: 1px solid {border}; }}")
         self.camera_header.setStyleSheet(f"background-color: {panel2}; border: none;")
         self.camera_header_line.setStyleSheet(f"background-color: {border}; border: none;")
         self.camera_title.setStyleSheet(f"color: {text}; font-size: 9px; font-weight: 700; letter-spacing: 1.4px; border: none;")
         self.tracking_lbl.setStyleSheet(f"color: {dim}; font-size: 8px; letter-spacing: 1.2px; border: none;")
         self.camera_body.setStyleSheet(f"background-color: {camera_bg}; border: none;")
-        self.camera_label.setStyleSheet(f"""
-            background-color: transparent;
-            color: {muted};
-            font-size: 10px;
-            letter-spacing: 2px;
-            border: none;
-        """)
+        self.camera_label.setStyleSheet(f"background-color: transparent; color: {muted}; font-size: 10px; letter-spacing: 2px; border: none;")
 
-        for side_panel in [self.distance_panel, self.telemetry_panel]:
-            side_panel.setStyleSheet(f"background-color: {panel}; border: 1px solid {border};")
+        self.distance_panel.setStyleSheet(f"QWidget#distance_panel {{ background-color: {border}; border: 1px solid {border}; }}")
+        self.distance_header.setStyleSheet(f"background-color: {panel2}; border: none;")
+        self.distance_header_line.setStyleSheet(f"background-color: {border}; border: none;")
+        self.distance_title.setStyleSheet(f"color: {text}; font-size: 9px; font-weight: 700; letter-spacing: 1.4px; border: none;")
+        self.distance_body.setStyleSheet(f"background-color: {panel}; border: none;")
 
-        for header in [self.distance_header, self.telemetry_header]:
-            header.setStyleSheet(f"background-color: {panel2}; border: none;")
+        self.distance_bar.setStyleSheet(f"background-color: {panel2}; border: 1px solid {border};")
+        for cell in self.gauge_cells:
+            cell.setStyleSheet(f"background-color: {panel}; border-right: 1px solid {border};")
 
-        for line in [self.distance_header_line, self.telemetry_header_line]:
-            line.setStyleSheet(f"background-color: {border}; border: none;")
-
-        for label in [self.distance_title, self.telemetry_title]:
-            label.setStyleSheet(f"color: {text}; font-size: 9px; font-weight: 700; letter-spacing: 1.4px; border: none;")
-
-        self.distance_bar.setStyleSheet(f"""
-            background-color: {panel2};
-            border: 1px solid {border};
-        """)
-        for index, cell in enumerate(self.gauge_cells):
-            cell.setStyleSheet(f"""
-                background-color: {panel};
-                border-right: {'1px solid ' + border if index < len(self.gauge_cells) - 1 else 'none'};
-            """)
-        self.distance_value.setStyleSheet(f"color: {dim}; font-size: 8px; border: none;")
-        self.distance_axis.setStyleSheet(f"color: {muted}; font-size: 7px; border: none;")
-        self.distance_badge.setStyleSheet(f"color: {muted}; font-size: 8px; font-weight: 700; border: none; padding: 2px 0px;")
-        self.hold_label.setStyleSheet(f"color: {muted}; font-size: 7px; letter-spacing: 1.2px; border: none;")
+        self.distance_value.setStyleSheet(f"color: {dim}; font-size: 8px; border: none; background: transparent;")
+        self.axis_near_lbl.setStyleSheet(f"color: {muted}; font-size: 7px; border: none; background: transparent;")
+        self.axis_far_lbl.setStyleSheet(f"color: {muted}; font-size: 7px; border: none; background: transparent;")
+        self.distance_badge.setStyleSheet(f"color: {muted}; font-size: 8px; font-weight: 700; border: none; padding: 2px 0px; background: transparent;")
+        self.hold_label.setStyleSheet(f"color: {muted}; font-size: 7px; letter-spacing: 1.2px; border: none; background: transparent;")
         self.hold_progress.setStyleSheet(f"""
-            QProgressBar {{
-                background-color: {border};
-                border: none;
-            }}
-            QProgressBar::chunk {{
-                background-color: {success};
-            }}
+            QProgressBar {{ background-color: {border}; border: none; }}
+            QProgressBar::chunk {{ background-color: {success}; }}
         """)
-        self.lighting_lbl.setStyleSheet(f"color: {dim}; font-size: 9px; letter-spacing: 1px; border: none;")
-        self.background_lbl.setStyleSheet(f"color: {dim}; font-size: 9px; letter-spacing: 1px; border: none;")
+
+        self.telemetry_panel.setStyleSheet(f"QWidget#telemetry_panel {{ background-color: {border}; border: 1px solid {border}; }}")
+        self.telemetry_header.setStyleSheet(f"background-color: {panel2}; border: none;")
+        self.telemetry_header_line.setStyleSheet(f"background-color: {border}; border: none;")
+        self.telemetry_title.setStyleSheet(f"color: {text}; font-size: 9px; font-weight: 700; letter-spacing: 1.4px; border: none;")
+        self.telemetry_body.setStyleSheet(f"background-color: {panel}; border: none;")
+
+        self.lighting_key.setStyleSheet(f"color: {success}; font-size: 9px; font-weight: 700; letter-spacing: 1px; border: none; background: transparent;")
+        self.lighting_val.setStyleSheet(f"color: {success}; font-size: 9px; font-weight: 700; letter-spacing: 1px; border: none; background: transparent;")
+        self.background_key.setStyleSheet(f"color: {success}; font-size: 9px; font-weight: 700; letter-spacing: 1px; border: none; background: transparent;")
+        self.background_val.setStyleSheet(f"color: {success}; font-size: 9px; font-weight: 700; letter-spacing: 1px; border: none; background: transparent;")
 
         self.back_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: transparent;
-                color: {dim};
+                background-color: transparent; color: {dim};
                 border: 1px solid {border};
-                font-size: 8px;
-                font-weight: 700;
-                letter-spacing: 1.4px;
+                font-size: 8px; font-weight: 700; letter-spacing: 1.4px;
             }}
             QPushButton:hover {{ background-color: {panel}; }}
         """)
         self.continue_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: {primary_bg};
-                color: {primary_text};
+                background-color: {primary_bg}; color: {primary_text};
                 border: 1px solid {primary_bg};
-                font-size: 8px;
-                font-weight: 700;
-                letter-spacing: 1.4px;
+                font-size: 8px; font-weight: 700; letter-spacing: 1.4px;
             }}
             QPushButton:hover {{ background-color: {strong}; }}
         """)
@@ -489,18 +426,20 @@ class MainMenuCalibration(QWidget):
             self.hold_label.setText("HOLD IN RANGE TO AUTO-ADVANCE")
 
     def set_telemetry(self, lighting: str, background: str):
-        good  = "#00d084" if self.is_dark else "#00A36C"
-        warn  = "#d08400" if self.is_dark else "#B86A00"
+        good = "#00d084" if self.is_dark else "#00A36C"
+        warn = "#d08400" if self.is_dark else "#B86A00"
         light_ok = (lighting == "GOOD")
         bg_ok    = (background in ("CLEAR", "OK"))
-        self.lighting_lbl.setText(
-            f"LIGHTING{'':>20}{lighting}")
-        self.lighting_lbl.setStyleSheet(
-            f"color: {good if light_ok else warn}; font-size: 9px; letter-spacing: 1px; border: none;")
-        self.background_lbl.setText(
-            f"BACKGROUND{'':>15}{background}")
-        self.background_lbl.setStyleSheet(
-            f"color: {good if bg_ok else warn}; font-size: 9px; letter-spacing: 1px; border: none;")
+
+        lc = good if light_ok else warn
+        bc = good if bg_ok else warn
+
+        self.lighting_key.setStyleSheet(f"color: {lc}; font-size: 9px; font-weight: 700; letter-spacing: 1px; border: none; background: transparent;")
+        self.lighting_val.setText(lighting)
+        self.lighting_val.setStyleSheet(f"color: {lc}; font-size: 9px; font-weight: 700; letter-spacing: 1px; border: none; background: transparent;")
+        self.background_key.setStyleSheet(f"color: {bc}; font-size: 9px; font-weight: 700; letter-spacing: 1px; border: none; background: transparent;")
+        self.background_val.setText(background)
+        self.background_val.setStyleSheet(f"color: {bc}; font-size: 9px; font-weight: 700; letter-spacing: 1px; border: none; background: transparent;")
 
     def set_distance(self, norm_dist: float, has_hand: bool):
         _TARGET = 0.18
@@ -527,10 +466,9 @@ class MainMenuCalibration(QWidget):
             self.distance_value.setText("-")
             self.distance_badge.setText("NO HAND DETECTED")
             self.distance_badge.setStyleSheet(
-                f"color: {warn}; font-size: 8px; font-weight: 700; border: none;")
-            for i, cell in enumerate(self.gauge_cells):
-                b = f"1px solid {border}" if i < 3 else "none"
-                cell.setStyleSheet(f"background-color: {dim_col}; border-right: {b};")
+                f"color: {warn}; font-size: 8px; font-weight: 700; border: none; background: transparent;")
+            for cell in self.gauge_cells:
+                cell.setStyleSheet(f"background-color: {dim_col}; border-right: 1px solid {border};")
             self.tracking_lbl.setText("NO HAND")
             self.tracking_lbl.setStyleSheet(f"color: {warn}; font-size: 8px; letter-spacing: 1.2px; border: none;")
             return
@@ -555,13 +493,12 @@ class MainMenuCalibration(QWidget):
             status = "TOO FAR - MOVE CLOSER"
             badge_color = warn
 
-        for i, (cell, col) in enumerate(zip(self.gauge_cells, colors)):
-            b = f"1px solid {border}" if i < 3 else "none"
-            cell.setStyleSheet(f"background-color: {col}; border-right: {b};")
+        for cell, col in zip(self.gauge_cells, colors):
+            cell.setStyleSheet(f"background-color: {col}; border-right: 1px solid {border};")
 
         self.distance_badge.setText(status)
         self.distance_badge.setStyleSheet(
-            f"color: {badge_color}; font-size: 8px; font-weight: 700; border: none;")
+            f"color: {badge_color}; font-size: 8px; font-weight: 700; border: none; background: transparent;")
 
         alert_text = "● OPTIMAL" if optimal else ("● TOO CLOSE" if too_close else "● TOO FAR")
         self.tracking_lbl.setText(alert_text)

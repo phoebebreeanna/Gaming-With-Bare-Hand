@@ -419,8 +419,16 @@ class HandControllerThread(
         self._mouse_side = side
         self._set_zone(self.chosen_zone)
 
-    def pause(self):  self._paused_event.clear()
-    def resume(self): self._paused_event.set()
+    def pause(self):
+        self.app_state = 'stopped'
+        self.meta_hold = {k: None for k in self.meta_hold}
+        self.state_changed.emit('stopped')
+
+    def resume(self):
+        if self.app_state == 'stopped':
+            self.app_state = 'running'
+            self.meta_hold = {k: None for k in self.meta_hold}
+            self.state_changed.emit('running')
 
     def stop(self):
         self._running = False

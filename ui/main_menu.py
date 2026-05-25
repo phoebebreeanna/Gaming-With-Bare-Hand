@@ -29,6 +29,7 @@ class MainMenu(QWidget):
         self._preview_thread = None
         self._is_running = False
         self._is_paused = False
+        self._is_frozen = False
         self._last_camera_pixmap = None
         self._optimal_since = None
         self._zone_hold_since = None
@@ -631,7 +632,7 @@ class MainMenu(QWidget):
             }
         """)
         self.start_btn.clicked.connect(self._on_start)   
-        self.pause_btn.clicked.connect(self._on_pause)   
+        self.pause_btn.clicked.connect(self._on_pause)
         self.stop_btn.clicked.connect(self._on_stop)
         self.exit_btn.clicked.connect(QApplication.quit)
 
@@ -1312,12 +1313,6 @@ class MainMenu(QWidget):
         self.top_time_lbl.setText(current_time)
 
     def _on_start(self):
-        if self._is_paused and self.controller:
-            self.controller.resume()
-            self._is_paused = False
-            self.start_btn.setText("Start")
-            self.pause_btn.setText("Pause")
-            return
         if self._is_running:
             return
         if is_setup_done():
@@ -1518,7 +1513,8 @@ class MainMenu(QWidget):
 
         self._is_running = True
         self._is_paused  = False
-        self.start_btn.setEnabled(False)
+        self.start_btn.setEnabled(True)
+        self.start_btn.setText("Start")
         self.pause_btn.setEnabled(True)
         self.stop_btn.setEnabled(True)
         self.info_cards["STATUS"].setText("RUNNING")
@@ -1526,18 +1522,10 @@ class MainMenu(QWidget):
     def _on_pause(self):
         if not self._is_running or not self.controller:
             return
-        if self._is_paused:
+        if self._is_frozen:
             self.controller.resume()
-            self._is_paused = False
-            self.pause_btn.setText("Pause")
-            self.start_btn.setEnabled(False)
-            self.info_cards["STATUS"].setText("RUNNING")
         else:
             self.controller.pause()
-            self._is_paused = True
-            self.pause_btn.setText("Resume")
-            self.start_btn.setEnabled(True)
-            self.info_cards["STATUS"].setText("PAUSED")
 
     @Slot(object)
     def _on_running_data(self, data: dict):
@@ -1591,6 +1579,7 @@ class MainMenu(QWidget):
         self._hide_hold_bar()
         self._is_running = False
         self._is_paused  = False
+        self._is_frozen  = False
         self.controller  = None
         self.start_btn.setEnabled(True)
         self.start_btn.setText("Start")
@@ -1671,6 +1660,12 @@ class MainMenu(QWidget):
             'running': 'RUNNING', 'stopped': 'PAUSED', 'idle': 'IDLE',
         }
         self.info_cards["STATUS"].setText(labels.get(state, state.upper()))
+        if state == 'stopped':
+            self._is_frozen = True
+            self.pause_btn.setText("Resume")
+        elif state == 'running':
+            self._is_frozen = False
+            self.pause_btn.setText("Pause")
 
     @Slot(float, bool)
     def _update_distance_live(self, dist: float, has_hand: bool):
