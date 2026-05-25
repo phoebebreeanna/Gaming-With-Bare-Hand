@@ -2,14 +2,15 @@
   "camera_index": 0,
   "setup_complete": true,
   "zone": "small",
-  "game_mode": "mouse",
+  "game_mode": "subway",
   "model_sources": {
-    "mouse": "default"
+    "mouse": "default",
+    "subway": "default"
   },
   "cursor_point": "knuckle",
   "key_bindings": {
-    "subway": {
-      "jump": "up"
+    "open_world": {
+      "peace": "2"
     }
   },
   "mouse_enabled": true

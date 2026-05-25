@@ -21,11 +21,24 @@ _GESTURE_META = {
         ('camera',      'CAMERA (TAP)', 'Left index + middle fingers'),
     ],
     'open_world': [
-        ('jump',  'FORWARD',      'Two fingers up'),
-        ('roll',  'BACKWARD',     'Two fingers down'),
-        ('left',  'STRAFE LEFT',  'Two fingers left'),
-        ('right', 'STRAFE RIGHT', 'Two fingers right'),
-        ('space', 'ACTION',       'Metal sign'),
+        ('like',           'DODGE',       'Thumbs up'),
+        ('palm',           'JUMP',        'Open palm'),
+        ('thumb_index',    'ABILITY',     'L sign (thumb + index)'),
+        ('ok',             'INTERACT',    'OK sign'),
+        ('call',           'SKILL',       'Call sign'),
+        ('dislike',        'ALT SKILL',   'Thumbs down'),
+        ('holy',           'ESCAPE',      'Holy / spread hand'),
+        ('grip',           'ALT',         'Grip / fist-clench'),
+        ('one',            'TEAMMATE 1',  'Index finger up'),
+        ('peace',          'TEAMMATE 2',  'Peace sign'),
+        ('three',          'TEAMMATE 3',  'Three fingers up'),
+        ('four',           'TEAMMATE 4',  'Four fingers up'),
+        ('peace_inverted', 'EXTRA 1',     'Inverted peace sign'),
+        ('three2',         'TAB / MAP',   'Three-three pose'),
+        ('three3',         'EXTRA 2',     'Three-two pose'),
+        ('two_up',          'MOVE FWD',   'Peace sign pointing up',    'W'),
+        ('two_up_inverted', 'MOVE BACK',  'Peace sign pointing down',  'S'),
+        ('three_gun',       'STRAFE',     'Gun pose, aim left or right', 'A / D'),
     ],
 }
 
@@ -34,7 +47,6 @@ _MODE_LABELS = {
     'racing':     'RACING',
     'open_world': 'OPEN WORLD',
 }
-
 
 def _qt_key_to_str(key):
     _SPECIAL = {
@@ -55,7 +67,6 @@ def _qt_key_to_str(key):
     if Qt.Key_F1 <= key <= Qt.Key_F12:
         return f'f{key - Qt.Key_F1 + 1}'
     return None
-
 
 class KeyBindings(QWidget):
     on_menu_toggle  = Signal()
@@ -128,16 +139,32 @@ class KeyBindings(QWidget):
         cl.addSpacing(14)
 
         self._section_widgets = {}
+        self._locked_keys = set()
 
         for mode, gestures in _GESTURE_META.items():
             mode_binds = self._bindings.get(mode, {})
 
+            sec_row = QWidget()
+            sec_row.setFixedHeight(20)
+            srl = QHBoxLayout(sec_row)
+            srl.setContentsMargins(0, 0, 0, 0)
+            srl.setSpacing(0)
             sec_hdr = QLabel(_MODE_LABELS[mode])
-            cl.addWidget(sec_hdr)
+            srl.addWidget(sec_hdr)
+            srl.addStretch()
+            reset_btn = QPushButton("RESET ALL")
+            reset_btn.setFixedSize(68, 18)
+            reset_btn.setCursor(Qt.PointingHandCursor)
+            reset_btn.clicked.connect(lambda _, m=mode: self._reset_mode(m))
+            srl.addWidget(reset_btn)
+            cl.addWidget(sec_row)
             cl.addSpacing(4)
 
             rows = []
-            for gesture, label, desc in gestures:
+            for entry in gestures:
+                gesture, label, desc = entry[0], entry[1], entry[2]
+                locked = len(entry) > 3
+
                 row = QWidget()
                 row.setFixedHeight(44)
                 rl = QHBoxLayout(row)
@@ -152,14 +179,20 @@ class KeyBindings(QWidget):
                 text_col.addWidget(desc_lbl)
                 rl.addLayout(text_col, stretch=1)
 
-                key_str = mode_binds.get(gesture, '?')
-                key_btn = QPushButton(key_str.upper())
-                key_btn.setFixedSize(72, 26)
-                key_btn.setCursor(Qt.PointingHandCursor)
-                key_btn.clicked.connect(
-                    lambda _, m=mode, g=gesture: self._start_capture(m, g))
-                rl.addWidget(key_btn)
+                if locked:
+                    key_btn = QPushButton(entry[3])
+                    key_btn.setFixedSize(72, 26)
+                    key_btn.setEnabled(False)
+                    self._locked_keys.add((mode, gesture))
+                else:
+                    key_str = mode_binds.get(gesture, '?')
+                    key_btn = QPushButton(key_str.upper())
+                    key_btn.setFixedSize(72, 26)
+                    key_btn.setCursor(Qt.PointingHandCursor)
+                    key_btn.clicked.connect(
+                        lambda _, m=mode, g=gesture: self._start_capture(m, g))
 
+                rl.addWidget(key_btn)
                 self._key_btns[(mode, gesture)] = key_btn
                 cl.addWidget(row)
                 rows.append((row, name_lbl, desc_lbl))
@@ -169,11 +202,27 @@ class KeyBindings(QWidget):
             cl.addWidget(sep)
             cl.addSpacing(14)
 
-            self._section_widgets[mode] = {'hdr': sec_hdr, 'rows': rows, 'sep': sep}
+            self._section_widgets[mode] = {'hdr': sec_hdr, 'rows': rows, 'sep': sep, 'reset_btn': reset_btn}
 
         cl.addStretch()
         scroll.setWidget(content)
         root.addWidget(scroll, stretch=1)
+
+    def _reset_mode(self, mode: str):
+        try:
+            from logic.app_config import reset_key_bindings, BINDINGS_DEFAULT
+            reset_key_bindings(mode)
+            self._bindings[mode] = dict(BINDINGS_DEFAULT.get(mode, {}))
+        except Exception:
+            from logic.app_config import BINDINGS_DEFAULT
+            self._bindings[mode] = dict(BINDINGS_DEFAULT.get(mode, {}))
+        for entry in _GESTURE_META.get(mode, []):
+            gesture = entry[0]
+            if (mode, gesture) in self._locked_keys:
+                continue
+            key_str = self._bindings[mode].get(gesture, '?')
+            self._key_btns[(mode, gesture)].setText(key_str.upper())
+        self.apply_theme(self.is_dark)
 
     def _start_capture(self, mode: str, gesture: str):
         if self._capturing:
@@ -256,12 +305,29 @@ class KeyBindings(QWidget):
                 border: 1px solid {cap_bg}; border-radius: 2px;
             }}
         """
+        locked_btn_style = f"""
+            QPushButton:disabled {{
+                background-color: {bg}; color: {muted};
+                font-size: 9px; font-weight: 700; letter-spacing: 1px;
+                border: 1px solid {border}; border-radius: 2px;
+            }}
+        """
+
+        reset_btn_style = f"""
+            QPushButton {{
+                background-color: transparent; color: {muted};
+                font-size: 7px; font-weight: 700; letter-spacing: 1px;
+                border: 1px solid {border}; border-radius: 2px;
+            }}
+            QPushButton:hover {{ background-color: {hover}; color: {text}; }}
+        """
 
         for mode, sw in self._section_widgets.items():
             sw['hdr'].setStyleSheet(
                 f"color: {sec_clr}; font-size: 8px; font-weight: 700; "
                 f"letter-spacing: 1.4px; background: transparent; border: none;")
             sw['sep'].setStyleSheet(f"background-color: {border};")
+            sw['reset_btn'].setStyleSheet(reset_btn_style)
             for row, name_lbl, desc_lbl in sw['rows']:
                 row.setStyleSheet(
                     f"background-color: {panel}; border: 1px solid {border};")
@@ -273,7 +339,9 @@ class KeyBindings(QWidget):
                     f"letter-spacing: 1px; background: transparent; border: none;")
 
         for (mode, gesture), btn in self._key_btns.items():
-            if self._capturing and self._capturing == (mode, gesture):
+            if (mode, gesture) in self._locked_keys:
+                btn.setStyleSheet(locked_btn_style)
+            elif self._capturing and self._capturing == (mode, gesture):
                 btn.setStyleSheet(capture_btn_style)
             else:
                 btn.setStyleSheet(normal_btn_style)

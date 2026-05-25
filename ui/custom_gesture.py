@@ -185,4 +185,3 @@ class CustomGesture(QWidget):
             self.conf_edit.setStyleSheet(
                 "border:1px solid #D1D5DB;border-radius:6px;"
                 "padding:4px 8px;font-size:12px;color:#111827;")
-

@@ -88,6 +88,7 @@ class MainMenu(QWidget):
         self.game_mode_widget.camera_changed.connect(self._on_game_camera_changed)
         self.game_mode_widget.cursor_point_changed.connect(self._on_cursor_point_changed)
         self.game_mode_widget.mouse_in_game_changed.connect(self._on_mouse_in_game_changed)
+        self.game_mode_widget.model_source_changed.connect(self._on_model_source_changed)
         self.pages.addWidget(self.game_mode_widget)
 
         self.pipeline_ui = PipelineUI(is_dark=self.is_dark)
@@ -636,14 +637,14 @@ class MainMenu(QWidget):
         return page
 
     def _on_game_mode_from_ui(self, mode: str):
-        labels = {'mouse': 'MOUSE', 'subway': 'SUBWAY', 'racing': 'RACING'}
+        labels = {'mouse': 'MOUSE', 'subway': 'SUBWAY', 'racing': 'RACING', 'open_world': 'OPEN WORLD'}
         self.info_cards["MODE"].setText(labels.get(mode, mode.upper()))
         if self._is_running and self.controller:
             self.controller.switch_game_mode(mode)
 
     @Slot(str)
     def _on_controller_game_mode(self, mode: str):
-        labels = {'mouse': 'MOUSE', 'subway': 'SUBWAY', 'racing': 'RACING'}
+        labels = {'mouse': 'MOUSE', 'subway': 'SUBWAY', 'racing': 'RACING', 'open_world': 'OPEN WORLD'}
         self.info_cards["MODE"].setText(labels.get(mode, mode.upper()))
         self.game_mode_widget.set_selected_mode(mode)
 
@@ -1245,6 +1246,10 @@ class MainMenu(QWidget):
         if self.controller:
             self.controller.set_key_binding(mode, gesture, key)
 
+    def _on_model_source_changed(self, mode: str, source: str):
+        if self.controller:
+            self.controller.set_model_source(mode, source)
+
     def _on_game_camera_changed(self, cam_idx: int):
         if not self._is_running: return
         if self.controller:
@@ -1654,4 +1659,3 @@ class MainMenu(QWidget):
     def _on_error(self, msg: str):
         self.camera_label.setText(f"⚠  {msg}")
         self._on_finished()
-

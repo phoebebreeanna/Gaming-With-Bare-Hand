@@ -371,4 +371,3 @@ class MainMenuSetup(QWidget):
                 background-color: {button_hover};
             }}
         """)
-

@@ -15,8 +15,8 @@ class UserGuide(QWidget):
             {
                 "title": "Welcome",
                 "items": [
-                    "HandMouse launches with a 5-second countdown screen - it navigates automatically.",
-                    "First-time users are taken through a quick 4-step setup wizard.",
+                    "HandMouse launches with a 3-second welcome screen - it navigates automatically.",
+                    "First-time users are taken through a quick setup wizard (camera, calibration, zone).",
                     "Returning users land directly on the Home dashboard.",
                     "Use the sidebar at any time to switch between pages.",
                 ],
@@ -25,46 +25,55 @@ class UserGuide(QWidget):
                 "title": "First-Time Setup",
                 "items": [
                     "Camera Setup: select your camera and confirm the live preview looks correct.",
-                    "Distance Calibration: hold your hand at roughly arm's length until the progress bar turns green.",
-                    "Zone Setup: choose Small, Medium, or Large - this controls how much hand movement maps to the full screen.",
-                    "Once all steps are complete the setup wizard closes and the Home dashboard appears.",
+                    "Distance Calibration: hold your hand at roughly arm's length until the progress bar completes.",
+                    "Zone Setup: hold 1, 2, or 3 fingers to choose Small, Medium, or Large movement zone.",
+                    "Once all steps are complete, setup is saved and the Home dashboard appears automatically.",
                 ],
             },
             {
                 "title": "Choose a Game Mode",
                 "items": [
-                    "Open Game Option (04) from the sidebar.",
-                    "Select Mouse, Subway Surfers, or Racing mode.",
-                    "If you have trained a custom model, switch the source to Custom for that mode.",
-                    "Your selection is saved automatically.",
+                    "Open Settings (04) from the sidebar.",
+                    "Choose Mouse, Subway Surfers, Racing, or Open World mode.",
+                    "For each mode, toggle Default or Custom model source - Custom activates once you have trained your own model via Train Model (05).",
+                    "Switching Default ↔ Custom takes effect immediately, even while the controller is running.",
+                ],
+            },
+            {
+                "title": "Customize Controls",
+                "items": [
+                    "Open Key Bindings (06) from the sidebar.",
+                    "Click any key button to remap a gesture - press the desired key to confirm, or Escape to cancel.",
+                    "Locked gestures (greyed out) use fixed directional logic and cannot be rebound to a single key.",
+                    "Use the Reset All button at the top of each section to restore that mode's defaults instantly.",
                 ],
             },
             {
                 "title": "Start the Controller",
                 "items": [
                     "Go to Home (01) from the sidebar.",
-                    "Check the distance alert at the top of the camera feed: OPTIMAL / TOO FAR / TOO CLOSE.",
-                    "Click Start and wait for the status to show Running.",
+                    "Check the distance alert in the camera feed: OPTIMAL / TOO FAR / TOO CLOSE.",
+                    "Click Start and wait for the status card to show Running.",
                     "Keep your hand clearly inside the camera frame while playing.",
                 ],
             },
             {
                 "title": "Using Gestures",
                 "items": [
-                    "Open Gesture Guide (03) from the sidebar to see all gestures for the active mode.",
-                    "Show both palms to the camera to pause at any time.",
-                    "Show peace sign with both hands to resume from paused state.",
-                    "Close both hands into fists to exit the controller.",
-                    "Click Stop on the Home page when you are done.",
+                    "Open Gesture Guide (03) from the sidebar to see all gestures for any mode.",
+                    "Show both open palms to pause the controller at any time.",
+                    "Show peace signs with both hands simultaneously to resume from the paused state.",
+                    "Hold both fists (two hands) to exit the controller completely.",
+                    "Switch game modes by holding one fist and N fingers on the other hand for 3 seconds.",
                 ],
             },
             {
                 "title": "Best Performance",
                 "items": [
                     "Avoid strong backlight or a busy background behind your hand.",
-                    "Keep fingers clearly separated - spread them out for better detection.",
+                    "Keep fingers clearly separated - spread them out for better detection accuracy.",
                     "Use the distance alert on the Home page to stay at the optimal depth.",
-                    "Clean the camera lens if the image looks blurry.",
+                    "Train a Custom model for your own gestures via Train Model (05) in the sidebar.",
                 ],
             },
         ]
@@ -341,4 +350,3 @@ class UserGuide(QWidget):
         """
         self.prev_btn.setStyleSheet(btn_style)
         self.next_btn.setStyleSheet(btn_style)
-

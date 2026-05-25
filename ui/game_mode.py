@@ -16,11 +16,12 @@ _CUSTOM_FILES = {
 }
 
 class GameMode(QWidget):
-    on_menu_toggle       = Signal()
-    game_mode_changed    = Signal(str)
-    camera_changed       = Signal(int)
-    cursor_point_changed = Signal(str)
+    on_menu_toggle        = Signal()
+    game_mode_changed     = Signal(str)
+    camera_changed        = Signal(int)
+    cursor_point_changed  = Signal(str)
     mouse_in_game_changed = Signal(bool)
+    model_source_changed  = Signal(str, str)
 
     def __init__(self):
         super().__init__()
@@ -191,9 +192,10 @@ class GameMode(QWidget):
         mode_row.setSpacing(12)
 
         modes = [
-            ("🖱", "MOUSE",  "mouse"),
-            ("🚇", "SUBWAY", "subway"),
-            ("🏎", "RACING", "racing"),
+            ("🖱", "MOUSE",      "mouse"),
+            ("🚇", "SUBWAY",     "subway"),
+            ("🏎", "RACING",     "racing"),
+            ("🌍", "OPEN WORLD", "open_world"),
         ]
 
         for icon, label, key in modes:
@@ -243,14 +245,6 @@ class GameMode(QWidget):
             src_row.addWidget(custom_btn)
 
             self._source_btns[key] = {'default': def_btn, 'custom': custom_btn}
-
-            if key == 'mouse':
-                lm_btn = QPushButton("LANDMARK")
-                lm_btn.setFixedHeight(22)
-                lm_btn.setCursor(Qt.PointingHandCursor)
-                lm_btn.clicked.connect(lambda _, k=key: self._set_model_source(k, 'landmark'))
-                src_row.addWidget(lm_btn)
-                self._source_btns[key]['landmark'] = lm_btn
 
             card_col.addLayout(src_row)
 
@@ -326,6 +320,7 @@ class GameMode(QWidget):
             set_model_source(mode, source)
         except Exception:
             pass
+        self.model_source_changed.emit(mode, source)
         self.apply_theme(self.is_dark)
 
     def _populate_cameras(self):
@@ -535,7 +530,7 @@ class GameMode(QWidget):
         for key, btns in self._source_btns.items():
             cur_src = self._mode_sources.get(key, 'default')
             for src, btn in btns.items():
-                is_active = (src == cur_src) and (src in ('default', 'landmark') or self._custom_exists(key))
+                is_active = (src == cur_src) and (src == 'default' or self._custom_exists(key))
                 if is_active:
                     btn.setStyleSheet(f"""
                         QPushButton {{

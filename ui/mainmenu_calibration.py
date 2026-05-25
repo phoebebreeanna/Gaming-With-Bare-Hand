@@ -558,4 +558,3 @@ class MainMenuCalibration(QWidget):
         self.tracking_lbl.setText(alert_text)
         self.tracking_lbl.setStyleSheet(
             f"color: {success if optimal else warn}; font-size: 8px; font-weight: 700; letter-spacing: 1.2px; border: none;")
-

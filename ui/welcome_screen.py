@@ -91,4 +91,3 @@ class WelcomeScreen(QWidget):
     def on_get_main(self):
         self.timer.stop()
         self.on_get_started()
-

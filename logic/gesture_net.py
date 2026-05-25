@@ -51,4 +51,3 @@ def load_nn(weights_path, encoder_path, input_size=126, tag='model'):
     except Exception as e:
         print(f"[NN:{tag}] Load error: {e}")
         return None, None
-

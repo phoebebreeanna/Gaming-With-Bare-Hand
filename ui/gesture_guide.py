@@ -27,7 +27,7 @@ class GestureGuide(QWidget):
                         {"img": "assets/gestures/general/game_option_one.png",   "n": "06", "name": "Game Option 1 - Mouse Mode",       "desc": "One hand fist + other hand 1 finger raised, hold for 5 s to switch to Mouse mode",          "tag": "GAME OPTION"},
                         {"img": "assets/gestures/general/game_option_two.png",   "n": "07", "name": "Game Option 2 - Subway Mode",      "desc": "One hand fist + other hand 2 fingers raised, hold for 5 s to switch to Subway mode",        "tag": "GAME OPTION"},
                         {"img": "assets/gestures/general/game_option_three.png", "n": "08", "name": "Game Option 3 - Racing Mode",      "desc": "One hand fist + other hand 3 fingers raised, hold for 5 s to switch to Racing mode",        "tag": "GAME OPTION"},
-                        {"img": "assets/gestures/general/game_option_four.png",  "n": "09", "name": "Game Option 4 - Free Mode",        "desc": "One hand fist + other hand 4 fingers raised, hold for 5 s to switch to Free mode",          "tag": "GAME OPTION"},
+                        {"img": "assets/gestures/general/game_option_four.png",  "n": "09", "name": "Game Option 4 - Open World",      "desc": "One hand fist + other hand 4 fingers raised, hold for 5 s to switch to Open World mode",    "tag": "GAME OPTION"},
                         {"img": "assets/gestures/general/mouse_in_game.png",     "n": "10", "name": "Mouse in Game",                    "desc": "One hand devil horn + other hand index finger raised to navigate with mouse in game",       "tag": "SYSTEM"},
                         {"img": "assets/gestures/general/exit.png",              "n": "11", "name": "Exit / Close",                     "desc": "Close both hands into fists simultaneously to exit the application",                        "tag": "SYSTEM"},
                     ],
@@ -55,6 +55,31 @@ class GestureGuide(QWidget):
                         {"img": "assets/gestures/subway/swipe_left.png",  "n": "03", "name": "Two Fingers Left - Swipe Left","desc": "Point index and middle fingers to the left to swipe left",            "tag": "ACTIVE"},
                         {"img": "assets/gestures/subway/swipe_right.png", "n": "04", "name": "Two Fingers Right - Swipe Right","desc": "Point index and middle fingers to the right to swipe right",        "tag": "ACTIVE"},
                         {"img": "assets/gestures/subway/space.png",       "n": "05", "name": "Metal Sign - Space Bar",      "desc": "Raise index and pinky fingers (devil horn / metal sign) to activate space", "tag": "ACTIVE"},
+                    ],
+                },
+            ],
+            "Open World": [
+                {
+                    "label": "04  ·  OPEN WORLD",
+                    "gestures": [
+                        {"img": "assets/gestures/open_world/two_up.png",     "n": "01", "name": "Two Up - Move Forward",      "desc": "Peace sign pointing up (V sign upward) to move forward (W key)",                                    "tag": "MOVEMENT"},
+                        {"img": "assets/gestures/open_world/two_up_inv.png", "n": "02", "name": "Two Up Inv - Move Backward", "desc": "Peace sign pointing downward to move backward (S key)",                                             "tag": "MOVEMENT"},
+                        {"img": "assets/gestures/open_world/three_gun.png",  "n": "03", "name": "Three Gun - Strafe",         "desc": "Gun-hand gesture, aim left for A key or right for D key",                                          "tag": "MOVEMENT"},
+                        {"img": "assets/gestures/open_world/like.png",       "n": "04", "name": "Thumbs Up - Dodge",          "desc": "Thumb up to dodge or dash (Shift key)",                                                             "tag": "ACTION"},
+                        {"img": "assets/gestures/open_world/palm.png",       "n": "05", "name": "Open Palm - Jump",           "desc": "Open palm facing camera to jump (Space key)",                                                       "tag": "ACTION"},
+                        {"img": "assets/gestures/open_world/thumb_index.png","n": "06", "name": "Thumb Index - Ability",      "desc": "L-sign (thumb + index extended) to use main ability (E key)",                                       "tag": "ACTION"},
+                        {"img": "assets/gestures/open_world/ok.png",         "n": "07", "name": "OK Sign - Interact",         "desc": "OK sign (thumb + index pinch) to interact (F key)",                                                 "tag": "ACTION"},
+                        {"img": "assets/gestures/open_world/call.png",       "n": "08", "name": "Call - Skill",               "desc": "Call sign to trigger skill (R key)",                                                                "tag": "ACTION"},
+                        {"img": "assets/gestures/open_world/dislike.png",    "n": "09", "name": "Thumbs Down - Alt Skill",    "desc": "Thumb down to trigger alternate skill (Q key)",                                                     "tag": "ACTION"},
+                        {"img": "assets/gestures/open_world/grip.png",       "n": "10", "name": "Grip - Alt",                 "desc": "Gripping gesture for alt action (Alt key)",                                                         "tag": "ACTION"},
+                        {"img": "assets/gestures/open_world/one.png",        "n": "11", "name": "One - Teammate 1",           "desc": "Index finger raised to select teammate 1 (1 key)",                                                  "tag": "TEAM"},
+                        {"img": "assets/gestures/open_world/peace.png",      "n": "12", "name": "Peace - Teammate 2",         "desc": "Peace sign to select teammate 2 (2 key)",                                                           "tag": "TEAM"},
+                        {"img": "assets/gestures/open_world/three.png",      "n": "13", "name": "Three - Teammate 3",         "desc": "Three fingers raised to select teammate 3 (3 key)",                                                 "tag": "TEAM"},
+                        {"img": "assets/gestures/open_world/four.png",       "n": "14", "name": "Four - Teammate 4",          "desc": "Four fingers raised to select teammate 4 (4 key)",                                                  "tag": "TEAM"},
+                        {"img": "assets/gestures/open_world/holy.png",       "n": "15", "name": "Holy - Escape",              "desc": "Holy / spread hand gesture to open menu or escape (Esc key)",                                       "tag": "SYSTEM"},
+                        {"img": "assets/gestures/open_world/peace_inv.png",  "n": "16", "name": "Peace Inv - Extra",          "desc": "Inverted peace sign for extra action (T key)",                                                      "tag": "EXTRA"},
+                        {"img": "assets/gestures/open_world/three_three.png","n": "17", "name": "Three-Three - Tab",          "desc": "Three-three finger pose for map / tab (Tab key)",                                                   "tag": "EXTRA"},
+                        {"img": "assets/gestures/open_world/three_two.png",  "n": "18", "name": "Three-Two - Extra",          "desc": "Three-two finger pose for extra action (G key)",                                                    "tag": "EXTRA"},
                     ],
                 },
             ],
@@ -364,4 +389,3 @@ class GestureGuide(QWidget):
             lbl.setStyleSheet(
                 f"color: {dim}; font-size: 8px; letter-spacing: 1.2px;"
                 f" background: transparent; border: 1px solid {border}; padding: 0 6px;")
-

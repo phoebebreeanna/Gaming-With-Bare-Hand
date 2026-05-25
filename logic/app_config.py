@@ -10,7 +10,10 @@ BINDINGS_DEFAULT = {
         'horn': 'h', 'camera': 'c',
     },
     'open_world': {
-        'jump': 'w', 'roll': 's', 'left': 'a', 'right': 'd', 'space': 'f',
+        'like': 'shift', 'palm': 'space', 'thumb_index': 'e',
+        'ok': 'f', 'call': 'r', 'dislike': 'q', 'holy': 'esc',
+        'grip': 'alt', 'one': '1', 'peace': '2', 'three': '3', 'four': '4',
+        'peace_inverted': 't', 'three2': 'tab', 'three3': 'g',
     },
 }
 
@@ -94,3 +97,9 @@ def set_key_binding(mode: str, gesture: str, key: str) -> None:
         config['key_bindings'][mode] = {}
     config['key_bindings'][mode][gesture] = key
     _write(config)
+
+def reset_key_bindings(mode: str) -> None:
+    config = _read()
+    if 'key_bindings' in config and mode in config['key_bindings']:
+        del config['key_bindings'][mode]
+        _write(config)

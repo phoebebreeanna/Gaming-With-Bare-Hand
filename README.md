@@ -1,19 +1,24 @@
 # HandMouse - Gesture Control
 
 Control your mouse, keyboard, and games using only your hand and a webcam.
-No hardware required - powered by MediaPipe, OpenCV, and PySide6.
+No hardware required - powered by MediaPipe, OpenCV, PyTorch, and PySide6.
 
 ---
 
 ## Features
 
-- **Mouse control** - move cursor, left/right click, drag, and scroll
-- **Subway Surfers mode** - tilt and swipe gestures mapped to arrow keys
-- **Car Racing mode** - two-hand tilt steering with thumbs-up accelerate/brake
-- **Free slot** - customise with your own gesture logic
-- **Live camera feed** with real-time hand skeleton overlay
-- **Multi-camera support** - detect and switch cameras at runtime
-- **Zone calibration** - choose small, medium, or large movement zones
+- **Mouse mode** - move cursor, left/right click, drag, and scroll with hand gestures
+- **Subway Surfers mode** - swipe and tilt gestures mapped to arrow keys and space
+- **Racing mode** - two-hand tilt steering with thumb-up accelerate/brake and horn/camera actions
+- **Open World mode** - 18 gestures mapped to movement (WASD), abilities, team commands, and more
+- **Custom model training** - collect gesture data and train your own neural network in-app
+- **Live model swap** - switch between Default and Custom model per mode without restarting
+- **Key bindings editor** - remap any gesture to any key; locked directional gestures shown read-only
+- **Reset All** - restore a mode's key bindings to defaults with one click
+- **Live camera feed** with real-time hand skeleton overlay and distance alert
+- **Multi-camera support** - enumerate and switch cameras at runtime
+- **Zone calibration** - choose Small, Medium, or Large movement zone
+- **Dark / Light theme** - full theme toggle across all pages
 
 ---
 
@@ -21,17 +26,21 @@ No hardware required - powered by MediaPipe, OpenCV, and PySide6.
 
 - Python **3.9 or higher**
 - A webcam or external USB camera
-- The `hand_landmarker.task` model file (see Installation below)
+- The `hand_landmarker.task` model file (see Installation)
+- The `hagridv2_gesture_recognizer.task` model file for Open World mode (optional)
 
 Python packages (all in `requirements.txt`):
 
-- PySide6 >= 6.5.0
-- opencv-python >= 4.8.0
-- mediapipe >= 0.10.0
-- pyautogui >= 0.9.54
-- numpy >= 1.24.0
-- torch >= 2.0.0
-- joblib >= 1.3.0
+```
+PySide6 >= 6.5.0
+opencv-python >= 4.8.0
+mediapipe >= 0.10.0
+pyautogui >= 0.9.54
+numpy >= 1.24.0
+torch >= 2.0.0
+joblib >= 1.3.0
+pynput >= 1.7.0
+```
 
 > **macOS Apple Silicon**: All packages run natively. No extra steps needed.
 
@@ -42,24 +51,16 @@ Python packages (all in `requirements.txt`):
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/your-username/Gaming-With-Bare-Hand.git
-cd Gaming-With-Bare-Hand
+git clone https://github.com/your-username/HandMouse.git
+cd HandMouse
 ```
 
 ### 2. Create a virtual environment (recommended)
 
 ```bash
 python -m venv venv
-```
-
-Activate it:
-
-```bash
-# macOS / Linux
-source venv/bin/activate
-
-# Windows
-venv\Scripts\activate
+source venv/bin/activate   # macOS / Linux
+venv\Scripts\activate      # Windows
 ```
 
 ### 3. Install dependencies
@@ -70,28 +71,42 @@ pip install -r requirements.txt
 
 ### 4. Download the MediaPipe hand landmark model
 
-Go to: https://ai.google.dev/edge/mediapipe/solutions/vision/hand_landmarker
+Download `hand_landmarker.task` from:
+https://ai.google.dev/edge/mediapipe/solutions/vision/hand_landmarker
 
-Download `hand_landmarker.task` and place it in the `logic/` folder:
-
-```
-Gaming-With-Bare-Hand/
-└── logic/
-    └── hand_landmarker.task
-```
-
-### 5. Game mode ML models (optional)
-
-For Subway Surfers and Car Racing, place these files in `logic/`:
+Place it at:
 
 ```
-logic/gesture_model_subway.pt
-logic/label_encoder_subway.pkl
-logic/gesture_model_racing.pt
-logic/label_encoder_racing.pkl
+logic/hand_landmarker.task
 ```
 
-If missing, those game modes are silently disabled. Mouse mode works without them.
+### 5. Download the Open World gesture model (optional)
+
+Download `hagridv2_gesture_recognizer.task` from the MediaPipe model card or HaGRID repository.
+
+Place it at:
+
+```
+logic/data/hagridv2_gesture_recognizer.task
+```
+
+If missing, Open World mode falls back to landmark-only gestures.
+
+### 6. Default ML models
+
+Pre-trained models for Mouse, Subway, and Racing modes are included under `logic/data/`:
+
+```
+logic/data/
+├── mouse_gesture_model_best.pt
+├── mouse_label_encoder.pkl
+├── subway_gesture_model_best.pt
+├── subway_label_encoder.pkl
+├── racing_gesture_model_best.pt
+└── racing_label_encoder.pkl
+```
+
+Custom-trained models are saved to `logic/data/custom/` via the Train Model page.
 
 ---
 
@@ -101,119 +116,227 @@ If missing, those game modes are silently disabled. Mouse mode works without the
 python main.py
 ```
 
-A 3-second splash screen appears, then the main interface loads.
+A 3-second welcome screen appears, then the main interface loads.
 
 ---
 
 ## How to use
 
-### Step 1 - Select a camera
+### Step 1 - First-time setup
 
-Use the **Camera** dropdown at the top of the Home page.
-Click **Refresh** if a camera was connected after the app started.
+On first launch the setup wizard runs automatically:
 
-### Step 2 - Start tracking
+1. **Camera Setup** - select your camera and confirm the preview looks correct.
+2. **Distance Calibration** - hold your hand at roughly arm's length until the progress bar completes.
+3. **Zone Setup** - show 1, 2, or 3 fingers and hold to choose Small / Medium / Large movement zone.
 
-Click **Start**. The app runs through these stages automatically:
+Setup is saved to `logic/app_config.json`. Subsequent launches skip straight to the dashboard.
 
-- **Intro** - short intro slide. Raise Thumbs Up to skip.
-- **Zone Intro** - explains zone sizes. Raise Thumbs Up to skip.
-- **Zone Pick** - show 1, 2, or 3 fingers and hold 5 seconds to choose Small / Medium / Large.
-- **Gesture Guide** - quick gesture reminder. Raise Thumbs Up to skip.
-- **Distance Check** - hold your hand at arm's length until the bar fills green (3 seconds).
-- **Running** - full gesture control is now active.
+### Step 2 - Choose a mode and model source
 
-### Step 3 - Gesture reference
+Open **Settings (04)** from the sidebar:
 
-**Mouse Mode**
+- Click a mode card to select it (Mouse / Subway Surfers / Racing / Open World).
+- Toggle **DEFAULT** or **CUSTOM** below each card. Custom is enabled once you have trained a model via Train Model (05).
+- Switching Default ↔ Custom takes effect immediately, even while the controller is running.
+
+### Step 3 - Customize key bindings
+
+Open **Key Bindings (06)** from the sidebar:
+
+- Click any key button to remap a gesture - press the desired key to confirm, Escape to cancel.
+- Locked gestures (greyed out) use fixed directional logic and cannot be rebound.
+- Click **RESET ALL** at the top of a section to restore that mode's default bindings.
+
+### Step 4 - Start tracking
+
+Go to **Home (01)** and click **Start**. The status card shows **Running** when ready.
+
+Use the distance alert (OPTIMAL / TOO FAR / TOO CLOSE) in the camera feed to position your hand correctly.
+
+---
+
+## Gesture reference
+
+### Meta gestures (all modes)
 
 | Gesture | Action |
-| --- | --- |
-| Index finger only | Move cursor |
-| Thumb + Middle pinch, held under 0.5s | Left click |
-| Thumb + Middle pinch, held over 0.5s | Drag |
-| Thumb + Ring pinch | Right click |
+|---|---|
+| Both open palms (2 hands) - hold 3s | Pause controller |
+| Both peace signs (2 hands) - hold 3s | Resume from pause |
+| Both fists (2 hands) - hold 2s | Exit controller |
+| One fist + N fingers (other hand) - hold 3s | Switch game mode (see below) |
+
+### Game mode switching
+
+| Fingers on free hand | Mode |
+|---|---|
+| 1 | Mouse |
+| 2 | Subway Surfers |
+| 3 | Racing |
+| 4 | Open World |
+
+---
+
+### Mouse mode
+
+| Gesture | Action |
+|---|---|
+| Index finger up | Move cursor |
+| OK sign (thumb + index pinch) - tap | Left click |
+| OK sign - hold 0.5s | Drag |
+| Middle pinch (thumb + middle) | Right click |
 | Index + Middle + Ring up | Scroll up |
-| All fingers curled (fist) | Scroll down |
+| Fist | Scroll down |
 
-**Meta gestures - hold the gesture for the listed duration**
+---
 
-| Gesture | Hold | Action |
-| --- | --- | --- |
-| Open palm | 3s | Pause tracking |
-| Both peace signs (two hands) | 3s | Resume tracking |
-| Shaka | 3s | Recalibrate movement zone |
-| Metal sign | 3s | Show gesture guide |
-| Both fists (two hands) | 3s | Close session |
+### Subway Surfers mode
 
-**Switching game modes while running**
+| Gesture | Key | Action |
+|---|---|---|
+| Two fingers up | ↑ | Jump |
+| Two fingers down | ↓ | Slide |
+| Two fingers left | ← | Swipe left |
+| Two fingers right | → | Swipe right |
+| Metal sign (devil horns) | Space | Jump boost |
 
-Show one fist on one hand and N fingers on the other, hold 5 seconds:
+---
 
-| Fingers | Mode |
-| --- | --- |
-| 1 finger | Mouse mode (default) |
-| 2 fingers | Subway Surfers |
-| 3 fingers | Car Racing |
-| 4 fingers | Free slot |
+### Racing mode
+
+| Gesture | Key | Action |
+|---|---|---|
+| Right thumb up | ↑ | Accelerate |
+| Left thumb up | ↓ | Brake |
+| Both hands tilt left | ← | Steer left |
+| Both hands tilt right | → | Steer right |
+| Right index + middle forward (hold) | H | Horn |
+| Left index + middle forward (tap) | C | Change camera |
+
+---
+
+### Open World mode
+
+Default key bindings - all rebindable via Key Bindings except the locked movement gestures.
+
+| Gesture | Default Key | Action |
+|---|---|---|
+| Peace sign pointing up *(locked)* | W | Move forward |
+| Peace sign pointing down *(locked)* | S | Move backward |
+| Gun pose left/right *(locked)* | A / D | Strafe |
+| Thumbs up | Shift | Dodge |
+| Open palm | Space | Jump |
+| L-sign (thumb + index) | E | Ability |
+| OK sign | F | Interact |
+| Call sign | R | Skill |
+| Thumbs down | Q | Alt skill |
+| Holy / spread hand | Esc | Menu / escape |
+| Grip / fist-clench | Alt | Alt action |
+| Index finger up | 1 | Teammate 1 |
+| Peace sign | 2 | Teammate 2 |
+| Three fingers up | 3 | Teammate 3 |
+| Four fingers up | 4 | Teammate 4 |
+| Inverted peace sign | T | Extra 1 |
+| Three-three pose | Tab | Map / Tab |
+| Three-two pose | G | Extra 2 |
+
+---
+
+## Custom model training
+
+1. Open **Train Model (05)** from the sidebar.
+2. Select a mode (Mouse / Subway / Racing).
+3. Use the **Collect** tab to record gesture samples - point the camera at your hand and record each gesture class.
+4. Use the **Train** tab to train the neural network on your collected data.
+5. Once training completes, go to **Settings (04)** and switch the mode's source to **CUSTOM**.
+
+Custom models are saved to `logic/data/custom/` and are not tracked by git.
 
 ---
 
 ## Project structure
 
 ```
-Gaming-With-Bare-Hand/
-├── main.py                        # App entry point
+HandMouse/
+├── main.py                        # App entry point + event filter
 ├── requirements.txt
 ├── README.md
 ├── logic/
-│   ├── __init__.py
 │   ├── hand_controller.py         # QThread - gesture detection + state machine
-│   ├── virtual_mouse_main.py      # Original standalone script (reference)
+│   ├── hand_utils.py              # Shared geometry helpers, drawing, constants
+│   ├── gesture_net.py             # GestureNet architecture + load/run helpers
+│   ├── gesture_pipeline.py        # Data collection + model training pipeline
+│   ├── app_config.py              # Persistent JSON config (zone, mode, bindings…)
 │   ├── hand_landmarker.task       # MediaPipe model (download separately)
-│   ├── gesture_model_subway.pt    # Subway Surfers model (optional)
-│   ├── label_encoder_subway.pkl
-│   ├── gesture_model_racing.pt    # Car Racing model (optional)
-│   └── label_encoder_racing.pkl
+│   ├── modes/
+│   │   ├── mouse_mode.py          # MouseModeMixin
+│   │   ├── subway_mode.py         # SubwayModeMixin
+│   │   ├── racing_mode.py         # RacingModeMixin
+│   │   └── open_world_mode.py     # OpenWorldModeMixin
+│   ├── conf/
+│   │   ├── mouse_control.conf
+│   │   ├── subway_surfers.conf
+│   │   └── racing.conf
+│   └── data/
+│       ├── hand_landmarker.task
+│       ├── hagridv2_gesture_recognizer.task
+│       ├── mouse_gesture_model_best.pt
+│       ├── subway_gesture_model_best.pt
+│       ├── racing_gesture_model_best.pt
+│       └── custom/                # User-trained models (git-ignored)
 └── ui/
     ├── welcome_screen.py
-    ├── main_menu.py               # Sidebar + home page with live feed
+    ├── main_menu.py               # Sidebar + home dashboard
     ├── user_guide.py
     ├── gesture_guide.py
-    ├── distance_check.py
-    ├── zone_setup.py
-    └── game_mode.py
+    ├── game_mode.py               # Settings page (mode, camera, model source)
+    ├── key_bindings.py            # Key binding editor
+    ├── pipeline_ui.py             # Train Model page
+    ├── mainmenu_setup.py
+    ├── mainmenu_calibration.py
+    ├── mainmenu_zone.py
+    └── mainmenu_camera.py
 ```
 
 ---
 
 ## Tech stack
 
-- **PySide6** - desktop UI framework (Qt 6)
-- **MediaPipe** - hand landmark detection (21-point skeleton)
-- **OpenCV** - camera capture, frame processing, skeleton overlay
-- **PyTorch** - GestureNet neural network for game mode classification
-- **PyAutoGUI** - mouse movement, clicks, keyboard input
-- **NumPy** - vector math for gesture calculations
+| Library | Role |
+|---|---|
+| **PySide6** | Desktop UI framework (Qt 6) |
+| **MediaPipe** | Hand landmark detection (21-point skeleton) + HaGRIDv2 gesture recognition |
+| **OpenCV** | Camera capture, frame processing, skeleton overlay |
+| **PyTorch** | GestureNet neural network for game mode classification |
+| **pynput** | Low-level keyboard/mouse input (replaces pyautogui for key-hold) |
+| **PyAutoGUI** | Mouse movement and click |
+| **NumPy** | Vector math for gesture geometry |
 
 ---
 
 ## Troubleshooting
 
 **No camera detected**
-Make sure your camera is not in use by another app. Click Refresh in the app.
+Make sure your camera is not in use by another app. Reopen the Settings page - cameras are enumerated on load.
 
 **hand_landmarker.task not found**
 Download the file and place it in `logic/` - see Installation step 4.
 
-**Game modes not working**
-The `.pt` and `.pkl` model files must be in `logic/`. Mouse mode works without them.
+**Open World gestures not recognised**
+Make sure `hagridv2_gesture_recognizer.task` is placed in `logic/data/`. Without it, only the landmark-based movement gestures (WASD) are active.
 
-**Tracking drifts**
-Use the Shaka gesture (hold 3s) to recalibrate. Make sure lighting is even.
+**Custom model not available**
+The Custom button is greyed out until both `.pt` and `.pkl` files exist in `logic/data/custom/`. Train a model first via Train Model (05).
+
+**Gestures triggering my own app UI**
+HandMouse filters out gesture-generated keypresses from its own UI automatically via an application-level event filter.
 
 **App crashes on exit**
-Stop tracking first with the Stop button, or use the Exit button inside the app.
+Stop tracking first with the Stop button, or use the Exit button in the app. Never force-quit while the controller is running.
+
+**Tracking drifts or lags**
+Ensure even lighting and a clear background. Retrain a Custom model if the default model does not fit your hand or environment well.
 
 ---
 

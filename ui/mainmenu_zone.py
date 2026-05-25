@@ -453,4 +453,3 @@ class MainMenuZone(QWidget):
             }}
             QPushButton:hover {{ background-color: {strong}; }}
         """)
-

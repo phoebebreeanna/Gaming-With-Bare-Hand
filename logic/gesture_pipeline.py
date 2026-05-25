@@ -157,6 +157,7 @@ def draw_landmarks_collect(frame, lms, w, h):
 def _open_csv(csv_path, gestures):
     header_coords = [f'{ax}{i}' for i in range(21) for ax in ['x','y','z']]
     header = header_coords + ['label']
+    os.makedirs(os.path.dirname(os.path.abspath(csv_path)), exist_ok=True)
     exists = os.path.exists(csv_path) and os.path.getsize(csv_path) > 0
     fh = open(csv_path, 'a', newline='')
     cw = csv.writer(fh)
@@ -566,13 +567,10 @@ def run_training(cfg):
         print(f"ERROR: {data_path} not found. Run preprocess first.")
         return None, None, None
 
-    _data_dir        = os.path.dirname(cfg['model_out'])
-    _custom_dir      = os.path.join(_data_dir, 'custom')
-    os.makedirs(_custom_dir, exist_ok=True)
-    _model_best_path    = os.path.join(_custom_dir, os.path.basename(cfg['model_best']))
-    _model_out_path     = os.path.join(_custom_dir, os.path.basename(cfg['model_out']))
-    _label_encoder_path = os.path.join(_custom_dir, os.path.basename(cfg['label_encoder']))
-    print(f"Output directory: {_custom_dir}")
+    _model_best_path    = cfg['model_best']
+    _model_out_path     = cfg['model_out']
+    _label_encoder_path = cfg['label_encoder']
+    print(f"Output directory: {os.path.dirname(_model_out_path)}")
 
     df    = pd.read_csv(data_path)
     df    = df[df['label'].isin(cfg['gestures'])].reset_index(drop=True)
@@ -993,4 +991,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
