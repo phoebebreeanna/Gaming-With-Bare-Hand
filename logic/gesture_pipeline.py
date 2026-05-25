@@ -448,7 +448,7 @@ def rotate_2d(coords_63, angle_deg):
     rotated[:, 1] = coords[:, 0] * sin_a + coords[:, 1] * cos_a
     return rotated.flatten().tolist()
 
-def augment(coords_63, aug_per_sample, noise_std, rot_max_deg, scale_jitter):
+def augment(coords_63, aug_per_sample, noise_std, rot_max_deg, scale_jitter, mirror=False):
     variants = []
     for _ in range(aug_per_sample):
         c = np.array(coords_63, dtype=np.float32)
@@ -456,6 +456,16 @@ def augment(coords_63, aug_per_sample, noise_std, rot_max_deg, scale_jitter):
         c *= 1.0 + np.random.uniform(-scale_jitter, scale_jitter)
         c += np.random.normal(0, noise_std, c.shape).astype(np.float32)
         variants.append(c.tolist())
+    if mirror:
+        mirrored = np.array(coords_63, dtype=np.float32)
+        for i in range(0, 63, 3):
+            mirrored[i] = -mirrored[i]
+        for _ in range(aug_per_sample):
+            c = mirrored.copy()
+            c = np.array(rotate_2d(c.tolist(), np.random.uniform(-rot_max_deg, rot_max_deg)), dtype=np.float32)
+            c *= 1.0 + np.random.uniform(-scale_jitter, scale_jitter)
+            c += np.random.normal(0, noise_std, c.shape).astype(np.float32)
+            variants.append(c.tolist())
     return variants
 
 def compute_delta(current, previous):
@@ -463,8 +473,12 @@ def compute_delta(current, previous):
         return [0.0] * len(current)
     return [c - p for c, p in zip(current, previous)]
 
-def run_preprocess(cfg):
+def run_preprocess(cfg, mirror=False):
     banner("STEP 2 - PREPROCESSING")
+    if mirror:
+        print("Mirror augmentation: ON  (left-hand support enabled)")
+    else:
+        print("Mirror augmentation: OFF")
     raw_path = cfg['raw_csv']
     out_path = cfg['processed_csv']
 
@@ -500,7 +514,7 @@ def run_preprocess(cfg):
             out_rows.append(norm + delta + [label])
             aug_prev = norm
             for aug in augment(norm, cfg['aug_per_sample'], cfg['noise_std'],
-                               cfg['rot_max_deg'], cfg['scale_jitter']):
+                               cfg['rot_max_deg'], cfg['scale_jitter'], mirror=mirror):
                 out_rows.append(aug + compute_delta(aug, aug_prev) + [label])
                 aug_prev = aug
 

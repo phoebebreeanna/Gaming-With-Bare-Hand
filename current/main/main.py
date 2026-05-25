@@ -1220,7 +1220,6 @@ while cap.isOpened():
                 handle_pinch_release(now)
                 break
 
-            # ── normal mouse gesture processing ──────────────────────────────
             any_meta_active = any(v is not None for v in meta_hold.values()) or game_opt_frac > 0
 
             if lms and triggered_meta is None and not any_meta_active:
@@ -1228,7 +1227,6 @@ while cap.isOpened():
                 dist    = hand_size(lms)
                 dist_ok = abs(dist - TARGET_DIST) <= DIST_TOL * 2
 
-                # ── distance drift message ────────────────────────────────────
                 dist_drift_msg = None
                 drift = dist - TARGET_DIST
                 if drift > DIST_TOL * 3:

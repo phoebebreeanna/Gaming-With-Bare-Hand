@@ -1,6 +1,19 @@
 import os
 import json
 
+BINDINGS_DEFAULT = {
+    'subway': {
+        'jump': 'up', 'roll': 'down', 'left': 'left', 'right': 'right', 'space': 'space',
+    },
+    'racing': {
+        'accel': 'up', 'brake': 'down', 'steer_left': 'left', 'steer_right': 'right',
+        'horn': 'h', 'camera': 'c',
+    },
+    'open_world': {
+        'jump': 'w', 'roll': 's', 'left': 'a', 'right': 'd', 'space': 'f',
+    },
+}
+
 _CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'app_config.json')
 
 def _read() -> dict:
@@ -58,4 +71,26 @@ def get_camera_index() -> int:
 def set_camera_index(idx: int) -> None:
     config = _read()
     config['camera_index'] = idx
+    _write(config)
+
+def get_cursor_point() -> str:
+    return _read().get('cursor_point', 'tip')
+
+def set_cursor_point(point: str) -> None:
+    config = _read()
+    config['cursor_point'] = point
+    _write(config)
+
+def get_key_bindings(mode: str) -> dict:
+    defaults = BINDINGS_DEFAULT.get(mode, {})
+    saved    = _read().get('key_bindings', {}).get(mode, {})
+    return {**defaults, **saved}
+
+def set_key_binding(mode: str, gesture: str, key: str) -> None:
+    config = _read()
+    if 'key_bindings' not in config:
+        config['key_bindings'] = {}
+    if mode not in config['key_bindings']:
+        config['key_bindings'][mode] = {}
+    config['key_bindings'][mode][gesture] = key
     _write(config)

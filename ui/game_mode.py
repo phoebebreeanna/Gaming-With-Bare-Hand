@@ -16,9 +16,11 @@ _CUSTOM_FILES = {
 }
 
 class GameMode(QWidget):
-    on_menu_toggle    = Signal()
-    game_mode_changed = Signal(str)
-    camera_changed    = Signal(int)
+    on_menu_toggle       = Signal()
+    game_mode_changed    = Signal(str)
+    camera_changed       = Signal(int)
+    cursor_point_changed = Signal(str)
+    mouse_in_game_changed = Signal(bool)
 
     def __init__(self):
         super().__init__()
@@ -26,10 +28,12 @@ class GameMode(QWidget):
         self.selected_mode = 'mouse'
         self.mouse_enabled = False
         self._camera_index = 0
+        self._cursor_point = 'tip'
         self._mode_sources = {k: 'default' for k in ('mouse', 'subway', 'racing')}
         self._source_btns  = {}
         self._mode_cards   = {}
         self._camera_combo = None
+        self._cursor_btns  = {}
 
         self._load_state()
         self._init_ui()
@@ -37,10 +41,11 @@ class GameMode(QWidget):
 
     def _load_state(self):
         try:
-            from logic.app_config import get_game_mode, get_mouse_enabled, get_model_source, get_camera_index
+            from logic.app_config import get_game_mode, get_mouse_enabled, get_model_source, get_camera_index, get_cursor_point
             self.selected_mode = get_game_mode()
             self.mouse_enabled = get_mouse_enabled()
             self._camera_index = get_camera_index()
+            self._cursor_point = get_cursor_point()
             for m in ('mouse', 'subway', 'racing'):
                 self._mode_sources[m] = get_model_source(m)
         except Exception:
@@ -92,7 +97,7 @@ class GameMode(QWidget):
         cl.setContentsMargins(24, 16, 24, 16)
         cl.setSpacing(14)
 
-        self.page_title = QLabel("GAME OPTION")
+        self.page_title = QLabel("SETTINGS")
         cl.addWidget(self.page_title)
 
         self.mouse_panel = QWidget()
@@ -119,6 +124,40 @@ class GameMode(QWidget):
         self.div1 = QWidget()
         self.div1.setFixedHeight(1)
         cl.addWidget(self.div1)
+
+        self.cursor_panel = QWidget()
+        self.cursor_panel.setFixedHeight(52)
+        crp = QHBoxLayout(self.cursor_panel)
+        crp.setContentsMargins(16, 0, 16, 0)
+        crp.setSpacing(0)
+
+        cursor_text_col = QVBoxLayout()
+        cursor_text_col.setSpacing(2)
+        self.cursor_hdr_lbl = QLabel("CURSOR TRACKING POINT")
+        self.cursor_sub_lbl = QLabel("Landmark used to position the cursor on screen")
+        cursor_text_col.addWidget(self.cursor_hdr_lbl)
+        cursor_text_col.addWidget(self.cursor_sub_lbl)
+        crp.addLayout(cursor_text_col, stretch=1)
+
+        cursor_row = QHBoxLayout()
+        cursor_row.setSpacing(4)
+        tip_btn = QPushButton("TIP")
+        tip_btn.setFixedSize(52, 26)
+        tip_btn.setCursor(Qt.PointingHandCursor)
+        tip_btn.clicked.connect(lambda: self._set_cursor_point('tip'))
+        knuckle_btn = QPushButton("KNUCKLE")
+        knuckle_btn.setFixedSize(72, 26)
+        knuckle_btn.setCursor(Qt.PointingHandCursor)
+        knuckle_btn.clicked.connect(lambda: self._set_cursor_point('knuckle'))
+        cursor_row.addWidget(tip_btn)
+        cursor_row.addWidget(knuckle_btn)
+        crp.addLayout(cursor_row)
+        self._cursor_btns = {'tip': tip_btn, 'knuckle': knuckle_btn}
+        cl.addWidget(self.cursor_panel)
+
+        self.div1b = QWidget()
+        self.div1b.setFixedHeight(1)
+        cl.addWidget(self.div1b)
 
         self.camera_panel = QWidget()
         self.camera_panel.setFixedHeight(52)
@@ -204,6 +243,15 @@ class GameMode(QWidget):
             src_row.addWidget(custom_btn)
 
             self._source_btns[key] = {'default': def_btn, 'custom': custom_btn}
+
+            if key == 'mouse':
+                lm_btn = QPushButton("LANDMARK")
+                lm_btn.setFixedHeight(22)
+                lm_btn.setCursor(Qt.PointingHandCursor)
+                lm_btn.clicked.connect(lambda _, k=key: self._set_model_source(k, 'landmark'))
+                src_row.addWidget(lm_btn)
+                self._source_btns[key]['landmark'] = lm_btn
+
             card_col.addLayout(src_row)
 
             mode_row.addLayout(card_col)
@@ -256,6 +304,17 @@ class GameMode(QWidget):
             set_mouse_enabled(self.mouse_enabled)
         except Exception:
             pass
+        self.mouse_in_game_changed.emit(self.mouse_enabled)
+        self.apply_theme(self.is_dark)
+
+    def _set_cursor_point(self, point: str):
+        self._cursor_point = point
+        try:
+            from logic.app_config import set_cursor_point
+            set_cursor_point(point)
+        except Exception:
+            pass
+        self.cursor_point_changed.emit(point)
         self.apply_theme(self.is_dark)
 
     def _set_model_source(self, mode: str, source: str):
@@ -382,6 +441,33 @@ class GameMode(QWidget):
             """)
 
         self.div1.setStyleSheet(f"background-color: {border};")
+
+        self.cursor_panel.setStyleSheet(
+            f"background-color: {panel}; border: 1px solid {border};")
+        self.cursor_hdr_lbl.setStyleSheet(
+            f"font-size: 9px; font-weight: 700; color: {text}; letter-spacing: 1.5px; background: transparent; border: none;")
+        self.cursor_sub_lbl.setStyleSheet(
+            f"font-size: 8px; color: {muted}; letter-spacing: 1px; background: transparent; border: none;")
+        for pt, btn in self._cursor_btns.items():
+            if pt == self._cursor_point:
+                btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {tog_on_bg}; color: {tog_on_txt};
+                        font-size: 8px; font-weight: 700; letter-spacing: 1px;
+                        border: 1px solid {tog_on_bg}; border-radius: 2px;
+                    }}
+                """)
+            else:
+                btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {tog_off_bg}; color: {tog_off_txt};
+                        font-size: 8px; font-weight: 700; letter-spacing: 1px;
+                        border: 1px solid {border}; border-radius: 2px;
+                    }}
+                    QPushButton:hover {{ background-color: {hover}; color: {text}; }}
+                """)
+        self.div1b.setStyleSheet(f"background-color: {border};")
+
         self.div2.setStyleSheet(f"background-color: {border};")
 
         self.camera_panel.setStyleSheet(
@@ -449,7 +535,7 @@ class GameMode(QWidget):
         for key, btns in self._source_btns.items():
             cur_src = self._mode_sources.get(key, 'default')
             for src, btn in btns.items():
-                is_active = (src == cur_src) and (src == 'default' or self._custom_exists(key))
+                is_active = (src == cur_src) and (src in ('default', 'landmark') or self._custom_exists(key))
                 if is_active:
                     btn.setStyleSheet(f"""
                         QPushButton {{

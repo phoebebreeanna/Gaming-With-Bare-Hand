@@ -223,14 +223,12 @@ def draw_running_ui(img, angle, steer_dir, accel, brake, fw, fh,
     cv2.putText(img, f"R: {gest_r} [{conf_r:.2f}]",
                 (hw + 10, h - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.45, gr_color, 1)
 
-    # Steer bar
     cv2.rectangle(img, (0, 0), (w, 44), (25, 25, 25), -1)
     sc = {'left': (255, 180, 80), 'right': (255, 80, 180), 'none': (180, 180, 180)}[steer_dir]
     sl = {'left': 'LEFT  <', 'right': 'RIGHT  >', 'none': 'STRAIGHT'}[steer_dir]
     cv2.putText(img, f"Steer: {sl}  ({angle:+.1f}deg)",
                 (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.65, sc, 2)
 
-    # Row 1: ACCEL | BRAKE
     cv2.rectangle(img, (w - 165, 4), (w - 88, 38),
                   (0, 180, 60) if accel else (50, 50, 50), -1)
     cv2.putText(img, "ACCEL ^", (w - 162, 28),
@@ -240,7 +238,6 @@ def draw_running_ui(img, angle, steer_dir, accel, brake, fw, fh,
     cv2.putText(img, "BRAKE v", (w - 79, 28),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
 
-    # Row 2: H HELD | C TAP
     h_active = gest_r == 'index_middle'
     c_active = gest_l == 'index_middle'
     cv2.rectangle(img, (w - 165, 44), (w - 88, 78),
@@ -287,7 +284,6 @@ def draw_running_ui(img, angle, steer_dir, accel, brake, fw, fh,
                     (10, h - 50 - (len(legend) - 1 - i) * 18),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.37, col, 1)
 
-# Main loop
 while cap.isOpened():
     ret, frame = cap.read()
     if not ret:
@@ -352,24 +348,18 @@ while cap.isOpened():
         if lms_right:
             gest_r, conf_r, prev_row_right = get_gesture(lms_right, prev_row_right)
 
-        # Right thumb -> hold UP (accel)
-        # Left  thumb -> hold DOWN (brake)
-        # Both can be active simultaneously
         accel = gest_r == 'thumb'
         brake = gest_l == 'thumb'
 
         if accel: desired.add('up')
         if brake: desired.add('down')
 
-        # Right index_middle -> hold H
         if gest_r == 'index_middle':
             desired.add('h')
 
-        # Left index_middle -> tap C once
         if gest_l == 'index_middle':
             tap_key('c')
 
-        # Steering
         if lms_left and lms_right:
             angle = get_steer_angle(lms_left, lms_right)
             if angle < -STEER_DEADZONE:  steer_dir = 'left'

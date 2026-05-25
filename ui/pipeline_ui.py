@@ -75,6 +75,7 @@ class PipelineUI(QWidget):
         super().__init__()
         self.is_dark          = is_dark
         self.current_mode     = "Mouse"
+        self._mirror_aug      = False
         self._cfg             = None
         self._worker          = None
         self._training_result = None
@@ -441,6 +442,29 @@ class PipelineUI(QWidget):
             self._step_widgets[key]["sep"] = sep
             sp.addWidget(sep)
 
+            if key == 'preprocess':
+                self._mirror_row = QWidget()
+                self._mirror_row.setFixedHeight(44)
+                mr = QHBoxLayout(self._mirror_row)
+                mr.setContentsMargins(12, 0, 12, 0)
+                mr.setSpacing(10)
+                mc = QVBoxLayout()
+                mc.setSpacing(2)
+                self._mirror_name_lbl = QLabel("MIRROR AUG  ·  Left Hand Support")
+                self._mirror_desc_lbl = QLabel("Disable if gestures include left / right direction")
+                mc.addWidget(self._mirror_name_lbl)
+                mc.addWidget(self._mirror_desc_lbl)
+                mr.addLayout(mc, stretch=1)
+                self._mirror_toggle = QPushButton("OFF")
+                self._mirror_toggle.setFixedSize(44, 22)
+                self._mirror_toggle.setCursor(Qt.PointingHandCursor)
+                self._mirror_toggle.clicked.connect(self._toggle_mirror)
+                mr.addWidget(self._mirror_toggle)
+                sp.addWidget(self._mirror_row)
+                self._mirror_sep = QWidget()
+                self._mirror_sep.setFixedHeight(1)
+                sp.addWidget(self._mirror_sep)
+
         sp.addStretch()
         return self.steps_panel
 
@@ -766,14 +790,21 @@ class PipelineUI(QWidget):
         self.top_stack.setCurrentIndex(self._PAGE_IDLE)
         self._refresh_counts()
 
+    def _toggle_mirror(self):
+        self._mirror_aug = not self._mirror_aug
+        self._mirror_toggle.setText("ON" if self._mirror_aug else "OFF")
+        if hasattr(self, '_theme_ready'):
+            self.apply_theme(self.is_dark)
+
     def _on_preprocess(self):
         if not self._cfg:
             return
         self.top_stack.setCurrentIndex(self._PAGE_LOG)
         self._set_busy(True)
-        self._log("Starting preprocessing ...")
+        state = "ON" if self._mirror_aug else "OFF"
+        self._log(f"Starting preprocessing  (mirror aug: {state}) ...")
         from logic.gesture_pipeline import run_preprocess
-        self._worker = _Worker(run_preprocess, self._cfg)
+        self._worker = _Worker(run_preprocess, self._cfg, self._mirror_aug)
         self._worker.log_line.connect(self._log)
         self._worker.finished_ok.connect(lambda _: self._preprocess_done())
         self._worker.finished_err.connect(self._step_error)
@@ -1182,6 +1213,30 @@ class PipelineUI(QWidget):
             w = info["bar_bg"].width()
             if w > 0:
                 info["bar_fill"].setGeometry(0, 0, int(info["frac"] * w), 6)
+
+        self._mirror_row.setStyleSheet(f"background-color: {panel}; border: none;")
+        self._mirror_sep.setStyleSheet(f"background-color: {border};")
+        self._mirror_name_lbl.setStyleSheet(
+            f"color: {text}; font-size: 9px; font-weight: 700; letter-spacing: 1px; background: transparent; border: none;")
+        self._mirror_desc_lbl.setStyleSheet(
+            f"color: {muted}; font-size: 8px; letter-spacing: 1px; background: transparent; border: none;")
+        if self._mirror_aug:
+            self._mirror_toggle.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {pri_bg}; color: {pri_txt};
+                    font-size: 7px; font-weight: 700; letter-spacing: 1px;
+                    border: 1px solid {pri_bg}; border-radius: 2px;
+                }}
+            """)
+        else:
+            self._mirror_toggle.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: transparent; color: {dim};
+                    font-size: 7px; font-weight: 700; letter-spacing: 1px;
+                    border: 1px solid {border}; border-radius: 2px;
+                }}
+                QPushButton:hover {{ background-color: {hover}; color: {text}; }}
+            """)
 
         self.steps_panel.setStyleSheet(f"background-color: {panel}; border: 1px solid {border};")
         self._steps_hdr.setStyleSheet(

@@ -80,13 +80,8 @@ SS_CONFIDENCE_THRESH = 0.75
 RC_STEER_DEADZONE = 5
 RC_STEER_MAX      = 40
 RC_CONF_THRESH    = 0.6
+RC_TAP_COOLDOWN   = 0.4
 
-SS_GESTURE_KEY = {
-    'jump':  'up',
-    'roll':  'down',
-    'left':  'left',
-    'right': 'right',
-}
 
 CONNECTIONS = [
     (0,1),(1,2),(2,3),(3,4),
@@ -298,6 +293,19 @@ def fingers_extended(lms):
 def count_fingers_up(lms):
     return sum(fingers_extended(lms).values())
 
+def count_vertical_fingers(lms):
+    tips_mcps = [(8, 5), (12, 9), (16, 13), (20, 17)]
+    count = 0
+    for tip, mcp in tips_mcps:
+        if not is_finger_extended(lms, tip, tip - 2):
+            continue
+        dy = lms[mcp].y - lms[tip].y
+        dz = abs(lms[tip].z - lms[mcp].z)
+        dx = abs(lms[tip].x - lms[mcp].x)
+        if dy > dz and dy > dx:
+            count += 1
+    return count
+
 def is_thumbs_up(lms):
     f = fingers_extended(lms)
     return (lms[4].y < lms[3].y < lms[2].y and
@@ -309,6 +317,7 @@ def is_open_palm(lms):
 def is_fist(lms):
     return not any(fingers_extended(lms).values())
 
+
 def is_shaka(lms):
     f = fingers_extended(lms)
     return (lms[4].y < lms[3].y) and f['pinky'] and not f['index'] and not f['middle'] and not f['ring']
@@ -316,6 +325,26 @@ def is_shaka(lms):
 def is_metal_sign(lms):
     f = fingers_extended(lms)
     return f['index'] and f['pinky'] and not f['middle'] and not f['ring']
+
+LANDMARK_PINCH_THRESH = 0.03
+
+def landmark_gesture(lms):
+    f = fingers_extended(lms)
+    if f['index'] and f['middle'] and f['ring'] and not f['pinky']:
+        return 'scroll_up'
+    if not f['index'] and not f['middle'] and not f['ring'] and not f['pinky']:
+        return 'scroll_down'
+    if tip_dist(lms, 4, 12) < LANDMARK_PINCH_THRESH:
+        return 'left_click'
+    if tip_dist(lms, 4, 16) < LANDMARK_PINCH_THRESH:
+        return 'right_click'
+    index_d = np.hypot(lms[8].x - lms[0].x, lms[8].y - lms[0].y)
+    if f['index'] and all(
+        np.hypot(lms[t].x - lms[0].x, lms[t].y - lms[0].y) < index_d * 0.85
+        for t in (12, 16, 20)
+    ):
+        return 'move'
+    return 'idle'
 
 def is_peace_sign(lms):
     f = fingers_extended(lms)
@@ -326,7 +355,7 @@ def get_game_option(lms, lms2):
         return None
     for fist_hand, finger_hand in [(lms, lms2), (lms2, lms)]:
         if is_fist(fist_hand):
-            n = count_fingers_up(finger_hand)
+            n = count_vertical_fingers(finger_hand)
             if 1 <= n <= 4:
                 return n
     return None
@@ -375,9 +404,9 @@ def draw_zone_rect(img, min_x, max_x, min_y, max_y):
                   (int(max_x * w), int(max_y * h)),
                   _ZONE_C, 1)
 
-def draw_finger_dot(img, lms, gesture, drag_active):
+def draw_finger_dot(img, lms, gesture, drag_active, cursor_lm=8):
     h, w = img.shape[:2]
-    fx, fy = int(lms[8].x * w), int(lms[8].y * h)
+    fx, fy = int(lms[cursor_lm].x * w), int(lms[cursor_lm].y * h)
     col = _DOT_CLR['drag'] if drag_active else _DOT_CLR.get(gesture, _DOT_CLR['idle'])
     cv2.circle(img, (fx, fy), 12, col, 2)
     cv2.circle(img, (fx, fy),  4, col, -1)
@@ -446,19 +475,38 @@ class HandControllerThread(QThread):
 
         sources = model_sources or {}
 
+        self._mouse_use_landmark = (sources.get('mouse') == 'landmark')
+        self._mouse_in_game_enabled = sources.get('mouse_in_game', True)
+        cursor_point = sources.get('cursor_point', 'tip')
+        self._cursor_lm = 5 if cursor_point == 'knuckle' else 8
+
         def _pick(mode, default_w, default_e, custom_w, custom_e):
             if sources.get(mode) == 'custom' and os.path.exists(custom_w) and os.path.exists(custom_e):
                 print(f"[{mode.upper()}] Using custom model")
                 return custom_w, custom_e
             return default_w, default_e
 
-        mw, me = _pick('mouse',  MOUSE_WEIGHTS,  MOUSE_ENCODER,  MOUSE_WEIGHTS_CUSTOM,  MOUSE_ENCODER_CUSTOM)
+        if self._mouse_use_landmark:
+            print("[MOUSE] Using landmark-based gesture detection (no NN)")
+            self.mouse_model = self.mouse_le = None
+        else:
+            mw, me = _pick('mouse', MOUSE_WEIGHTS, MOUSE_ENCODER, MOUSE_WEIGHTS_CUSTOM, MOUSE_ENCODER_CUSTOM)
+            self.mouse_model, self.mouse_le = _load_nn(mw, me, 'MOUSE')
+
         sw, se = _pick('subway', SUBWAY_WEIGHTS, SUBWAY_ENCODER, SUBWAY_WEIGHTS_CUSTOM, SUBWAY_ENCODER_CUSTOM)
         rw, re = _pick('racing', RACING_WEIGHTS, RACING_ENCODER, RACING_WEIGHTS_CUSTOM, RACING_ENCODER_CUSTOM)
-
-        self.mouse_model,  self.mouse_le  = _load_nn(mw, me, 'MOUSE')
         self.subway_model, self.subway_le = _load_nn(sw, se, 'SUBWAY')
         self.racing_model, self.racing_le = _load_nn(rw, re, 'RACING')
+
+        try:
+            from logic.app_config import get_key_bindings
+            self.ss_key_map = get_key_bindings('subway')
+            self.rc_key_map = get_key_bindings('racing')
+            self.ow_key_map = get_key_bindings('open_world')
+        except Exception:
+            self.ss_key_map = {'jump':'up','roll':'down','left':'left','right':'right','space':'space'}
+            self.rc_key_map = {'accel':'up','brake':'down','steer_left':'left','steer_right':'right'}
+            self.ow_key_map = {'jump':'w','roll':'s','left':'a','right':'d','space':'f'}
 
         self._init_state()
 
@@ -477,7 +525,7 @@ class HandControllerThread(QThread):
         self.scroll_active      = False
         self.smooth_x = SCREEN_W / 2
         self.smooth_y = SCREEN_H / 2
-        self.meta_hold = {k: None for k in ('start','stop','close','recal','guide','game_opt')}
+        self.meta_hold = {k: None for k in ('start','stop','close','game_opt')}
         self.game_option_pending = None
         self.game_opt_number     = None
         self.active_game_mode    = None
@@ -498,6 +546,7 @@ class HandControllerThread(QThread):
         self.rc_held_keys      = set()
         self.rc_prev_row_left  = None
         self.rc_prev_row_right = None
+        self.rc_tap_cooldown   = {}
 
     def _full_reset(self):
         self._release_drag()
@@ -523,6 +572,7 @@ class HandControllerThread(QThread):
         self.ss_prev_row      = None
         self.rc_prev_row_left  = None
         self.rc_prev_row_right = None
+        self.rc_tap_cooldown   = {}
         self._devilhorn_mouse  = False
 
     def _set_zone(self, zone_name):
@@ -560,7 +610,7 @@ class HandControllerThread(QThread):
         self.rc_held_keys.clear()
 
     def _run_mouse_gesture(self, gesture, lms, now):
-        tx, ty = self._map_cursor(lms[8].x, lms[8].y)
+        tx, ty = self._map_cursor(lms[self._cursor_lm].x, lms[self._cursor_lm].y)
         self.smooth_x += (tx - self.smooth_x) * MOUSE_SMOOTHING
         self.smooth_y += (ty - self.smooth_y) * MOUSE_SMOOTHING
         _mouse_move(self.smooth_x, self.smooth_y)
@@ -639,6 +689,12 @@ class HandControllerThread(QThread):
             self.game_mode_changed.emit('racing')
         elif opt == 4:
             self.active_game_mode = 4
+            self.ss_current_zone  = 'neutral'
+            self.ss_last_key_t    = 0.0
+            self.ss_last_space_t  = 0.0
+            self.ss_space_pressed = False
+            self.ss_prev_row      = None
+            self.game_mode_changed.emit('open_world')
 
     def switch_game_mode(self, mode: str):
         self._pending_mode = mode
@@ -648,6 +704,21 @@ class HandControllerThread(QThread):
         if self._running:
             self.stop(); self.wait()
             self._init_state(); self.start()
+
+    def set_cursor_point(self, point: str):
+        self._cursor_lm = 5 if point == 'knuckle' else 8
+
+    def set_key_binding(self, mode: str, gesture: str, key: str):
+        if mode == 'subway':
+            self.ss_key_map[gesture] = key
+        elif mode == 'racing':
+            self.rc_key_map[gesture] = key
+            self._rc_release_all()
+        elif mode == 'open_world':
+            self.ow_key_map[gesture] = key
+
+    def set_mouse_in_game(self, enabled: bool):
+        self._mouse_in_game_enabled = enabled
 
     def pause(self):  self._paused_event.clear()
     def resume(self): self._paused_event.set()
@@ -711,7 +782,7 @@ class HandControllerThread(QThread):
             self._set_zone(self.chosen_zone)
             self.app_state = 'running'
             self.state_changed.emit('running')
-            _opt_map = {'mouse': 1, 'subway': 2, 'racing': 3}
+            _opt_map = {'mouse': 1, 'subway': 2, 'racing': 3, 'open_world': 4}
             _opt = _opt_map.get(self.initial_game_mode, 1)
             if _opt != 1:
                 self._activate_game_mode(_opt)
@@ -864,7 +935,7 @@ class HandControllerThread(QThread):
             elif self.app_state == 'running':
 
                 if self._pending_mode is not None:
-                    _opt_map = {'mouse': 1, 'subway': 2, 'racing': 3}
+                    _opt_map = {'mouse': 1, 'subway': 2, 'racing': 3, 'open_world': 4}
                     self._activate_game_mode(_opt_map.get(self._pending_mode, 1))
                     game_opt_hold_t = None; self.game_opt_number = None; game_opt_frac = 0.0
                     self._pending_mode = None
@@ -882,7 +953,7 @@ class HandControllerThread(QThread):
 
                 if self.active_game_mode is None:
 
-                    meta_hold_fracs = {k: 0.0 for k in ('start','stop','recal','close','guide','game_opt')}
+                    meta_hold_fracs = {k: 0.0 for k in ('start','stop','close','game_opt')}
                     triggered_meta  = None
 
                     both_open = lms is not None and lms2 is not None and is_open_palm(lms) and is_open_palm(lms2)
@@ -892,21 +963,6 @@ class HandControllerThread(QThread):
                         if meta_hold_fracs['stop'] >= 1.0: triggered_meta = 'stop'
                     else:
                         self.meta_hold['stop'] = None
-
-                    if lms:
-                        if is_shaka(lms):
-                            if self.meta_hold['recal'] is None: self.meta_hold['recal'] = now
-                            meta_hold_fracs['recal'] = min((now - self.meta_hold['recal']) / HOLD_META, 1.0)
-                            if meta_hold_fracs['recal'] >= 1.0: triggered_meta = 'recal'
-                        else:
-                            self.meta_hold['recal'] = None
-
-                        if is_metal_sign(lms):
-                            if self.meta_hold['guide'] is None: self.meta_hold['guide'] = now
-                            meta_hold_fracs['guide'] = min((now - self.meta_hold['guide']) / HOLD_META, 1.0)
-                            if meta_hold_fracs['guide'] >= 1.0: triggered_meta = 'guide'
-                        else:
-                            self.meta_hold['guide'] = None
 
                     both_peace = lms and lms2 and is_peace_sign(lms) and is_peace_sign(lms2)
                     if both_peace:
@@ -931,16 +987,6 @@ class HandControllerThread(QThread):
                         self.app_state = 'stopped'
                         self.meta_hold = {k: None for k in self.meta_hold}
                         self.state_changed.emit('stopped')
-                    elif triggered_meta == 'recal':
-                        self._release_drag()
-                        self.app_state = 'zone_pick'; self.zone_start_t = now
-                        self.meta_hold = {k: None for k in self.meta_hold}
-                        self.state_changed.emit('zone_pick')
-                    elif triggered_meta == 'guide':
-                        self._release_drag()
-                        self.app_state = 'guide'; self.guide_start_t = now
-                        self.meta_hold = {k: None for k in self.meta_hold}
-                        self.state_changed.emit('guide')
                     elif triggered_meta == 'close':
                         self._release_drag()
                         self._running = False
@@ -960,6 +1006,8 @@ class HandControllerThread(QThread):
                         if not mp_ok:
                             self.mouse_prev_row = None
                             gesture = 'idle'
+                        elif self._mouse_use_landmark:
+                            gesture = landmark_gesture(lms)
                         else:
                             gesture, _, self.mouse_prev_row = run_nn(
                                 lms, self.mouse_prev_row,
@@ -969,7 +1017,7 @@ class HandControllerThread(QThread):
 
                         draw_hand(display, lms)
                         if lms2: draw_hand(display, lms2)
-                        draw_finger_dot(display, lms, gesture, self.tm_drag_active)
+                        draw_finger_dot(display, lms, gesture, self.tm_drag_active, self._cursor_lm)
 
                     else:
                         self._release_drag()
@@ -1005,7 +1053,8 @@ class HandControllerThread(QThread):
                     if result and result.hand_landmarks:
                         lms_left_dh, lms_right_dh = split_hands(result)
 
-                    devil_horn = lms_left_dh is not None and is_metal_sign(lms_left_dh)
+                    devil_horn = (self._mouse_in_game_enabled and
+                                  lms_left_dh is not None and is_metal_sign(lms_left_dh))
                     if devil_horn != self._devilhorn_mouse:
                         self.mouse_prev_row     = None
                         self.left_click_entry_t = None
@@ -1024,7 +1073,7 @@ class HandControllerThread(QThread):
                                 self.mouse_model, self.mouse_le, MOUSE_CONF_THRESH)
                             self._run_mouse_gesture(gesture_m, lms_right_dh, now)
                             draw_hand(display, lms_right_dh)
-                            draw_finger_dot(display, lms_right_dh, gesture_m, self.tm_drag_active)
+                            draw_finger_dot(display, lms_right_dh, gesture_m, self.tm_drag_active, self._cursor_lm)
                         draw_hand(display, lms_left_dh, (255, 100, 0))
                         self.gesture_changed.emit(
                             f'MOUSE: {gesture_m.upper().replace("_", " ")}', 'Devil horn mouse mode')
@@ -1042,14 +1091,14 @@ class HandControllerThread(QThread):
                                 lms, self.ss_prev_row, self.subway_model, self.subway_le, SS_CONFIDENCE_THRESH)
                             if gesture_ss == 'space':
                                 if not self.ss_space_pressed and (now - self.ss_last_space_t) > SS_SPACE_COOLDOWN:
-                                    pyautogui.press('space')
+                                    pyautogui.press(self.ss_key_map.get('space', 'space'))
                                     self.ss_space_pressed = True; self.ss_last_space_t = now
                                 self.ss_current_zone = 'neutral'
                             else:
                                 self.ss_space_pressed = False
-                                if gesture_ss in SS_GESTURE_KEY:
+                                if gesture_ss in self.ss_key_map:
                                     if gesture_ss != self.ss_current_zone and (now - self.ss_last_key_t) > SS_KEY_COOLDOWN:
-                                        pyautogui.press(SS_GESTURE_KEY[gesture_ss])
+                                        pyautogui.press(self.ss_key_map[gesture_ss])
                                         self.ss_last_key_t = now; self.ss_current_zone = gesture_ss
                                 else:
                                     self.ss_current_zone = 'neutral'
@@ -1084,7 +1133,8 @@ class HandControllerThread(QThread):
                     if result and result.hand_landmarks:
                         lms_left, lms_right = split_hands(result)
 
-                    devil_horn = lms_left is not None and is_metal_sign(lms_left)
+                    devil_horn = (self._mouse_in_game_enabled and
+                                  lms_left is not None and is_metal_sign(lms_left))
                     if devil_horn != self._devilhorn_mouse:
                         self.mouse_prev_row     = None
                         self.left_click_entry_t = None
@@ -1104,7 +1154,7 @@ class HandControllerThread(QThread):
                                 self.mouse_model, self.mouse_le, MOUSE_CONF_THRESH)
                             self._run_mouse_gesture(gesture_m, lms_right, now)
                             draw_hand(display, lms_right)
-                            draw_finger_dot(display, lms_right, gesture_m, self.tm_drag_active)
+                            draw_finger_dot(display, lms_right, gesture_m, self.tm_drag_active, self._cursor_lm)
                         draw_hand(display, lms_left, (255, 100, 0))
                         self.gesture_changed.emit(
                             f'MOUSE: {gesture_m.upper().replace("_", " ")}', 'Devil horn mouse mode')
@@ -1119,36 +1169,55 @@ class HandControllerThread(QThread):
                         if lms_left  is None: self.rc_prev_row_left  = None
                         if lms_right is None: self.rc_prev_row_right = None
                         desired   = set(); angle = 0.0; steer_dir = 'none'
-                        accel = brake = False; gest_l = gest_r = 'none'; conf_l = conf_r = 0.0
+                        accel = brake = horn = camera_tapped = False
+                        gest_l = gest_r = 'none'; conf_l = conf_r = 0.0
                         if lms_left:
                             gest_l, conf_l, self.rc_prev_row_left = run_nn(
                                 lms_left, self.rc_prev_row_left, self.racing_model, self.racing_le, RC_CONF_THRESH)
                         if lms_right:
                             gest_r, conf_r, self.rc_prev_row_right = run_nn(
                                 lms_right, self.rc_prev_row_right, self.racing_model, self.racing_le, RC_CONF_THRESH)
-                        accel = gest_r == 'thumbs'
-                        brake = gest_l == 'thumbs'
+
+                        accel = gest_r == 'thumb'
+                        brake = gest_l == 'thumb'
+                        horn  = gest_r == 'index_middle'
+
+                        if accel: desired.add(self.rc_key_map.get('accel', 'up'))
+                        if brake: desired.add(self.rc_key_map.get('brake', 'down'))
+                        if horn:  desired.add(self.rc_key_map.get('horn', 'h'))
+
+                        camera_key = self.rc_key_map.get('camera', 'c')
+                        if gest_l == 'index_middle':
+                            last_tap = self.rc_tap_cooldown.get(camera_key, 0)
+                            if now - last_tap >= RC_TAP_COOLDOWN:
+                                pyautogui.press(camera_key)
+                                self.rc_tap_cooldown[camera_key] = now
+                                camera_tapped = True
+
                         if lms_left and lms_right:
                             angle = get_steer_angle(lms_left, lms_right)
                             if   angle < -RC_STEER_DEADZONE: steer_dir = 'left'
                             elif angle >  RC_STEER_DEADZONE: steer_dir = 'right'
-                        if steer_dir == 'left':  desired.add('left')
-                        if steer_dir == 'right': desired.add('right')
-                        if accel: desired.add('up')
-                        if brake: desired.add('down')
+                        if steer_dir == 'left':  desired.add(self.rc_key_map.get('steer_left',  'left'))
+                        if steer_dir == 'right': desired.add(self.rc_key_map.get('steer_right', 'right'))
                         self._rc_set_held_keys(desired)
+
                         if lms_left:  draw_hand(display, lms_left,  (255, 180, 80))
                         if lms_right: draw_hand(display, lms_right, (255, 80, 180))
+
                         _sl  = {'left': 'LEFT ←', 'right': 'RIGHT →', 'none': 'Straight'}[steer_dir]
                         _ped = ' · ACCEL' if accel else (' · BRAKE' if brake else '')
+                        _extras = (' · HORN' if horn else '') + (' · CAM' if camera_tapped else '')
                         _act = ('Accelerate' if accel else ('Brake' if brake else 'Idle')) + f'  ·  Steer {_sl}'
-                        self.gesture_changed.emit(f'STEER {_sl}{_ped}', _act)
+                        self.gesture_changed.emit(f'STEER {_sl}{_ped}{_extras}', _act)
                         self.running_data.emit({
                             'mode': 'racing',
                             'steer': steer_dir,
                             'angle': round(angle, 1),
                             'accel': accel,
                             'brake': brake,
+                            'horn': horn,
+                            'camera': camera_tapped,
                             'gest_l': gest_l, 'conf_l': round(conf_l, 2),
                             'gest_r': gest_r, 'conf_r': round(conf_r, 2),
                             'game_opt_num': self.game_opt_number or 0,
@@ -1157,13 +1226,43 @@ class HandControllerThread(QThread):
                         })
 
                 elif self.active_game_mode == 4:
+                    gesture_ow = 'none'; conf_ow = 0.0
+                    if lms:
+                        gesture_ow, conf_ow, self.ss_prev_row = run_nn(
+                            lms, self.ss_prev_row, self.subway_model, self.subway_le, SS_CONFIDENCE_THRESH)
+                        if gesture_ow == 'space':
+                            if not self.ss_space_pressed and (now - self.ss_last_space_t) > SS_SPACE_COOLDOWN:
+                                pyautogui.press(self.ow_key_map.get('space', 'f'))
+                                self.ss_space_pressed = True; self.ss_last_space_t = now
+                            self.ss_current_zone = 'neutral'
+                        else:
+                            self.ss_space_pressed = False
+                            if gesture_ow in self.ow_key_map:
+                                if gesture_ow != self.ss_current_zone and (now - self.ss_last_key_t) > SS_KEY_COOLDOWN:
+                                    pyautogui.press(self.ow_key_map[gesture_ow])
+                                    self.ss_last_key_t = now; self.ss_current_zone = gesture_ow
+                            else:
+                                self.ss_current_zone = 'neutral'
+                    else:
+                        self.ss_prev_row = None
                     if lms:  draw_hand(display, lms)
                     if lms2: draw_hand(display, lms2)
-                    self.gesture_changed.emit('FREE MODE', 'Opt 4 - custom slot')
+                    _ow_act = {
+                        'jump': self.ow_key_map.get('jump','w').upper(),
+                        'roll': self.ow_key_map.get('roll','s').upper(),
+                        'left': self.ow_key_map.get('left','a').upper(),
+                        'right':self.ow_key_map.get('right','d').upper(),
+                        'space':self.ow_key_map.get('space','f').upper(),
+                        'idle': 'Idle', 'none': 'Idle',
+                    }
+                    self.gesture_changed.emit(gesture_ow.upper(), _ow_act.get(gesture_ow, gesture_ow))
                     self.running_data.emit({
-                        'mode': 'free',
+                        'mode': 'open_world',
+                        'gesture': gesture_ow,
+                        'conf': conf_ow,
                         'game_opt_num': self.game_opt_number or 0,
                         'game_opt_frac': game_opt_frac,
+                        'meta': {'game_opt': game_opt_frac},
                     })
 
                 self.distance_live.emit(hand_size(lms) if lms else 0.0, lms is not None)
@@ -1194,6 +1293,7 @@ class HandControllerThread(QThread):
                 if lms:  draw_hand(display, lms)
                 if lms2: draw_hand(display, lms2)
                 self.stopped_data.emit(resume_frac, close_frac)
+                self.distance_live.emit(hand_size(lms) if lms else 0.0, lms is not None)
 
             h_img, w_img, ch = display.shape
             qt_img = QImage(display.data, w_img, h_img, ch * w_img, QImage.Format_RGB888)

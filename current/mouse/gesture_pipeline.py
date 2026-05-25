@@ -372,6 +372,17 @@ def augment(coords_63, aug_per_sample, noise_std, rot_max_deg, scale_jitter):
         c *= 1.0 + np.random.uniform(-scale_jitter, scale_jitter)
         c += np.random.normal(0, noise_std, c.shape).astype(np.float32)
         variants.append(c.tolist())
+
+    mirrored = np.array(coords_63, dtype=np.float32)
+    for i in range(0, 63, 3):
+        mirrored[i] = -mirrored[i]
+    for _ in range(aug_per_sample):
+        c = mirrored.copy()
+        c = np.array(rotate_2d(c.tolist(), np.random.uniform(-rot_max_deg, rot_max_deg)), dtype=np.float32)
+        c *= 1.0 + np.random.uniform(-scale_jitter, scale_jitter)
+        c += np.random.normal(0, noise_std, c.shape).astype(np.float32)
+        variants.append(c.tolist())
+
     return variants
 
 

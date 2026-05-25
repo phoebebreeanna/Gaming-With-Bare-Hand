@@ -12,6 +12,7 @@ from ui.user_guide import UserGuide
 from ui.gesture_guide import GestureGuide
 from ui.game_mode import GameMode
 from ui.pipeline_ui import PipelineUI
+from ui.key_bindings import KeyBindings
 from ui.mainmenu_setup import MainMenuSetup
 from ui.mainmenu_calibration import MainMenuCalibration
 from ui.mainmenu_zone import MainMenuZone
@@ -85,12 +86,19 @@ class MainMenu(QWidget):
         self.game_mode_widget.on_menu_toggle.connect(self.toggle_sidebar)
         self.game_mode_widget.game_mode_changed.connect(self._on_game_mode_from_ui)
         self.game_mode_widget.camera_changed.connect(self._on_game_camera_changed)
+        self.game_mode_widget.cursor_point_changed.connect(self._on_cursor_point_changed)
+        self.game_mode_widget.mouse_in_game_changed.connect(self._on_mouse_in_game_changed)
         self.pages.addWidget(self.game_mode_widget)
 
         self.pipeline_ui = PipelineUI(is_dark=self.is_dark)
         self.pipeline_ui.on_menu_toggle.connect(self.toggle_sidebar)
         self.pipeline_ui.training_complete.connect(self.game_mode_widget.refresh_custom_availability)
         self.pages.addWidget(self.pipeline_ui)
+
+        self.key_bindings_widget = KeyBindings()
+        self.key_bindings_widget.on_menu_toggle.connect(self.toggle_sidebar)
+        self.key_bindings_widget.binding_changed.connect(self._on_binding_changed)
+        self.pages.addWidget(self.key_bindings_widget)
 
         self.pages.setCurrentIndex(0)
 
@@ -207,8 +215,9 @@ class MainMenu(QWidget):
         layout.addWidget(self.setup_lbl)
 
         for label, index in [
-            ("04      -     GAME OPTION", 3),
+            ("04      -     SETTING", 3),
             ("05      -     TRAIN MODEL", 4),
+            ("06      -     KEY BINDINGS", 5),
         ]:
             btn = QPushButton(label)
             btn.setCheckable(True)
@@ -1202,6 +1211,7 @@ class MainMenu(QWidget):
         self.gesture_guide.apply_theme(self.is_dark)
         self.game_mode_widget.apply_theme(self.is_dark)
         self.pipeline_ui.apply_theme(self.is_dark)
+        self.key_bindings_widget.apply_theme(self.is_dark)
         self.update()
         self.repaint()
 
@@ -1222,6 +1232,18 @@ class MainMenu(QWidget):
         cam = self.camera_combo.itemData(combo_idx)
         if cam is not None and cam >= 0 and self.controller:
             self.controller.set_camera(cam)
+
+    def _on_cursor_point_changed(self, point: str):
+        if self.controller:
+            self.controller.set_cursor_point(point)
+
+    def _on_mouse_in_game_changed(self, enabled: bool):
+        if self.controller:
+            self.controller.set_mouse_in_game(enabled)
+
+    def _on_binding_changed(self, mode: str, gesture: str, key: str):
+        if self.controller:
+            self.controller.set_key_binding(mode, gesture, key)
 
     def _on_game_camera_changed(self, cam_idx: int):
         if not self._is_running: return
@@ -1429,8 +1451,10 @@ class MainMenu(QWidget):
             self._on_zone_continue()
 
     def _start_controller(self):
-        from logic.app_config import get_model_source, get_game_mode
-        model_sources     = {m: get_model_source(m) for m in ('mouse', 'subway', 'racing')}
+        from logic.app_config import get_model_source, get_game_mode, get_mouse_enabled, get_cursor_point
+        model_sources                  = {m: get_model_source(m) for m in ('mouse', 'subway', 'racing')}
+        model_sources['mouse_in_game'] = get_mouse_enabled()
+        model_sources['cursor_point']  = get_cursor_point()
         initial_game_mode = get_game_mode()
 
         zone = getattr(self.zone_guide, 'selected_zone', None) or get_saved_zone()
@@ -1480,8 +1504,6 @@ class MainMenu(QWidget):
         meta = data.get('meta', {})
         label_map = {
             'stop':     'PAUSING',
-            'recal':    'RECALIBRATING',
-            'guide':    'OPENING GUIDE',
             'close':    'CLOSING',
             'game_opt': 'GAME OPTION',
             'start':    'STARTING',
@@ -1490,6 +1512,10 @@ class MainMenu(QWidget):
         best_frac = meta.get(best_key, 0.0) if best_key else 0.0
         if best_frac > 0.0:
             self._show_hold_bar(label_map.get(best_key, best_key.upper()), best_frac)
+        elif data.get('mode') == 'racing' and data.get('horn'):
+            self._show_hold_bar('HORN HELD', 1.0)
+        elif data.get('mode') == 'racing' and data.get('camera'):
+            self._show_hold_bar('CAMERA TAP', 1.0)
         else:
             self._hide_hold_bar()
 

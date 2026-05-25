@@ -38,9 +38,9 @@ class GestureGuide(QWidget):
                     "label": "01  ·  MOUSE MODE",
                     "gestures": [
                         {"img": "assets/gestures/mouse/move.png",        "n": "01", "name": "Point - Move Cursor",      "desc": "Raise your index finger to move the cursor across the screen",  "tag": "ACTIVE IN MOUSE MODE"},
-                        {"img": "assets/gestures/mouse/left_click.png",  "n": "02", "name": "Quick Pinch - Left Click", "desc": "Thumb + Middle pinch, held under 0.5 s",                        "tag": "QUICK ACTION"},
-                        {"img": "assets/gestures/mouse/left_click.png",  "n": "03", "name": "Hold Pinch - Drag",        "desc": "Thumb + Middle pinch, held over 0.5 s",                         "tag": "HOLD 0.5S"},
-                        {"img": "assets/gestures/mouse/right_click.png", "n": "04", "name": "Ring Pinch - Right Click", "desc": "Thumb + Ring finger pinch",                                     "tag": "QUICK ACTION"},
+                        {"img": "assets/gestures/mouse/left_click.png",  "n": "02", "name": "OK Sign - Left Click",    "desc": "Thumb + Index finger pinch (OK sign), held under 0.5 s",       "tag": "QUICK ACTION"},
+                        {"img": "assets/gestures/mouse/left_click.png",  "n": "03", "name": "OK Sign Hold - Drag",     "desc": "Thumb + Index finger pinch (OK sign), held over 0.5 s",        "tag": "HOLD 0.5S"},
+                        {"img": "assets/gestures/mouse/right_click.png", "n": "04", "name": "Middle Pinch - Right Click", "desc": "Thumb + Middle finger pinch",                                "tag": "QUICK ACTION"},
                         {"img": "assets/gestures/mouse/scroll_up.png",   "n": "05", "name": "Three Fingers - Scroll Up","desc": "Index + Middle + Ring fingers raised",                          "tag": "ACTIVE"},
                         {"img": "assets/gestures/mouse/scroll_down.png", "n": "06", "name": "Fist - Scroll Down",       "desc": "All fingers clenched into a fist",                              "tag": "ACTIVE"},
                     ],

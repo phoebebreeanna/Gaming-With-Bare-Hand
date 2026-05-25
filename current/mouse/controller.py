@@ -11,7 +11,6 @@ import joblib
 import math
 from pynput.mouse import Controller, Button
 
-# ── pynput mouse (lower latency than pyautogui) ──────────────────────────────
 mouse = Controller()
 
 import pyautogui
@@ -19,11 +18,6 @@ pyautogui.FAILSAFE = False
 pyautogui.PAUSE = 0
 SCREEN_W, SCREEN_H = pyautogui.size()
 
-# ══════════════════════════════════════════════════════════════════════════════
-# TRACKING POINT MACRO
-#   'tip'    → lms[8]  index fingertip   (more precise, moves a lot)
-#   'knuckle'→ lms[5]  index MCP knuckle (more stable, less jitter)
-# ══════════════════════════════════════════════════════════════════════════════
 TRACKING_POINT = 'knuckle'
 
 TRACK_LM = {
@@ -31,7 +25,6 @@ TRACK_LM = {
     'knuckle': 5,
 }[TRACKING_POINT]
 
-# ── Tuning ────────────────────────────────────────────────────────────────────
 SMOOTHING          = 0.45
 CLICK_COOLDOWN     = 0.35
 SCROLL_SPEED       = 3
@@ -101,8 +94,6 @@ calib_done_t       = None
 last_click_t       = 0.0
 last_right_click_t = 0.0
 prev_scroll_y      = None
-# right_click_armed: True = will fire on next right_click frame
-#                   False = already fired, waiting to leave gesture before firing again
 right_click_armed  = True
 left_click_entry_t = None
 drag_active        = False
@@ -460,13 +451,10 @@ while cap.isOpened():
             else:
                 gesture, conf, low_conf = get_gesture(lms)
 
-                # ── cursor follows TRACK_LM ───────────────────────────────────
                 raw_x, raw_y = map_cursor(lms[TRACK_LM].x, lms[TRACK_LM].y)
                 smooth_x += (raw_x - smooth_x) * SMOOTHING
                 smooth_y += (raw_y - smooth_y) * SMOOTHING
                 move_cursor(smooth_x, smooth_y)
-
-                # ── gesture actions ───────────────────────────────────────────
 
                 if gesture == 'left_click':
                     scroll_entry_t    = None
@@ -495,14 +483,12 @@ while cap.isOpened():
 
                 elif gesture == 'right_click':
                     release_drag()
-                    # fire any pending left click first
                     if left_click_entry_t is not None:
                         held = now - left_click_entry_t
                         if held < DRAG_HOLD_THRESH and now - last_click_t > CLICK_COOLDOWN:
                             mouse.click(Button.left)
                             last_click_t = now
                         left_click_entry_t = None
-                    # FIX: fire immediately on gesture entry (armed), disarm until gesture exits
                     if right_click_armed:
                         mouse.click(Button.right)
                         last_right_click_t = now
@@ -543,7 +529,6 @@ while cap.isOpened():
                     scroll_entry_t = None
                     scroll_active  = False
 
-                # ── fire left click on release ────────────────────────────────
                 if gesture != 'left_click' and gesture not in ('pre_left_click', 'pre_right_click'):
                     if left_click_entry_t is not None and not drag_active:
                         held = now - left_click_entry_t
@@ -555,8 +540,6 @@ while cap.isOpened():
                         else:
                             left_click_entry_t = None
 
-                # FIX: re-arm right click the moment gesture leaves - no cooldown gate
-                # This guarantees every distinct right_click entry = one right click
                 if gesture != 'right_click':
                     right_click_armed = True
 
