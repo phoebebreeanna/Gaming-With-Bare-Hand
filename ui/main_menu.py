@@ -19,7 +19,7 @@ from ui.mainmenu_zone import MainMenuZone
 from ui.mainmenu_camera import MainMenuCamera
 
 from logic.hand_controller import HandControllerThread, CameraPreviewThread, list_cameras
-from logic.app_config import is_setup_done, get_saved_zone, mark_setup_done, get_camera_index, set_camera_index
+from logic.app_config import is_setup_done, get_saved_zone, mark_setup_done, get_camera_index, set_camera_index, set_zone, get_mouse_side, set_mouse_side
 
 class MainMenu(QWidget):
     def __init__(self):
@@ -33,6 +33,7 @@ class MainMenu(QWidget):
         self._optimal_since = None
         self._zone_hold_since = None
         self._zone_pending = None
+        self._current_zone = get_saved_zone()
         self.start_time = time.time() 
         self.init_ui()
 
@@ -90,6 +91,8 @@ class MainMenu(QWidget):
         self.game_mode_widget.cursor_point_changed.connect(self._on_cursor_point_changed)
         self.game_mode_widget.mouse_in_game_changed.connect(self._on_mouse_in_game_changed)
         self.game_mode_widget.model_source_changed.connect(self._on_model_source_changed)
+        self.game_mode_widget.zone_changed.connect(self._on_zone_changed)
+        self.game_mode_widget.mouse_side_changed.connect(self._on_mouse_side_changed)
         self.pages.addWidget(self.game_mode_widget)
 
         self.pipeline_ui = PipelineUI(is_dark=self.is_dark)
@@ -1235,6 +1238,12 @@ class MainMenu(QWidget):
         if cam is not None and cam >= 0 and self.controller:
             self.controller.set_camera(cam)
 
+    def _on_zone_changed(self, zone: str):
+        self._current_zone = zone
+        set_zone(zone)
+        if self._is_running and self.controller:
+            self.controller.set_zone(zone)
+
     def _on_cursor_point_changed(self, point: str):
         if self.controller:
             self.controller.set_cursor_point(point)
@@ -1242,6 +1251,11 @@ class MainMenu(QWidget):
     def _on_mouse_in_game_changed(self, enabled: bool):
         if self.controller:
             self.controller.set_mouse_in_game(enabled)
+
+    def _on_mouse_side_changed(self, side: str):
+        set_mouse_side(side)
+        if self._is_running and self.controller:
+            self.controller.set_mouse_side(side)
 
     def _on_binding_changed(self, mode: str, gesture: str, key: str):
         if self.controller:
@@ -1278,7 +1292,7 @@ class MainMenu(QWidget):
 
         if hasattr(self, "footer_status"):
             self.footer_status.setText(
-                f"ZONE · MEDIUM    UPTIME · {uptime}"
+                f"ZONE · {self._current_zone.upper()}    UPTIME · {uptime}"
             )
         if hasattr(self, "rec_lbl"):
             self.rec_lbl.setText(f"● REC  ·  {uptime}")
@@ -1358,6 +1372,7 @@ class MainMenu(QWidget):
         self._zone_hold_since = None
         self._zone_pending = None
         zone = getattr(self.zone_guide, 'selected_zone', 'medium')
+        self._current_zone = zone
         mark_setup_done(zone)
         self._stop_preview()
         self.home_stack.setCurrentIndex(0)
@@ -1457,10 +1472,11 @@ class MainMenu(QWidget):
             self._on_zone_continue()
 
     def _start_controller(self):
-        from logic.app_config import get_model_source, get_game_mode, get_mouse_enabled, get_cursor_point
+        from logic.app_config import get_model_source, get_game_mode, get_mouse_enabled, get_cursor_point, get_mouse_side
         model_sources                  = {m: get_model_source(m) for m in ('mouse', 'subway', 'racing')}
         model_sources['mouse_in_game'] = get_mouse_enabled()
         model_sources['cursor_point']  = get_cursor_point()
+        model_sources['mouse_side']    = get_mouse_side()
         initial_game_mode = get_game_mode()
 
         zone = getattr(self.zone_guide, 'selected_zone', None) or get_saved_zone()

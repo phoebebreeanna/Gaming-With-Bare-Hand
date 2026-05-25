@@ -22,6 +22,8 @@ class GameMode(QWidget):
     cursor_point_changed  = Signal(str)
     mouse_in_game_changed = Signal(bool)
     model_source_changed  = Signal(str, str)
+    zone_changed          = Signal(str)
+    mouse_side_changed    = Signal(str)
 
     def __init__(self):
         super().__init__()
@@ -29,12 +31,16 @@ class GameMode(QWidget):
         self.selected_mode = 'mouse'
         self.mouse_enabled = False
         self._camera_index = 0
-        self._cursor_point = 'tip'
+        self._cursor_point = 'knuckle'
+        self._zone         = 'medium'
+        self._mouse_side   = 'right'
         self._mode_sources = {k: 'default' for k in ('mouse', 'subway', 'racing')}
         self._source_btns  = {}
         self._mode_cards   = {}
         self._camera_combo = None
         self._cursor_btns  = {}
+        self._zone_btns    = {}
+        self._side_btns    = {}
 
         self._load_state()
         self._init_ui()
@@ -42,11 +48,13 @@ class GameMode(QWidget):
 
     def _load_state(self):
         try:
-            from logic.app_config import get_game_mode, get_mouse_enabled, get_model_source, get_camera_index, get_cursor_point
+            from logic.app_config import get_game_mode, get_mouse_enabled, get_model_source, get_camera_index, get_cursor_point, get_saved_zone, get_mouse_side
             self.selected_mode = get_game_mode()
             self.mouse_enabled = get_mouse_enabled()
             self._camera_index = get_camera_index()
             self._cursor_point = get_cursor_point()
+            self._zone         = get_saved_zone()
+            self._mouse_side   = get_mouse_side()
             for m in ('mouse', 'subway', 'racing'):
                 self._mode_sources[m] = get_model_source(m)
         except Exception:
@@ -159,6 +167,66 @@ class GameMode(QWidget):
         self.div1b = QWidget()
         self.div1b.setFixedHeight(1)
         cl.addWidget(self.div1b)
+
+        self.zone_panel = QWidget()
+        self.zone_panel.setFixedHeight(52)
+        zp = QHBoxLayout(self.zone_panel)
+        zp.setContentsMargins(16, 0, 16, 0)
+        zp.setSpacing(0)
+
+        zone_text_col = QVBoxLayout()
+        zone_text_col.setSpacing(2)
+        self.zone_hdr_lbl = QLabel("ZONE SIZE")
+        self.zone_sub_lbl = QLabel("Control zone for cursor tracking area")
+        zone_text_col.addWidget(self.zone_hdr_lbl)
+        zone_text_col.addWidget(self.zone_sub_lbl)
+        zp.addLayout(zone_text_col, stretch=1)
+
+        zone_row = QHBoxLayout()
+        zone_row.setSpacing(4)
+        for z in ('small', 'medium', 'large'):
+            btn = QPushButton(z.upper())
+            btn.setFixedSize(56, 26)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.clicked.connect(lambda _, z=z: self._set_zone_setting(z))
+            zone_row.addWidget(btn)
+            self._zone_btns[z] = btn
+        zp.addLayout(zone_row)
+        cl.addWidget(self.zone_panel)
+
+        self.div1c = QWidget()
+        self.div1c.setFixedHeight(1)
+        cl.addWidget(self.div1c)
+
+        self.side_panel = QWidget()
+        self.side_panel.setFixedHeight(52)
+        sp = QHBoxLayout(self.side_panel)
+        sp.setContentsMargins(16, 0, 16, 0)
+        sp.setSpacing(0)
+
+        side_text_col = QVBoxLayout()
+        side_text_col.setSpacing(2)
+        self.side_hdr_lbl = QLabel("GAME MOUSE SIDE")
+        self.side_sub_lbl = QLabel("Which screen half to use when devil horn is active")
+        side_text_col.addWidget(self.side_hdr_lbl)
+        side_text_col.addWidget(self.side_sub_lbl)
+        sp.addLayout(side_text_col, stretch=1)
+
+        side_row = QHBoxLayout()
+        side_row.setSpacing(4)
+        for s in ('left', 'right'):
+            btn = QPushButton(s.upper())
+            btn.setFixedSize(52, 26)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.clicked.connect(lambda _, s=s: self._set_mouse_side(s))
+            side_row.addWidget(btn)
+            self._side_btns[s] = btn
+        sp.addLayout(side_row)
+        cl.addWidget(self.side_panel)
+
+        self.div1d = QWidget()
+        self.div1d.setFixedHeight(1)
+        cl.addWidget(self.div1d)
 
         self.camera_panel = QWidget()
         self.camera_panel.setFixedHeight(52)
@@ -309,6 +377,26 @@ class GameMode(QWidget):
         except Exception:
             pass
         self.cursor_point_changed.emit(point)
+        self.apply_theme(self.is_dark)
+
+    def _set_zone_setting(self, zone: str):
+        self._zone = zone
+        try:
+            from logic.app_config import set_zone
+            set_zone(zone)
+        except Exception:
+            pass
+        self.zone_changed.emit(zone)
+        self.apply_theme(self.is_dark)
+
+    def _set_mouse_side(self, side: str):
+        self._mouse_side = side
+        try:
+            from logic.app_config import set_mouse_side
+            set_mouse_side(side)
+        except Exception:
+            pass
+        self.mouse_side_changed.emit(side)
         self.apply_theme(self.is_dark)
 
     def _set_model_source(self, mode: str, source: str):
@@ -462,6 +550,58 @@ class GameMode(QWidget):
                     QPushButton:hover {{ background-color: {hover}; color: {text}; }}
                 """)
         self.div1b.setStyleSheet(f"background-color: {border};")
+
+        self.zone_panel.setStyleSheet(
+            f"background-color: {panel}; border: 1px solid {border};")
+        self.zone_hdr_lbl.setStyleSheet(
+            f"font-size: 9px; font-weight: 700; color: {text}; letter-spacing: 1.5px; background: transparent; border: none;")
+        self.zone_sub_lbl.setStyleSheet(
+            f"font-size: 8px; color: {muted}; letter-spacing: 1px; background: transparent; border: none;")
+        for z, btn in self._zone_btns.items():
+            if z == self._zone:
+                btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {tog_on_bg}; color: {tog_on_txt};
+                        font-size: 8px; font-weight: 700; letter-spacing: 1px;
+                        border: 1px solid {tog_on_bg}; border-radius: 2px;
+                    }}
+                """)
+            else:
+                btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {tog_off_bg}; color: {tog_off_txt};
+                        font-size: 8px; font-weight: 700; letter-spacing: 1px;
+                        border: 1px solid {border}; border-radius: 2px;
+                    }}
+                    QPushButton:hover {{ background-color: {hover}; color: {text}; }}
+                """)
+        self.div1c.setStyleSheet(f"background-color: {border};")
+
+        self.side_panel.setStyleSheet(
+            f"background-color: {panel}; border: 1px solid {border};")
+        self.side_hdr_lbl.setStyleSheet(
+            f"font-size: 9px; font-weight: 700; color: {text}; letter-spacing: 1.5px; background: transparent; border: none;")
+        self.side_sub_lbl.setStyleSheet(
+            f"font-size: 8px; color: {muted}; letter-spacing: 1px; background: transparent; border: none;")
+        for s, btn in self._side_btns.items():
+            if s == self._mouse_side:
+                btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {tog_on_bg}; color: {tog_on_txt};
+                        font-size: 8px; font-weight: 700; letter-spacing: 1px;
+                        border: 1px solid {tog_on_bg}; border-radius: 2px;
+                    }}
+                """)
+            else:
+                btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {tog_off_bg}; color: {tog_off_txt};
+                        font-size: 8px; font-weight: 700; letter-spacing: 1px;
+                        border: 1px solid {border}; border-radius: 2px;
+                    }}
+                    QPushButton:hover {{ background-color: {hover}; color: {text}; }}
+                """)
+        self.div1d.setStyleSheet(f"background-color: {border};")
 
         self.div2.setStyleSheet(f"background-color: {border};")
 

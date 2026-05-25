@@ -76,6 +76,19 @@ def set_camera_index(idx: int) -> None:
     config['camera_index'] = idx
     _write(config)
 
+def set_zone(zone: str) -> None:
+    config = _read()
+    config['zone'] = zone
+    _write(config)
+
+def get_mouse_side() -> str:
+    return _read().get('mouse_side', 'right')
+
+def set_mouse_side(side: str) -> None:
+    config = _read()
+    config['mouse_side'] = side
+    _write(config)
+
 def get_cursor_point() -> str:
     return _read().get('cursor_point', 'knuckle')
 

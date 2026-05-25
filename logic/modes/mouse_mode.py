@@ -7,6 +7,7 @@ from logic.hand_utils import (
     draw_hand, draw_finger_dot,
     is_open_palm, is_peace_sign, is_fist, get_game_option,
 )
+
 from logic.gesture_net import run_nn
 
 class MouseModeMixin:
@@ -15,6 +16,7 @@ class MouseModeMixin:
         if self.tm_drag_active:
             _mouse_left_up()
             self.tm_drag_active = False
+        self._drag_release_votes = 0
 
     def _run_mouse_gesture(self, gesture, lms, now):
         tx, ty = self._map_cursor(lms[self._cursor_lm].x, lms[self._cursor_lm].y)
@@ -24,33 +26,67 @@ class MouseModeMixin:
 
         if gesture == 'move':
             self._release_drag()
-            self.left_click_entry_t = None
-            self.right_click_armed  = True
-            self.scroll_entry_t     = None
-            self.scroll_active      = False
-        elif gesture in ('pre_left_click', 'pre_right_click'):
+            self.left_click_entry_t   = None
+            self._pending_left_click  = False
+            self.right_click_armed    = True
+            self.right_click_entry_t  = None
+            self.scroll_entry_t       = None
+            self.scroll_active        = False
+
+        elif gesture == 'pre_left_click':
+            if self.tm_drag_active:
+                self._drag_release_votes += 1
+                if self._drag_release_votes >= 3:
+                    self._release_drag()
+                    self.left_click_entry_t  = None
+                    self._pending_left_click = False
+            else:
+                self._drag_release_votes = 0
+
+        elif gesture == 'pre_right_click':
             pass
+
         elif gesture == 'left_click':
-            self.scroll_entry_t = None
-            self.scroll_active  = False
+            self._drag_release_votes = 0
+            self.scroll_entry_t  = None
+            self.scroll_active   = False
             if self.left_click_entry_t is None:
-                self.left_click_entry_t = now
+                self.left_click_entry_t  = now
+                self._pending_left_click = True
             if (now - self.left_click_entry_t) >= DRAG_HOLD_THRESH and not self.tm_drag_active:
+                self._pending_left_click = False
                 _mouse_left_down()
                 self.tm_drag_active = True
+
         elif gesture == 'right_click':
             self._release_drag()
-            self.left_click_entry_t = None
-            if self.right_click_armed and now - self.last_click_t > CLICK_COOLDOWN:
-                _mouse_right_click()
-                self.last_click_t      = now
-                self.right_click_armed = False
+            self.left_click_entry_t  = None
+            self._pending_left_click = False
+
+            if not self.right_click_armed:
+                if now - self.last_right_click_t > CLICK_COOLDOWN:
+                    self.right_click_armed   = True
+                    self.right_click_entry_t = None
+
+            if self.right_click_armed:
+                if self.right_click_entry_t is None:
+                    self.right_click_entry_t = now
+                elif (now - self.right_click_entry_t) >= 0.08:
+                    if now - self.last_right_click_t > CLICK_COOLDOWN:
+                        _mouse_right_click()
+                        self.last_right_click_t  = now
+                    self.right_click_armed   = False
+                    self.right_click_entry_t = None
+
             self.scroll_entry_t = None
             self.scroll_active  = False
+
         elif gesture in ('scroll_up', 'scroll_down'):
             self._release_drag()
-            self.left_click_entry_t = None
-            self.right_click_armed  = True
+            self.left_click_entry_t  = None
+            self._pending_left_click = False
+            self.right_click_armed   = True
+            self.right_click_entry_t = None
             if self.scroll_entry_t is None:
                 self.scroll_entry_t = now
                 self.scroll_active  = False
@@ -58,22 +94,26 @@ class MouseModeMixin:
                 self.scroll_active = True
             if self.scroll_active:
                 _mouse_scroll(SCROLL_SPEED if gesture == 'scroll_up' else -SCROLL_SPEED)
+
         else:
             self._release_drag()
-            self.left_click_entry_t = None
-            self.right_click_armed  = True
-            self.scroll_entry_t     = None
-            self.scroll_active      = False
+            self.left_click_entry_t  = None
+            self._pending_left_click = False
+            self.right_click_armed   = True
+            self.right_click_entry_t = None
+            self.scroll_entry_t      = None
+            self.scroll_active       = False
 
         if gesture != 'left_click' and self.left_click_entry_t is not None and not self.tm_drag_active:
-            held = now - self.left_click_entry_t
-            if held < DRAG_HOLD_THRESH and now - self.last_click_t > CLICK_COOLDOWN:
+            if self._pending_left_click and now - self.last_left_click_t > CLICK_COOLDOWN:
                 _mouse_left_click()
-                self.last_click_t = now
-            self.left_click_entry_t = None
+                self.last_left_click_t = now
+            self._pending_left_click = False
+            self.left_click_entry_t  = None
 
         if gesture != 'right_click':
-            self.right_click_armed = True
+            self.right_click_armed   = True
+            self.right_click_entry_t = None
 
     def _tick_mouse_mode(self, lms, lms2, result, display, now, game_opt_frac):
         meta_hold_fracs = {k: 0.0 for k in ('start', 'stop', 'close', 'game_opt')}
@@ -140,8 +180,10 @@ class MouseModeMixin:
             draw_finger_dot(display, lms, gesture, self.tm_drag_active, self._cursor_lm)
         else:
             self._release_drag()
-            self.scroll_entry_t = None
-            self.scroll_active  = False
+            self.scroll_entry_t      = None
+            self.scroll_active       = False
+            self._pending_left_click = False
+            self.left_click_entry_t  = None
             if lms:  draw_hand(display, lms)
             if lms2: draw_hand(display, lms2)
 

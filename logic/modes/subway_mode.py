@@ -27,6 +27,8 @@ class SubwayModeMixin:
             self.scroll_active      = False
             if not devil_horn:
                 self._release_drag()
+            self._right_half_mode = devil_horn
+            self._set_zone(self.chosen_zone)
         self._devilhorn_mouse = devil_horn
 
         if devil_horn:

@@ -17,7 +17,7 @@ pyautogui.PAUSE = 0
 SCREEN_W, SCREEN_H = pyautogui.size()
 
 MOUSE_SMOOTHING    = 0.45
-MOUSE_CONF_THRESH  = 0.75
+MOUSE_CONF_THRESH  = 0.51
 DRAG_HOLD_THRESH   = 0.5
 MP_PRESENCE_THRESH = 0.7
 CLICK_COOLDOWN     = 0.5
@@ -49,9 +49,9 @@ CONNECTIONS = [
 ]
 
 ZONE_PRESETS = {
-    'small':  0.25,
-    'medium': 0.55,
-    'large':  0.90,
+    'small':  0.1,
+    'medium': 0.2,
+    'large':  0.3,
 }
 
 _BONE    = (0, 200, 110)
@@ -208,37 +208,37 @@ def draw_finger_dot(img, lms, gesture, drag_active, cursor_lm=8):
     cv2.circle(img, (fx, fy),  4, col, -1)
 
 def _mouse_move(x, y):
-    if PYNPUT_AVAILABLE:
-        _mouse_ctrl.position = (int(x), int(y))
-    else:
+    # if PYNPUT_AVAILABLE:
+    #     _mouse_ctrl.position = (int(x), int(y))
+    # else:
         pyautogui.moveTo(int(x), int(y))
 
 def _mouse_left_down():
-    if PYNPUT_AVAILABLE:
-        _mouse_ctrl.press(_PynputButton.left)
-    else:
+    # if PYNPUT_AVAILABLE:
+    #     _mouse_ctrl.press(_PynputButton.left)
+    # else:
         pyautogui.mouseDown()
 
 def _mouse_left_up():
-    if PYNPUT_AVAILABLE:
-        _mouse_ctrl.release(_PynputButton.left)
-    else:
+    # if PYNPUT_AVAILABLE:
+    #     _mouse_ctrl.release(_PynputButton.left)
+    # else:
         pyautogui.mouseUp()
 
 def _mouse_left_click():
-    if PYNPUT_AVAILABLE:
-        _mouse_ctrl.click(_PynputButton.left)
-    else:
+    # if PYNPUT_AVAILABLE:
+    #     _mouse_ctrl.click(_PynputButton.left)
+    # else:
         pyautogui.click()
 
 def _mouse_right_click():
-    if PYNPUT_AVAILABLE:
-        _mouse_ctrl.click(_PynputButton.right)
-    else:
+    # if PYNPUT_AVAILABLE:
+    #     _mouse_ctrl.click(_PynputButton.right)
+    # else:
         pyautogui.rightClick()
 
 def _mouse_scroll(amount):
-    if PYNPUT_AVAILABLE:
-        _mouse_ctrl.scroll(0, amount)
-    else:
+    # if PYNPUT_AVAILABLE:
+    #     _mouse_ctrl.scroll(0, amount)
+    # else:
         pyautogui.scroll(amount)

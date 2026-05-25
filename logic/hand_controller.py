@@ -196,6 +196,9 @@ class HandControllerThread(
         self._mouse_in_game_enabled = sources.get('mouse_in_game', True)
         cursor_point                = sources.get('cursor_point', 'knuckle')
         self._cursor_lm             = 5 if cursor_point == 'knuckle' else 8
+        self._cursor_point          = cursor_point
+        self._right_half_mode       = False
+        self._mouse_side            = sources.get('mouse_side', 'right')
 
         def _pick(mode, default_w, default_e, custom_w, custom_e):
             if sources.get(mode) == 'custom' and os.path.exists(custom_w) and os.path.exists(custom_e):
@@ -233,7 +236,8 @@ class HandControllerThread(
         self.dist_ok_since      = None
         self.range_min_x = self.range_max_x = None
         self.range_min_y = self.range_max_y = None
-        self.last_click_t       = 0.0
+        self.last_left_click_t  = 0.0
+        self.last_right_click_t = 0.0
         self.scroll_entry_t     = None
         self.scroll_active      = False
         self.smooth_x = SCREEN_W / 2
@@ -244,11 +248,14 @@ class HandControllerThread(
         self.active_game_mode    = None
         self._pending_mode       = None
 
-        self.mouse_prev_row     = None
-        self.left_click_entry_t = None
-        self.right_click_armed  = True
-        self.tm_drag_active     = False
-        self._devilhorn_mouse   = False
+        self.mouse_prev_row      = None
+        self.left_click_entry_t  = None
+        self._pending_left_click = False
+        self.right_click_armed   = True
+        self.right_click_entry_t = None
+        self.tm_drag_active      = False
+        self._drag_release_votes = 0
+        self._devilhorn_mouse    = False
 
         self.ss_current_zone  = 'neutral'
         self.ss_last_key_t    = 0.0
@@ -273,13 +280,17 @@ class HandControllerThread(
         self.dist_ok_since       = None
         self.smooth_x = SCREEN_W / 2
         self.smooth_y = SCREEN_H / 2
-        self.last_click_t        = 0.0
+        self.last_left_click_t  = 0.0
+        self.last_right_click_t = 0.0
         self.scroll_entry_t      = None
         self.scroll_active       = False
         self.tm_drag_active      = False
+        self._drag_release_votes = 0
         self.mouse_prev_row      = None
         self.left_click_entry_t  = None
+        self._pending_left_click = False
         self.right_click_armed   = True
+        self.right_click_entry_t = None
         self.meta_hold           = {k: None for k in self.meta_hold}
         self.game_option_pending = None
         self.ss_current_zone  = 'neutral'
@@ -294,10 +305,17 @@ class HandControllerThread(
 
     def _set_zone(self, zone_name):
         half = ZONE_PRESETS.get(zone_name, 0.55) / 2
-        self.range_min_x = 0.5 - half
-        self.range_max_x = 0.5 + half
-        self.range_min_y = 0.5 - half
-        self.range_max_y = 0.5 + half
+        if self._mouse_side == 'left':
+            center_x = 0.25
+        elif self._mouse_side == 'right':
+            center_x = 0.75
+        else:
+            center_x = 0.5
+        self.range_min_x = center_x - half
+        self.range_max_x = center_x + half
+        center_y = 0.5
+        self.range_min_y = center_y - half
+        self.range_max_y = center_y + half
 
     def _map_cursor(self, tx, ty):
         import numpy as np
@@ -312,9 +330,13 @@ class HandControllerThread(
         self._rc_release_all()
         if opt == 1:
             self.active_game_mode = None
+            self._right_half_mode = False
+            self._set_zone(self.chosen_zone)
             self.game_mode_changed.emit('mouse')
         elif opt == 2:
             self.active_game_mode = 2
+            self._right_half_mode = False
+            self._set_zone(self.chosen_zone)
             self.ss_current_zone  = 'neutral'
             self.ss_last_key_t    = 0.0
             self.ss_last_space_t  = 0.0
@@ -323,15 +345,20 @@ class HandControllerThread(
             self.game_mode_changed.emit('subway')
         elif opt == 3:
             self.active_game_mode  = 3
+            self._right_half_mode  = False
+            self._set_zone(self.chosen_zone)
             self.rc_prev_row_left  = None
             self.rc_prev_row_right = None
             self.game_mode_changed.emit('racing')
         elif opt == 4:
             self.active_game_mode   = 4
+            self._right_half_mode   = False
+            self._set_zone(self.chosen_zone)
             self._ow_release_all()
             self._devilhorn_mouse   = False
             self.mouse_prev_row     = None
             self.left_click_entry_t = None
+            self._pending_left_click = False
             self.right_click_armed  = True
             self.scroll_entry_t     = None
             self.scroll_active      = False
@@ -347,7 +374,13 @@ class HandControllerThread(
             self._init_state(); self.start()
 
     def set_cursor_point(self, point: str):
-        self._cursor_lm = 5 if point == 'knuckle' else 8
+        self._cursor_point = point
+        self._cursor_lm    = 5 if point == 'knuckle' else 8
+        self._set_zone(self.chosen_zone)
+
+    def set_zone(self, zone: str):
+        self.chosen_zone = zone
+        self._set_zone(zone)
 
     def set_model_source(self, mode: str, source: str):
         def _paths(default_w, default_e, custom_w, custom_e):
@@ -379,6 +412,10 @@ class HandControllerThread(
 
     def set_mouse_in_game(self, enabled: bool):
         self._mouse_in_game_enabled = enabled
+
+    def set_mouse_side(self, side: str):
+        self._mouse_side = side
+        self._set_zone(self.chosen_zone)
 
     def pause(self):  self._paused_event.clear()
     def resume(self): self._paused_event.set()
