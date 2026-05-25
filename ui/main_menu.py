@@ -76,6 +76,7 @@ class MainMenu(QWidget):
 
         self.user_guide = UserGuide()
         self.user_guide.on_menu_toggle.connect(self.toggle_sidebar)
+        self.user_guide.on_done.connect(lambda: self.switch_page(0))
         self.pages.addWidget(self.user_guide)
 
         self.gesture_guide = GestureGuide()

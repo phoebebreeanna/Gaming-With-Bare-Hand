@@ -7,6 +7,7 @@ from PySide6.QtCore import Qt, Signal
 class UserGuide(QWidget):
 
     on_menu_toggle = Signal()
+    on_done        = Signal()
 
     def __init__(self):
         super().__init__()
@@ -233,6 +234,8 @@ class UserGuide(QWidget):
         if current < len(self.steps) - 1:
             self.step_stack.setCurrentIndex(current + 1)
             self.update_navigation(current + 1)
+        else:
+            self.on_done.emit()
 
     def go_previous(self):
         current = self.step_stack.currentIndex()
@@ -245,7 +248,7 @@ class UserGuide(QWidget):
         self.step_indicator.setText(f"STEP {index + 1} / {total}")
         self.current_step_name.setText(self.steps[index]["title"].upper())
         self.prev_btn.setEnabled(index > 0)
-        self.next_btn.setEnabled(index < total - 1)
+        self.next_btn.setEnabled(True)
         self.next_btn.setText("Done" if index == total - 1 else "Next")
         if hasattr(self, "_theme_ready"):
             self.apply_theme(self.is_dark)
