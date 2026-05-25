@@ -194,7 +194,7 @@ class HandControllerThread(
         sources = model_sources or {}
 
         self._mouse_in_game_enabled = sources.get('mouse_in_game', True)
-        cursor_point                = sources.get('cursor_point', 'tip')
+        cursor_point                = sources.get('cursor_point', 'knuckle')
         self._cursor_lm             = 5 if cursor_point == 'knuckle' else 8
 
         def _pick(mode, default_w, default_e, custom_w, custom_e):

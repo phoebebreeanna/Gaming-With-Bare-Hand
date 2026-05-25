@@ -77,7 +77,7 @@ def set_camera_index(idx: int) -> None:
     _write(config)
 
 def get_cursor_point() -> str:
-    return _read().get('cursor_point', 'tip')
+    return _read().get('cursor_point', 'knuckle')
 
 def set_cursor_point(point: str) -> None:
     config = _read()
