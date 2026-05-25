@@ -169,9 +169,9 @@ class MainMenuZone(QWidget):
         zone_body_layout.setSpacing(8)
 
         zone_defs = [
-            ("small",  "SMALL",  "1 finger - small area",   (44, 32)),
-            ("medium", "MEDIUM", "2 fingers - medium area",  (56, 40)),
-            ("large",  "LARGE",  "3 fingers - wide area",    (68, 48)),
+            ("small",  "SMALL",  "1 finger - small",   (44, 32)),
+            ("medium", "MEDIUM", "2 fingers - medium",  (56, 40)),
+            ("large",  "LARGE",  "3 fingers - large",    (68, 48)),
         ]
         for key, label, hint, preview_size in zone_defs:
             card = self._build_zone_card(key, label, hint, preview_size)

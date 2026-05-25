@@ -122,7 +122,7 @@ class MainMenuSetup(QWidget):
         content_layout.addWidget(self.desc)
 
         self.steps_card = QWidget()
-        self.steps_card.setFixedHeight(296)
+        self.steps_card.setFixedHeight(240)
         steps_layout = QVBoxLayout(self.steps_card)
         steps_layout.setContentsMargins(0, 0, 0, 0)
         steps_layout.setSpacing(0)
@@ -178,8 +178,6 @@ class MainMenuSetup(QWidget):
 
             self.step_rows.append(row)
             steps_layout.addWidget(row)
-
-        steps_layout.addStretch()
 
         content_layout.addSpacing(12)
         content_layout.addWidget(self.steps_card)
