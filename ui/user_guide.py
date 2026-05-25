@@ -153,14 +153,16 @@ class UserGuide(QWidget):
         footer_layout.setSpacing(12)
 
         self.prev_btn = QPushButton("Previous")
-        self.prev_btn.setFixedSize(112, 34)
+        self.prev_btn.setFixedHeight(34)
+        self.prev_btn.setMinimumWidth(90)
         self.prev_btn.setCursor(Qt.PointingHandCursor)
         self.prev_btn.clicked.connect(self.go_previous)
         footer_layout.addWidget(self.prev_btn)
         footer_layout.addStretch()
 
         self.next_btn = QPushButton("Next")
-        self.next_btn.setFixedSize(112, 34)
+        self.next_btn.setFixedHeight(34)
+        self.next_btn.setMinimumWidth(90)
         self.next_btn.setCursor(Qt.PointingHandCursor)
         self.next_btn.clicked.connect(self.go_next)
         footer_layout.addWidget(self.next_btn)

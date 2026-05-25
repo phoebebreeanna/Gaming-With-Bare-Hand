@@ -19,6 +19,8 @@ class MouseModeMixin:
         self._drag_release_votes = 0
 
     def _run_mouse_gesture(self, gesture, lms, now):
+        if gesture in ('idle', 'none'):
+            return
         tx, ty = self._map_cursor(lms[self._cursor_lm].x, lms[self._cursor_lm].y)
         self.smooth_x += (tx - self.smooth_x) * MOUSE_SMOOTHING
         self.smooth_y += (ty - self.smooth_y) * MOUSE_SMOOTHING

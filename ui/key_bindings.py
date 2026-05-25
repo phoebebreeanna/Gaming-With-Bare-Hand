@@ -153,7 +153,8 @@ class KeyBindings(QWidget):
             srl.addWidget(sec_hdr)
             srl.addStretch()
             reset_btn = QPushButton("RESET ALL")
-            reset_btn.setFixedSize(68, 18)
+            reset_btn.setFixedHeight(18)
+            reset_btn.setMinimumWidth(60)
             reset_btn.setCursor(Qt.PointingHandCursor)
             reset_btn.clicked.connect(lambda _, m=mode: self._reset_mode(m))
             srl.addWidget(reset_btn)
@@ -166,28 +167,31 @@ class KeyBindings(QWidget):
                 locked = len(entry) > 3
 
                 row = QWidget()
-                row.setFixedHeight(44)
+                row.setMinimumHeight(44)
                 rl = QHBoxLayout(row)
-                rl.setContentsMargins(16, 0, 16, 0)
+                rl.setContentsMargins(16, 4, 16, 4)
                 rl.setSpacing(0)
 
                 text_col = QVBoxLayout()
                 text_col.setSpacing(2)
                 name_lbl = QLabel(label)
                 desc_lbl = QLabel(desc)
+                desc_lbl.setWordWrap(True)
                 text_col.addWidget(name_lbl)
                 text_col.addWidget(desc_lbl)
                 rl.addLayout(text_col, stretch=1)
 
                 if locked:
                     key_btn = QPushButton(entry[3])
-                    key_btn.setFixedSize(72, 26)
+                    key_btn.setFixedHeight(26)
+                    key_btn.setMinimumWidth(56)
                     key_btn.setEnabled(False)
                     self._locked_keys.add((mode, gesture))
                 else:
                     key_str = mode_binds.get(gesture, '?')
                     key_btn = QPushButton(key_str.upper())
-                    key_btn.setFixedSize(72, 26)
+                    key_btn.setFixedHeight(26)
+                    key_btn.setMinimumWidth(56)
                     key_btn.setCursor(Qt.PointingHandCursor)
                     key_btn.clicked.connect(
                         lambda _, m=mode, g=gesture: self._start_capture(m, g))

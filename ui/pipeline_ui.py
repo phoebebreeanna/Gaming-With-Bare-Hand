@@ -988,7 +988,7 @@ class PipelineUI(QWidget):
             bar_fill_col = "#e8e8e8"; bar_bg_col = "#262626"
             log_bg = "#050508"; log_txt = "#9a9a9a"
             success = "#00cc66"; locked_col = "#3a3a3a"; step_hover = "#1a1a1a"
-            warn = "#cc4444"; cam_bg = "#000000"
+            warn = "#cc4444"; cam_bg = "#0a0a0a"
         else:
             bg   = "#F4F4F4"; panel = "#FFFFFF"; border = "#D8CEC7"
             text = "#111111"; dim   = "#6F655F"; muted  = "#B8B0AB"
@@ -996,7 +996,7 @@ class PipelineUI(QWidget):
             bar_fill_col = "#111111"; bar_bg_col = "#E8E0DA"
             log_bg = "#FAFAFA"; log_txt = "#4A4A4A"
             success = "#00A36C"; locked_col = "#D8D0CA"; step_hover = "#F0EBE7"
-            warn = "#B44545"; cam_bg = "#000000"
+            warn = "#B44545"; cam_bg = "#F4F4F4"
 
         self.setStyleSheet(f"background-color: {bg};")
         self.header.setStyleSheet(f"background-color: {bg}; border-bottom: 1px solid {border};")
@@ -1032,7 +1032,7 @@ class PipelineUI(QWidget):
         self._idle_lbl.setStyleSheet(
             f"color: {muted}; font-size: 11px; font-weight: 700; letter-spacing: 2px; background: transparent; border: none;")
 
-        self._collect_cam_lbl.setStyleSheet(f"background-color: {cam_bg}; border: 1px solid {border};")
+        self._collect_cam_lbl.setStyleSheet(f"background-color: transparent; border: none;")
         self._collect_ctrl.setStyleSheet(f"background-color: {panel}; border: 1px solid {border};")
         self._collect_scroll.setStyleSheet(f"background-color: {panel}; border: none;")
         self._collect_scroll.viewport().setStyleSheet(f"background-color: {panel}; border: none;")
@@ -1124,7 +1124,7 @@ class PipelineUI(QWidget):
             }}
         """)
 
-        self._review_hand_lbl.setStyleSheet(f"background-color: {cam_bg}; border: 1px solid {border};")
+        self._review_hand_lbl.setStyleSheet(f"background-color: transparent; border: none;")
         self._review_ctrl.setStyleSheet(f"background-color: {panel}; border: 1px solid {border};")
         self._review_scroll.setStyleSheet(f"background-color: {panel}; border: none;")
         self._review_scroll.viewport().setStyleSheet(f"background-color: {panel}; border: none;")

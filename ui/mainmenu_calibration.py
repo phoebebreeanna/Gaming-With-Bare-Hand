@@ -1,3 +1,5 @@
+import math
+
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QSizePolicy, QProgressBar
@@ -245,7 +247,8 @@ class MainMenuCalibration(QWidget):
         footer_layout.setContentsMargins(20, 0, 20, 0)
 
         self.back_btn = QPushButton("BACK")
-        self.back_btn.setFixedSize(92, 34)
+        self.back_btn.setFixedHeight(34)
+        self.back_btn.setMinimumWidth(76)
         self.back_btn.setCursor(Qt.PointingHandCursor)
         self.back_btn.clicked.connect(self.on_back.emit)
         footer_layout.addWidget(self.back_btn)
@@ -253,7 +256,8 @@ class MainMenuCalibration(QWidget):
         footer_layout.addStretch()
 
         self.continue_btn = QPushButton("CONTINUE")
-        self.continue_btn.setFixedSize(120, 34)
+        self.continue_btn.setFixedHeight(34)
+        self.continue_btn.setMinimumWidth(100)
         self.continue_btn.setCursor(Qt.PointingHandCursor)
         self.continue_btn.clicked.connect(self.on_continue.emit)
         footer_layout.addWidget(self.continue_btn)
@@ -400,11 +404,11 @@ class MainMenuCalibration(QWidget):
         self.tracking_lbl.setStyleSheet(f"color: {dim}; font-size: 8px; letter-spacing: 1.2px; border: none;")
         self.camera_body.setStyleSheet(f"background-color: {camera_bg}; border: none;")
         self.camera_label.setStyleSheet(f"""
-            background-color: #000000;
+            background-color: transparent;
             color: {muted};
             font-size: 10px;
             letter-spacing: 2px;
-            border: 1px solid {border};
+            border: none;
         """)
 
         for side_panel in [self.distance_panel, self.telemetry_panel]:
@@ -478,6 +482,11 @@ class MainMenuCalibration(QWidget):
 
     def set_progress(self, frac: float):
         self.hold_progress.setValue(int(frac * 100))
+        if frac > 0:
+            remaining = max(1, math.ceil((1.0 - frac) * 3))
+            self.hold_label.setText(f"HOLD IN RANGE  ·  {remaining}")
+        else:
+            self.hold_label.setText("HOLD IN RANGE TO AUTO-ADVANCE")
 
     def set_telemetry(self, lighting: str, background: str):
         good  = "#00d084" if self.is_dark else "#00A36C"

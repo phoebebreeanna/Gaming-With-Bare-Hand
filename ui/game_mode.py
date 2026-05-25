@@ -2,7 +2,7 @@ import os
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QPushButton, QSizePolicy, QComboBox,
+    QLabel, QPushButton, QSizePolicy, QComboBox, QScrollArea,
 )
 from PySide6.QtCore import Qt, Signal
 
@@ -110,7 +110,7 @@ class GameMode(QWidget):
         cl.addWidget(self.page_title)
 
         self.mouse_panel = QWidget()
-        self.mouse_panel.setFixedHeight(52)
+        self.mouse_panel.setMinimumHeight(52)
         mp = QHBoxLayout(self.mouse_panel)
         mp.setContentsMargins(16, 0, 16, 0)
         mp.setSpacing(0)
@@ -119,12 +119,14 @@ class GameMode(QWidget):
         text_col.setSpacing(2)
         self.mouse_hdr_lbl = QLabel("MOUSE MODE")
         self.mouse_sub_lbl = QLabel("Enable cursor control when not in a game mode")
+        self.mouse_sub_lbl.setWordWrap(True)
         text_col.addWidget(self.mouse_hdr_lbl)
         text_col.addWidget(self.mouse_sub_lbl)
         mp.addLayout(text_col, stretch=1)
 
         self.mouse_toggle_btn = QPushButton("ON" if self.mouse_enabled else "OFF")
-        self.mouse_toggle_btn.setFixedSize(52, 26)
+        self.mouse_toggle_btn.setFixedHeight(26)
+        self.mouse_toggle_btn.setMinimumWidth(46)
         self.mouse_toggle_btn.setCursor(Qt.PointingHandCursor)
         self.mouse_toggle_btn.clicked.connect(self._toggle_mouse)
         mp.addWidget(self.mouse_toggle_btn)
@@ -135,7 +137,7 @@ class GameMode(QWidget):
         cl.addWidget(self.div1)
 
         self.cursor_panel = QWidget()
-        self.cursor_panel.setFixedHeight(52)
+        self.cursor_panel.setMinimumHeight(52)
         crp = QHBoxLayout(self.cursor_panel)
         crp.setContentsMargins(16, 0, 16, 0)
         crp.setSpacing(0)
@@ -144,6 +146,7 @@ class GameMode(QWidget):
         cursor_text_col.setSpacing(2)
         self.cursor_hdr_lbl = QLabel("CURSOR TRACKING POINT")
         self.cursor_sub_lbl = QLabel("Landmark used to position the cursor on screen")
+        self.cursor_sub_lbl.setWordWrap(True)
         cursor_text_col.addWidget(self.cursor_hdr_lbl)
         cursor_text_col.addWidget(self.cursor_sub_lbl)
         crp.addLayout(cursor_text_col, stretch=1)
@@ -151,11 +154,13 @@ class GameMode(QWidget):
         cursor_row = QHBoxLayout()
         cursor_row.setSpacing(4)
         tip_btn = QPushButton("TIP")
-        tip_btn.setFixedSize(52, 26)
+        tip_btn.setFixedHeight(26)
+        tip_btn.setMinimumWidth(46)
         tip_btn.setCursor(Qt.PointingHandCursor)
         tip_btn.clicked.connect(lambda: self._set_cursor_point('tip'))
         knuckle_btn = QPushButton("KNUCKLE")
-        knuckle_btn.setFixedSize(72, 26)
+        knuckle_btn.setFixedHeight(26)
+        knuckle_btn.setMinimumWidth(64)
         knuckle_btn.setCursor(Qt.PointingHandCursor)
         knuckle_btn.clicked.connect(lambda: self._set_cursor_point('knuckle'))
         cursor_row.addWidget(tip_btn)
@@ -169,7 +174,7 @@ class GameMode(QWidget):
         cl.addWidget(self.div1b)
 
         self.zone_panel = QWidget()
-        self.zone_panel.setFixedHeight(52)
+        self.zone_panel.setMinimumHeight(52)
         zp = QHBoxLayout(self.zone_panel)
         zp.setContentsMargins(16, 0, 16, 0)
         zp.setSpacing(0)
@@ -178,6 +183,7 @@ class GameMode(QWidget):
         zone_text_col.setSpacing(2)
         self.zone_hdr_lbl = QLabel("ZONE SIZE")
         self.zone_sub_lbl = QLabel("Control zone for cursor tracking area")
+        self.zone_sub_lbl.setWordWrap(True)
         zone_text_col.addWidget(self.zone_hdr_lbl)
         zone_text_col.addWidget(self.zone_sub_lbl)
         zp.addLayout(zone_text_col, stretch=1)
@@ -186,7 +192,8 @@ class GameMode(QWidget):
         zone_row.setSpacing(4)
         for z in ('small', 'medium', 'large'):
             btn = QPushButton(z.upper())
-            btn.setFixedSize(56, 26)
+            btn.setFixedHeight(26)
+            btn.setMinimumWidth(50)
             btn.setCursor(Qt.PointingHandCursor)
             btn.clicked.connect(lambda _, z=z: self._set_zone_setting(z))
             zone_row.addWidget(btn)
@@ -199,7 +206,7 @@ class GameMode(QWidget):
         cl.addWidget(self.div1c)
 
         self.side_panel = QWidget()
-        self.side_panel.setFixedHeight(52)
+        self.side_panel.setMinimumHeight(52)
         sp = QHBoxLayout(self.side_panel)
         sp.setContentsMargins(16, 0, 16, 0)
         sp.setSpacing(0)
@@ -208,6 +215,7 @@ class GameMode(QWidget):
         side_text_col.setSpacing(2)
         self.side_hdr_lbl = QLabel("GAME MOUSE SIDE")
         self.side_sub_lbl = QLabel("Which screen half to use when devil horn is active")
+        self.side_sub_lbl.setWordWrap(True)
         side_text_col.addWidget(self.side_hdr_lbl)
         side_text_col.addWidget(self.side_sub_lbl)
         sp.addLayout(side_text_col, stretch=1)
@@ -216,7 +224,8 @@ class GameMode(QWidget):
         side_row.setSpacing(4)
         for s in ('left', 'right'):
             btn = QPushButton(s.upper())
-            btn.setFixedSize(52, 26)
+            btn.setFixedHeight(26)
+            btn.setMinimumWidth(46)
             btn.setCursor(Qt.PointingHandCursor)
             btn.clicked.connect(lambda _, s=s: self._set_mouse_side(s))
             side_row.addWidget(btn)
@@ -229,7 +238,7 @@ class GameMode(QWidget):
         cl.addWidget(self.div1d)
 
         self.camera_panel = QWidget()
-        self.camera_panel.setFixedHeight(52)
+        self.camera_panel.setMinimumHeight(52)
         cp = QHBoxLayout(self.camera_panel)
         cp.setContentsMargins(16, 0, 16, 0)
         cp.setSpacing(0)
@@ -238,12 +247,14 @@ class GameMode(QWidget):
         cam_text_col.setSpacing(2)
         self.camera_hdr_lbl = QLabel("CAMERA INPUT")
         self.camera_sub_lbl = QLabel("Select which camera to use for hand tracking")
+        self.camera_sub_lbl.setWordWrap(True)
         cam_text_col.addWidget(self.camera_hdr_lbl)
         cam_text_col.addWidget(self.camera_sub_lbl)
         cp.addLayout(cam_text_col, stretch=1)
 
         self._camera_combo = QComboBox()
-        self._camera_combo.setFixedSize(140, 26)
+        self._camera_combo.setFixedHeight(26)
+        self._camera_combo.setMinimumWidth(100)
         self._camera_combo.currentIndexChanged.connect(self._on_camera_combo_changed)
         cp.addWidget(self._camera_combo)
         cl.addWidget(self.camera_panel)
@@ -256,8 +267,16 @@ class GameMode(QWidget):
         self.mode_section_hdr = QLabel("GAME MODE")
         cl.addWidget(self.mode_section_hdr)
 
-        mode_row = QHBoxLayout()
+        mode_scroll = QScrollArea()
+        mode_scroll.setWidgetResizable(True)
+        mode_scroll.setFrameShape(QScrollArea.NoFrame)
+        mode_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        mode_scroll.setFixedHeight(148)
+
+        mode_scroll_inner = QWidget()
+        mode_row = QHBoxLayout(mode_scroll_inner)
         mode_row.setSpacing(12)
+        mode_row.setContentsMargins(0, 0, 0, 0)
 
         modes = [
             ("🖱", "MOUSE",      "mouse"),
@@ -271,7 +290,9 @@ class GameMode(QWidget):
             card_col.setSpacing(6)
 
             card = QPushButton()
-            card.setFixedSize(150, 96)
+            card.setMinimumSize(100, 80)
+            card.setFixedHeight(96)
+            card.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
             card.setCheckable(True)
             card.setCursor(Qt.PointingHandCursor)
             card.clicked.connect(lambda _, k=key: self.select_mode(k))
@@ -300,11 +321,13 @@ class GameMode(QWidget):
 
             def_btn = QPushButton("DEFAULT")
             def_btn.setFixedHeight(22)
+            def_btn.setMinimumWidth(56)
             def_btn.setCursor(Qt.PointingHandCursor)
             def_btn.clicked.connect(lambda _, k=key: self._set_model_source(k, 'default'))
 
             custom_btn = QPushButton("CUSTOM")
             custom_btn.setFixedHeight(22)
+            custom_btn.setMinimumWidth(52)
             custom_btn.setCursor(Qt.PointingHandCursor)
             custom_btn.clicked.connect(lambda _, k=key: self._set_model_source(k, 'custom'))
             custom_btn.setEnabled(self._custom_exists(key))
@@ -319,10 +342,16 @@ class GameMode(QWidget):
             mode_row.addLayout(card_col)
 
         mode_row.addStretch()
-        cl.addLayout(mode_row)
+        mode_scroll.setWidget(mode_scroll_inner)
+        cl.addWidget(mode_scroll)
         cl.addStretch()
 
-        root.addWidget(content, stretch=1)
+        self._settings_scroll = QScrollArea()
+        self._settings_scroll.setWidgetResizable(True)
+        self._settings_scroll.setFrameShape(QScrollArea.NoFrame)
+        self._settings_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._settings_scroll.setWidget(content)
+        root.addWidget(self._settings_scroll, stretch=1)
 
     def select_mode(self, key: str):
         self.selected_mode = key
@@ -446,6 +475,12 @@ class GameMode(QWidget):
                 pass
             self.camera_changed.emit(d)
 
+    def set_zone(self, zone: str):
+        if self._zone == zone:
+            return
+        self._zone = zone
+        self.apply_theme(self.is_dark)
+
     def set_camera_index(self, idx: int):
         self._camera_index = idx
         if self._camera_combo is None:
@@ -480,6 +515,9 @@ class GameMode(QWidget):
             tog_off_bg     = "#F7F3F0"; tog_off_txt   = "#8B817B"
 
         self.setStyleSheet(f"background-color: {bg};")
+
+        self._settings_scroll.setStyleSheet(f"background-color: {bg}; border: none;")
+        self._settings_scroll.viewport().setStyleSheet(f"background-color: {bg}; border: none;")
 
         self.header.setStyleSheet(f"background-color: {bg};")
         self.header_rule.setStyleSheet(f"background-color: {border};")

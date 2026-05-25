@@ -210,13 +210,15 @@ class MainMenuZone(QWidget):
         footer_layout = QHBoxLayout(self.footer)
         footer_layout.setContentsMargins(20, 0, 20, 0)
         self.back_btn = QPushButton("BACK")
-        self.back_btn.setFixedSize(92, 34)
+        self.back_btn.setFixedHeight(34)
+        self.back_btn.setMinimumWidth(76)
         self.back_btn.setCursor(Qt.PointingHandCursor)
         self.back_btn.clicked.connect(self.on_zone_back.emit)
         footer_layout.addWidget(self.back_btn)
         footer_layout.addStretch()
         self.continue_btn = QPushButton("START TRACKING")
-        self.continue_btn.setFixedSize(140, 34)
+        self.continue_btn.setFixedHeight(34)
+        self.continue_btn.setMinimumWidth(120)
         self.continue_btn.setCursor(Qt.PointingHandCursor)
         self.continue_btn.clicked.connect(self.on_zone_continue.emit)
         footer_layout.addWidget(self.continue_btn)
@@ -409,11 +411,11 @@ class MainMenuZone(QWidget):
         self.tracking_lbl.setStyleSheet(f"color: {dim}; font-size: 8px; letter-spacing: 1.2px; border: none;")
         self.camera_body.setStyleSheet(f"background-color: {camera_bg}; border: none;")
         self.camera_label.setStyleSheet(f"""
-            background-color: #000000;
+            background-color: transparent;
             color: {muted};
             font-size: 10px;
             letter-spacing: 2px;
-            border: 1px solid {border};
+            border: none;
         """)
 
         self.zone_panel.setStyleSheet(f"background-color: {panel}; border: 1px solid {border};")

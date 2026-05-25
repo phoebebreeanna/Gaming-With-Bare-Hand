@@ -435,6 +435,8 @@ class HandControllerThread(
         _saved_fd = os.dup(2)
         os.dup2(_devnull, 2)
         os.close(_devnull)
+        _init_err = None
+        ow_recognizer = None
         try:
             base_options = mp_python.BaseOptions(model_asset_path=MODEL_PATH)
             options      = mp_vision.HandLandmarkerOptions(
@@ -444,7 +446,6 @@ class HandControllerThread(
             )
             detector = mp_vision.HandLandmarker.create_from_options(options)
 
-            ow_recognizer = None
             if os.path.exists(OW_MODEL_PATH):
                 try:
                     ow_opts = mp_vision.GestureRecognizerOptions(
@@ -455,9 +456,15 @@ class HandControllerThread(
                     ow_recognizer = mp_vision.GestureRecognizer.create_from_options(ow_opts)
                 except Exception as e:
                     print(f'[OW] Could not load GestureRecognizer: {e}')
+        except Exception as e:
+            _init_err = str(e)
         finally:
             os.dup2(_saved_fd, 2)
             os.close(_saved_fd)
+
+        if _init_err:
+            self.error_occurred.emit(f"Hand tracker init failed: {_init_err}")
+            return
 
         if ow_recognizer is not None:
             print('[OW] GestureRecognizer loaded')

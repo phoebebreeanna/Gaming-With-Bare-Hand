@@ -168,6 +168,27 @@ def split_hands(result):
         else:                lms_right = hand
     return lms_left, lms_right
 
+def split_hands_by_handedness(result):
+    """Split hands using MediaPipe's own handedness classification.
+    For a horizontally flipped (mirrored) frame, 'Left' = user's left hand,
+    'Right' = user's right hand. Falls back to spatial split if handedness
+    is unavailable."""
+    if not result or not result.hand_landmarks:
+        return None, None
+    user_left = user_right = None
+    for i, hand in enumerate(result.hand_landmarks):
+        if result.handedness and i < len(result.handedness):
+            if result.handedness[i][0].category_name == 'Left':
+                user_left = hand
+            else:
+                user_right = hand
+        else:
+            if hand[0].x < 0.5:
+                user_left = hand
+            else:
+                user_right = hand
+    return user_left, user_right
+
 def tick_game_opt(lms, lms2, now, hold_t, cur_num):
     opt_now = get_game_option(lms, lms2)
     if opt_now is not None:

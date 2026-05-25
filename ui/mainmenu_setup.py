@@ -195,7 +195,8 @@ class MainMenuSetup(QWidget):
         bottom.addStretch()
 
         self.go_btn = QPushButton("LET'S GO")
-        self.go_btn.setFixedSize(112, 34)
+        self.go_btn.setFixedHeight(34)
+        self.go_btn.setMinimumWidth(96)
         self.go_btn.setCursor(Qt.PointingHandCursor)
         self.go_btn.clicked.connect(self.on_lets_go.emit)
         bottom.addWidget(self.go_btn)

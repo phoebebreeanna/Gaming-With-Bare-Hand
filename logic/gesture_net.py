@@ -27,14 +27,17 @@ def extract_features(lms, prev_row):
 def run_nn(lms, prev_row, model, le, conf_thresh):
     if model is None or le is None:
         return 'none', 0.0, prev_row
-    features, new_prev = extract_features(lms, prev_row)
-    x = torch.tensor([features], dtype=torch.float32)
-    with torch.no_grad():
-        probs = torch.softmax(model(x), dim=1)[0]
-        conf, idx = probs.max(0)
-    if conf.item() < conf_thresh:
-        return 'none', conf.item(), new_prev
-    return le.inverse_transform([idx.item()])[0], conf.item(), new_prev
+    try:
+        features, new_prev = extract_features(lms, prev_row)
+        x = torch.tensor([features], dtype=torch.float32)
+        with torch.no_grad():
+            probs = torch.softmax(model(x), dim=1)[0]
+            conf, idx = probs.max(0)
+        if conf.item() < conf_thresh:
+            return 'none', conf.item(), new_prev
+        return le.inverse_transform([idx.item()])[0], conf.item(), new_prev
+    except Exception:
+        return 'none', 0.0, prev_row
 
 def load_nn(weights_path, encoder_path, input_size=126, tag='model'):
     try:

@@ -54,7 +54,7 @@ class GestureGuide(QWidget):
                         {"img": "assets/gestures/subway/slide.jpg",       "n": "02", "name": "Two Fingers Down - Slide",     "desc": "Point index and middle fingers downward to slide",                    "tag": "ACTIVE"},
                         {"img": "assets/gestures/subway/swipe_left.png",  "n": "03", "name": "Two Fingers Left - Swipe Left","desc": "Point index and middle fingers to the left to swipe left",            "tag": "ACTIVE"},
                         {"img": "assets/gestures/subway/swipe_right.png", "n": "04", "name": "Two Fingers Right - Swipe Right","desc": "Point index and middle fingers to the right to swipe right",        "tag": "ACTIVE"},
-                        {"img": "assets/gestures/subway/space.png",       "n": "05", "name": "Metal Sign - Space Bar",      "desc": "Raise index and pinky fingers (devil horn / metal sign) to activate space", "tag": "ACTIVE"},
+                        {"img": "assets/gestures/subway/space.png",       "n": "05", "name": "Shaka - Space Bar",             "desc": "Raise thumb and pinky fingers (shaka sign) to activate space",              "tag": "ACTIVE"},
                     ],
                 },
             ],
@@ -118,7 +118,7 @@ class GestureGuide(QWidget):
         layout.setSpacing(0)
 
         self.header = QWidget()
-        self.header.setFixedHeight(58)
+        self.header.setMinimumHeight(58)
         header_layout = QHBoxLayout(self.header)
         header_layout.setContentsMargins(24, 0, 14, 0)
         header_layout.setSpacing(14)
@@ -133,18 +133,21 @@ class GestureGuide(QWidget):
         header_layout.addWidget(self.title_lbl)
         header_layout.addStretch()
 
-        self.mode_tab_row = QHBoxLayout()
+        tabs_wrap = QWidget()
+        self.mode_tab_row = QHBoxLayout(tabs_wrap)
         self.mode_tab_row.setSpacing(4)
+        self.mode_tab_row.setContentsMargins(0, 0, 0, 0)
         self.mode_tab_btns = {}
         for mode in self.mode_sections:
             btn = QPushButton(mode.upper())
             btn.setFixedHeight(28)
+            btn.setMinimumWidth(40)
             btn.setCursor(Qt.PointingHandCursor)
             btn.clicked.connect(lambda _, m=mode: self.switch_mode(m))
             self.mode_tab_btns[mode] = btn
             self.mode_tab_row.addWidget(btn)
 
-        header_layout.addLayout(self.mode_tab_row)
+        header_layout.addWidget(tabs_wrap)
         layout.addWidget(self.header)
 
         self.scroll = QScrollArea()
@@ -207,13 +210,13 @@ class GestureGuide(QWidget):
 
     def _make_card(self, g):
         card = QWidget()
-        card.setFixedHeight(100)
+        card.setMinimumHeight(100)
         hl = QHBoxLayout(card)
         hl.setContentsMargins(0, 0, 0, 0)
         hl.setSpacing(0)
 
         img = QLabel()
-        img.setFixedSize(130, 100)
+        img.setFixedSize(110, 100)
         img.setAlignment(Qt.AlignCenter)
         img_path = g.get("img", "")
         if img_path:

@@ -27,8 +27,11 @@ def _read() -> dict:
         return {}
 
 def _write(config: dict) -> None:
-    with open(_CONFIG_FILE, 'w') as f:
-        json.dump(config, f, indent=2)
+    try:
+        with open(_CONFIG_FILE, 'w') as f:
+            json.dump(config, f, indent=2)
+    except OSError:
+        pass
 
 def is_setup_done() -> bool:
     return _read().get('setup_complete', False)
@@ -51,7 +54,7 @@ def set_game_mode(mode: str) -> None:
     _write(config)
 
 def get_mouse_enabled() -> bool:
-    return _read().get('mouse_enabled', False)
+    return _read().get('mouse_enabled', True)
 
 def set_mouse_enabled(enabled: bool) -> None:
     config = _read()

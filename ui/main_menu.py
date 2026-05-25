@@ -34,8 +34,15 @@ class MainMenu(QWidget):
         self._zone_hold_since = None
         self._zone_pending = None
         self._current_zone = get_saved_zone()
-        self.start_time = time.time() 
+        self.start_time = time.time()
         self.init_ui()
+
+        try:
+            from logic.app_config import get_game_mode
+            _mode_labels = {'mouse': 'MOUSE', 'subway': 'SUBWAY', 'racing': 'RACING', 'open_world': 'OPEN WORLD'}
+            self.info_cards["MODE"].setText(_mode_labels.get(get_game_mode(), 'MOUSE'))
+        except Exception:
+            pass
 
         if not is_setup_done():
             self.home_stack.setCurrentIndex(1)
@@ -454,7 +461,7 @@ class MainMenu(QWidget):
 
         self.camera_frame = QWidget()
         self.camera_frame.setStyleSheet("""
-            background-color: #000000;
+            background-color: #F4F4F4;
             border: 1px solid #D8D8D8;
             border-radius: 4px;
         """)
@@ -526,13 +533,9 @@ class MainMenu(QWidget):
 
         layout.addWidget(self.camera_frame, stretch=1)
 
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(8)
-
         self.footer_status = QLabel(
             "ZONE · MEDIUM    UPTIME · 00:00:00"
         )
-
         self.footer_status.setStyleSheet("""
             color: #6F655F;
             font-size: 8px;
@@ -541,10 +544,15 @@ class MainMenu(QWidget):
             background: transparent;
             border: none;
         """)
-        self.footer_status.setMinimumWidth(160)
         self.footer_status.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        status_row = QHBoxLayout()
+        status_row.setSpacing(0)
+        status_row.addWidget(self.footer_status)
+        status_row.addStretch()
+        layout.addLayout(status_row)
 
-        btn_row.addWidget(self.footer_status)
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
         btn_row.addStretch()
 
         self.start_btn = QPushButton("Start")
@@ -629,8 +637,8 @@ class MainMenu(QWidget):
 
         self.footer_buttons = [self.start_btn, self.pause_btn, self.stop_btn, self.exit_btn]
         for btn in self.footer_buttons:
-            btn.setFixedWidth(84)
-            btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+            btn.setMinimumWidth(70)
+            btn.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
 
         btn_row.addWidget(self.start_btn)
         btn_row.addWidget(self.pause_btn)
@@ -793,7 +801,7 @@ class MainMenu(QWidget):
                 border: none;
             """)
             self.camera_frame.setStyleSheet("""
-                background-color: #000000;
+                background-color: #0a0a0a;
                 border: 1px solid #262626;
                 border-radius: 4px;
             """)
@@ -1068,7 +1076,7 @@ class MainMenu(QWidget):
                 font-size: 10px; letter-spacing: 2px; border: none;
             """)
             self.camera_frame.setStyleSheet("""
-                background-color: #000000;
+                background-color: #F4F4F4;
                 border: 1px solid #D8D8D8;
                 border-radius: 4px;
             """)
@@ -1243,6 +1251,8 @@ class MainMenu(QWidget):
         set_zone(zone)
         if self._is_running and self.controller:
             self.controller.set_zone(zone)
+        if hasattr(self, 'zone_guide'):
+            self.zone_guide._select_zone(zone)
 
     def _on_cursor_point_changed(self, point: str):
         if self.controller:
@@ -1344,6 +1354,8 @@ class MainMenu(QWidget):
                 self.camera_combo.setCurrentIndex(i)
                 self.camera_combo.blockSignals(False)
                 break
+        self._optimal_since = None
+        self.calibration_guide.set_progress(0.0)
         self.home_stack.setCurrentIndex(3)
 
     def _on_setup_camera_select(self, cam_idx: int):
@@ -1361,6 +1373,7 @@ class MainMenu(QWidget):
 
     def _on_distance_back(self):
         self._optimal_since = None
+        self.calibration_guide.set_progress(0.0)
         self.home_stack.setCurrentIndex(2)
 
     def _on_zone_back(self):
@@ -1374,6 +1387,8 @@ class MainMenu(QWidget):
         zone = getattr(self.zone_guide, 'selected_zone', 'large')
         self._current_zone = zone
         mark_setup_done(zone)
+        if hasattr(self, 'game_mode_widget'):
+            self.game_mode_widget.set_zone(zone)
         self._stop_preview()
         self.home_stack.setCurrentIndex(0)
         self._start_controller()
@@ -1478,6 +1493,9 @@ class MainMenu(QWidget):
         model_sources['cursor_point']  = get_cursor_point()
         model_sources['mouse_side']    = get_mouse_side()
         initial_game_mode = get_game_mode()
+
+        _mode_labels = {'mouse': 'MOUSE', 'subway': 'SUBWAY', 'racing': 'RACING', 'open_world': 'OPEN WORLD'}
+        self.info_cards["MODE"].setText(_mode_labels.get(initial_game_mode, initial_game_mode.upper()))
 
         zone = getattr(self.zone_guide, 'selected_zone', None) or get_saved_zone()
         self.controller = HandControllerThread(
@@ -1593,7 +1611,7 @@ class MainMenu(QWidget):
                 border: none;
             """)
             self.camera_frame.setStyleSheet("""
-                background-color: #000000;
+                background-color: #0a0a0a;
                 border: 1px solid #262626;
                 border-radius: 4px;
             """)
@@ -1606,7 +1624,7 @@ class MainMenu(QWidget):
                 border: none;
             """)
             self.camera_frame.setStyleSheet("""
-                background-color: #000000;
+                background-color: #F4F4F4;
                 border: 1px solid #D8D8D8;
                 border-radius: 4px;
             """)

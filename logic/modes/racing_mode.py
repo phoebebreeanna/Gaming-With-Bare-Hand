@@ -1,8 +1,8 @@
 import pyautogui
 
 from logic.hand_utils import (
-    draw_hand, draw_finger_dot, split_hands, is_devil_horn,
-    get_steer_angle, MOUSE_CONF_THRESH,
+    draw_hand, draw_finger_dot, is_devil_horn,
+    split_hands, split_hands_by_handedness, get_steer_angle, MOUSE_CONF_THRESH,
 )
 from logic.gesture_net import run_nn
 
@@ -16,10 +16,11 @@ class RacingModeMixin:
     def _rc_set_held_keys(self, desired):
         for k in list(self.rc_held_keys - desired):
             try: pyautogui.keyUp(k)
-            except: pass
+            except Exception: pass
             self.rc_held_keys.discard(k)
         for k in list(desired - self.rc_held_keys):
-            pyautogui.keyDown(k)
+            try: pyautogui.keyDown(k)
+            except Exception: pass
             self.rc_held_keys.add(k)
 
     def _rc_release_all(self):
@@ -29,12 +30,18 @@ class RacingModeMixin:
         self.rc_held_keys.clear()
 
     def _tick_racing_mode(self, lms, lms2, result, display, now, game_opt_frac):
-        lms_left = lms_right = None
-        if result and result.hand_landmarks:
-            lms_left, lms_right = split_hands(result)
+        user_left, user_right = split_hands_by_handedness(result)
+        lms_left, lms_right   = split_hands(result) if (result and result.hand_landmarks) else (None, None)
+
+        if self._mouse_side == 'right':
+            devil_hand_lms = user_right
+            mouse_hand_lms = user_left
+        else:
+            devil_hand_lms = user_left
+            mouse_hand_lms = user_right
 
         devil_horn = (self._mouse_in_game_enabled and
-                      lms_left is not None and is_devil_horn(lms_left))
+                      devil_hand_lms is not None and is_devil_horn(devil_hand_lms))
         if devil_horn != self._devilhorn_mouse:
             self.mouse_prev_row     = None
             self.left_click_entry_t = None
@@ -50,14 +57,14 @@ class RacingModeMixin:
 
         if devil_horn:
             gesture_m = 'idle'
-            if lms_right:
+            if mouse_hand_lms:
                 gesture_m, _, self.mouse_prev_row = run_nn(
-                    lms_right, self.mouse_prev_row,
+                    mouse_hand_lms, self.mouse_prev_row,
                     self.mouse_model, self.mouse_le, MOUSE_CONF_THRESH)
-                self._run_mouse_gesture(gesture_m, lms_right, now)
-                draw_hand(display, lms_right)
-                draw_finger_dot(display, lms_right, gesture_m, self.tm_drag_active, self._cursor_lm)
-            draw_hand(display, lms_left, (255, 100, 0))
+                self._run_mouse_gesture(gesture_m, mouse_hand_lms, now)
+                draw_hand(display, mouse_hand_lms)
+                draw_finger_dot(display, mouse_hand_lms, gesture_m, self.tm_drag_active, self._cursor_lm)
+            draw_hand(display, devil_hand_lms, (255, 100, 0))
             self.gesture_changed.emit(
                 f'MOUSE: {gesture_m.upper().replace("_", " ")}', 'Devil horn mouse mode')
             self.running_data.emit({
