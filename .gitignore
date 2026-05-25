@@ -3,3 +3,7 @@ __pycache__/
 *.pyc
 *.pyo
 .env
+.vscode
+logic/__pycache__
+ui/__pycache__
+.DS_Store
