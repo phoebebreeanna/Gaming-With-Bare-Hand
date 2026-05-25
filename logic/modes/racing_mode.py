@@ -1,7 +1,7 @@
 import pyautogui
 
 from logic.hand_utils import (
-    draw_hand, draw_finger_dot, split_hands, is_metal_sign,
+    draw_hand, draw_finger_dot, split_hands, is_devil_horn,
     get_steer_angle, MOUSE_CONF_THRESH,
 )
 from logic.gesture_net import run_nn
@@ -34,7 +34,7 @@ class RacingModeMixin:
             lms_left, lms_right = split_hands(result)
 
         devil_horn = (self._mouse_in_game_enabled and
-                      lms_left is not None and is_metal_sign(lms_left))
+                      lms_left is not None and is_devil_horn(lms_left))
         if devil_horn != self._devilhorn_mouse:
             self.mouse_prev_row     = None
             self.left_click_entry_t = None

@@ -34,9 +34,9 @@ def is_setup_done() -> bool:
     return _read().get('setup_complete', False)
 
 def get_saved_zone() -> str:
-    return _read().get('zone', 'medium')
+    return _read().get('zone', 'large')
 
-def mark_setup_done(zone: str = 'medium') -> None:
+def mark_setup_done(zone: str = 'large') -> None:
     config = _read()
     config['setup_complete'] = True
     config['zone'] = zone

@@ -1371,7 +1371,7 @@ class MainMenu(QWidget):
     def _on_zone_continue(self):
         self._zone_hold_since = None
         self._zone_pending = None
-        zone = getattr(self.zone_guide, 'selected_zone', 'medium')
+        zone = getattr(self.zone_guide, 'selected_zone', 'large')
         self._current_zone = zone
         mark_setup_done(zone)
         self._stop_preview()

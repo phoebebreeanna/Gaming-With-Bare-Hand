@@ -120,7 +120,7 @@ def is_shaka(lms):
     f = fingers_extended(lms)
     return (lms[4].y < lms[3].y) and f['pinky'] and not f['index'] and not f['middle'] and not f['ring']
 
-def is_metal_sign(lms):
+def is_devil_horn(lms):
     f = fingers_extended(lms)
     return f['index'] and f['pinky'] and not f['middle'] and not f['ring']
 

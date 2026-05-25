@@ -180,7 +180,7 @@ class HandControllerThread(
     running_data    = Signal(object)
     stopped_data    = Signal(float, float)
 
-    def __init__(self, camera_index=0, initial_zone='medium', skip_intro=False,
+    def __init__(self, camera_index=0, initial_zone='large', skip_intro=False,
                  model_sources=None, initial_game_mode='mouse'):
         super().__init__()
         self.camera_index      = camera_index
@@ -232,7 +232,7 @@ class HandControllerThread(
         self.zone_intro_start_t = None
         self.zone_start_t       = None
         self.guide_start_t      = None
-        self.chosen_zone        = 'medium'
+        self.chosen_zone        = 'large'
         self.dist_ok_since      = None
         self.range_min_x = self.range_max_x = None
         self.range_min_y = self.range_max_y = None
@@ -304,18 +304,20 @@ class HandControllerThread(
         self._devilhorn_mouse  = False
 
     def _set_zone(self, zone_name):
-        half = ZONE_PRESETS.get(zone_name, 0.55) / 2
-        if self._mouse_side == 'left':
-            center_x = 0.25
-        elif self._mouse_side == 'right':
-            center_x = 0.75
+        size = ZONE_PRESETS.get(zone_name, 0.55)
+        if self._mouse_side == 'right':
+            self.range_min_x = 0.5
+            self.range_max_x = 0.5 + size
+        elif self._mouse_side == 'left':
+            self.range_min_x = 0.5 - size
+            self.range_max_x = 0.5
         else:
-            center_x = 0.5
-        self.range_min_x = center_x - half
-        self.range_max_x = center_x + half
-        center_y = 0.5
-        self.range_min_y = center_y - half
-        self.range_max_y = center_y + half
+            half = size / 2
+            self.range_min_x = 0.5 - half
+            self.range_max_x = 0.5 + half
+        half_y = size / 2
+        self.range_min_y = 0.5 - half_y
+        self.range_max_y = 0.5 + half_y
 
     def _map_cursor(self, tx, ty):
         import numpy as np

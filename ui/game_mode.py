@@ -32,7 +32,7 @@ class GameMode(QWidget):
         self.mouse_enabled = False
         self._camera_index = 0
         self._cursor_point = 'knuckle'
-        self._zone         = 'medium'
+        self._zone         = 'large'
         self._mouse_side   = 'right'
         self._mode_sources = {k: 'default' for k in ('mouse', 'subway', 'racing')}
         self._source_btns  = {}

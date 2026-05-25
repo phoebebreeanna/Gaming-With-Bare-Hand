@@ -12,7 +12,7 @@ class MainMenuZone(QWidget):
     def __init__(self, is_dark=False):
         super().__init__()
         self.is_dark = is_dark
-        self.selected_zone = 'medium'
+        self.selected_zone = 'large'
         self._pending_zone = None
         self.init_ui()
         self.apply_theme(self.is_dark)
@@ -166,8 +166,8 @@ class MainMenuZone(QWidget):
 
         self.zone_buttons = {}
         zone_options = [
-            ('small',  'SMALL',  '1 finger - precise area'),
-            ('medium', 'MEDIUM', '2 fingers - balanced'),
+            ('small',  'SMALL',  '1 finger - small area'),
+            ('medium', 'MEDIUM', '2 fingers - medium area'),
             ('large',  'LARGE',  '3 fingers - wide area'),
         ]
         for name, label, hint in zone_options:
