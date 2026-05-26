@@ -7,3 +7,7 @@ __pycache__/
 .DS_Store
 logic/app_config.json
 logic/data/custom
+research/dataset
+build
+dist
+main.spec
