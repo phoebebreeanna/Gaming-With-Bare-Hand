@@ -116,7 +116,46 @@ Custom-trained models are saved to `logic/data/custom/` via the Train Model page
 python main.py
 ```
 
+or via Make:
+
+```bash
+make run
+```
+
 A 3-second welcome screen appears, then the main interface loads.
+
+---
+
+## Building the app
+
+A `Makefile` is included for all common tasks.
+
+| Command | Description |
+|---|---|
+| `make run` | Run the app directly with Python |
+| `make build-mac` | Build a standalone `.app` bundle for macOS (arm64) |
+| `make build-win` | Build a standalone `.exe` for Windows |
+| `make icon-mac` | Generate `hand_gesture_icon.icns` from the source PNG |
+| `make icon-win` | Generate `hand_gesture_icon.ico` from the source PNG |
+| `make eval` | Run the gesture evaluation suite against `research/dataset/` |
+| `make clean` | Remove `build/`, `dist/`, and `.spec` files |
+
+### macOS app bundle
+
+```bash
+make build-mac
+```
+
+Produces `dist/main.app`. Double-click to open, or distribute the `.app` folder.
+macOS will prompt for camera permission on first launch.
+
+### Windows executable
+
+```bash
+make build-win
+```
+
+Produces `dist/main/main.exe` (onedir). Distribute the entire `dist/main/` folder.
 
 ---
 
@@ -255,13 +294,57 @@ Custom models are saved to `logic/data/custom/` and are not tracked by git.
 
 ---
 
+## Marketing page
+
+`index.html` is a self-contained static landing page for the project - no build step or server needed, just open it in a browser.
+
+It covers the project pitch, feature highlights, the five-stage processing pipeline, and team credits. It is independent of the Python app and is not bundled into the desktop build.
+
+---
+
+## Research
+
+The `research/` folder contains everything used to evaluate the gesture recognition systems.
+
+```
+research/
+├── evaluate.py          # Evaluation script - runs both rule-based and neural models
+├── hand_landmarker.task # MediaPipe model used during evaluation
+├── dataset/             # Labelled images for each gesture class
+│   ├── left_click/
+│   ├── right_click/
+│   ├── scroll_up/
+│   ├── scroll_down/
+│   ├── release_left_click/
+│   └── release_right_click/
+└── eval_results/        # Output charts and CSV files written by evaluate.py
+```
+
+Run the evaluation with:
+
+```bash
+make eval
+```
+
+Outputs saved to `research/eval_results/`:
+- `evaluation.png` - confusion matrix, per-label accuracy, and latency charts
+- `comparison.png` - rule-based vs neural side-by-side (when both are available)
+- `misclassified_rule.png` / `misclassified_neural.png` - up to 5 failure examples per system
+- `results.json` - full metrics in JSON
+- `per_image_rule.csv` / `per_image_neural.csv` - per-image prediction log
+
+---
+
 ## Project structure
 
 ```
 HandMouse/
 ├── main.py                        # App entry point + event filter
+├── Makefile                       # Build, run, eval, and icon generation
 ├── requirements.txt
 ├── README.md
+├── index.html                     # Static marketing / landing page
+├── research/                      # Evaluation scripts and dataset (see Research above)
 ├── logic/
 │   ├── hand_controller.py         # QThread - gesture detection + state machine
 │   ├── hand_utils.py              # Shared geometry helpers, drawing, constants
@@ -316,6 +399,12 @@ HandMouse/
 ---
 
 ## Troubleshooting
+
+**macOS - camera permission prompt**
+On first launch macOS will show a permission dialog: *"main" would like to access the camera*. Click **Allow**. If you missed it or clicked Deny, go to **System Settings → Privacy & Security → Camera**, find **main** in the list, and toggle it on. The app cannot start gesture tracking without camera access.
+
+**macOS - no permission prompt appears**
+This can happen if the app was previously blocked before it could request permission. Open **System Settings → Privacy & Security → Camera**, check if the app is listed (possibly toggled off), and enable it manually.
 
 **No camera detected**
 Make sure your camera is not in use by another app. Reopen the Settings page - cameras are enumerated on load.

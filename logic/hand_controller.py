@@ -35,7 +35,8 @@ from logic.modes.subway_mode     import SubwayModeMixin
 from logic.modes.racing_mode     import RacingModeMixin
 from logic.modes.open_world_mode import OpenWorldModeMixin, OW_GESTURE_KEY_MAP
 
-LOGIC_DIR  = os.path.dirname(os.path.abspath(__file__))
+import sys as _sys
+LOGIC_DIR  = os.path.join(_sys._MEIPASS, 'logic') if getattr(_sys, 'frozen', False) else os.path.dirname(os.path.abspath(__file__))
 DATA_DIR   = os.path.join(LOGIC_DIR, 'data')
 CUSTOM_DIR = os.path.join(DATA_DIR, 'custom')
 MODEL_PATH = os.path.join(DATA_DIR, 'hand_landmarker.task')

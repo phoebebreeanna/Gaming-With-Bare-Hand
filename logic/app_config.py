@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 
 BINDINGS_DEFAULT = {
@@ -17,7 +18,12 @@ BINDINGS_DEFAULT = {
     },
 }
 
-_CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'app_config.json')
+if getattr(sys, 'frozen', False):
+    _config_dir = os.path.join(os.path.expanduser('~'), '.handmouse')
+    os.makedirs(_config_dir, exist_ok=True)
+    _CONFIG_FILE = os.path.join(_config_dir, 'app_config.json')
+else:
+    _CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'app_config.json')
 
 def _read() -> dict:
     try:

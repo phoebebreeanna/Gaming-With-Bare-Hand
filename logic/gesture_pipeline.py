@@ -284,11 +284,11 @@ class CollectionWindow(QWidget):
         rv.addStretch()
         rv.addWidget(self._hsep())
 
-        self._status_lbl = _qlabel("Select a gesture (0–9)", _DIM)
+        self._status_lbl = _qlabel("Select a gesture (0-9)", _DIM)
         rv.addWidget(self._status_lbl)
 
         rv.addWidget(self._hsep())
-        for line in ["0–9  select", "SPC  record", "D    delete (tap twice)", "G/ESC  finish"]:
+        for line in ["0-9  select", "SPC  record", "D    delete (tap twice)", "G/ESC  finish"]:
             rv.addWidget(_qlabel(line, _DIM, size=9))
 
         outer.addWidget(right)
@@ -321,7 +321,7 @@ class CollectionWindow(QWidget):
             self._status_lbl.setText(f"Ready · {g}  (SPACE to record)")
             self._status_lbl.setStyleSheet(f"color: {_ACCENT}; font-size: 11px; background: transparent;")
         else:
-            self._status_lbl.setText("Select a gesture (0–9)")
+            self._status_lbl.setText("Select a gesture (0-9)")
             self._status_lbl.setStyleSheet(f"color: {_DIM}; font-size: 11px; background: transparent;")
 
     def _on_frame(self, frame_bgr, result):
@@ -868,7 +868,7 @@ def run_collection(cfg, target_gestures=None):
     print(f"Gestures to collect: {gestures}")
     print(f"Target per gesture : {cfg['target']} samples")
     print("\nControls (in collection window):")
-    print("  0–9  select gesture by index")
+    print("  0-9  select gesture by index")
     print("  SPACE  start / stop recording")
     print("  D      delete gesture samples (double-tap to confirm)")
     print("  G / ESC  finish and continue\n")

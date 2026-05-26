@@ -1,9 +1,14 @@
+import os
+import sys
+
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QScrollArea, QFrame
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPixmap
+
+_BASE = sys._MEIPASS if getattr(sys, 'frozen', False) else os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
 
 class GestureGuide(QWidget):
 
@@ -220,7 +225,7 @@ class GestureGuide(QWidget):
         img.setAlignment(Qt.AlignCenter)
         img_path = g.get("img", "")
         if img_path:
-            pix = QPixmap(img_path)
+            pix = QPixmap(os.path.join(_BASE, img_path))
             if not pix.isNull():
                 img.setPixmap(pix.scaled(130, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation))
             else:

@@ -1,0 +1,154 @@
+{
+  "rule_based": {
+    "overall_accuracy": 0.8667,
+    "per_label_accuracy": {
+      "left_click": 0.95,
+      "release_left_click": 1.0,
+      "release_right_click": 0.9,
+      "right_click": 0.65,
+      "scroll_down": 1.0,
+      "scroll_up": 0.7
+    },
+    "per_label_avg_lat_ms": {
+      "left_click": 19.379,
+      "release_left_click": 19.105,
+      "release_right_click": 19.069,
+      "right_click": 20.049,
+      "scroll_down": 19.428,
+      "scroll_up": 19.258
+    },
+    "classification_report": {
+      "idle": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 0.0
+      },
+      "index_pinch": {
+        "precision": 1.0,
+        "recall": 0.95,
+        "f1-score": 0.9743589743589743,
+        "support": 20.0
+      },
+      "move": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 40.0
+      },
+      "scroll_down": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1-score": 1.0,
+        "support": 20.0
+      },
+      "scroll_up": {
+        "precision": 1.0,
+        "recall": 0.7,
+        "f1-score": 0.8235294117647058,
+        "support": 20.0
+      },
+      "tm_pinch": {
+        "precision": 0.8666666666666667,
+        "recall": 0.65,
+        "f1-score": 0.7428571428571429,
+        "support": 20.0
+      },
+      "accuracy": 0.8666666666666667,
+      "macro avg": {
+        "precision": 0.6444444444444445,
+        "recall": 0.5499999999999999,
+        "f1-score": 0.5901242548301372,
+        "support": 120.0
+      },
+      "weighted avg": {
+        "precision": 0.6444444444444445,
+        "recall": 0.55,
+        "f1-score": 0.5901242548301372,
+        "support": 120.0
+      }
+    }
+  },
+  "neural": {
+    "overall_accuracy": 0.8583,
+    "per_label_accuracy": {
+      "left_click": 0.8,
+      "release_left_click": 1.0,
+      "release_right_click": 0.85,
+      "right_click": 0.8,
+      "scroll_down": 0.9,
+      "scroll_up": 0.8
+    },
+    "per_label_avg_lat_ms": {
+      "left_click": 19.816,
+      "release_left_click": 20.11,
+      "release_right_click": 19.96,
+      "right_click": 20.715,
+      "scroll_down": 20.059,
+      "scroll_up": 19.955
+    },
+    "classification_report": {
+      "idle": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 0.0
+      },
+      "left_click": {
+        "precision": 0.8,
+        "recall": 0.8,
+        "f1-score": 0.8,
+        "support": 20.0
+      },
+      "move": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 40.0
+      },
+      "pre_left_click": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 0.0
+      },
+      "pre_right_click": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 0.0
+      },
+      "right_click": {
+        "precision": 0.8421052631578947,
+        "recall": 0.8,
+        "f1-score": 0.8205128205128205,
+        "support": 20.0
+      },
+      "scroll_down": {
+        "precision": 1.0,
+        "recall": 0.9,
+        "f1-score": 0.9473684210526315,
+        "support": 20.0
+      },
+      "scroll_up": {
+        "precision": 1.0,
+        "recall": 0.8,
+        "f1-score": 0.8888888888888888,
+        "support": 20.0
+      },
+      "accuracy": 0.8583333333333333,
+      "macro avg": {
+        "precision": 0.4552631578947368,
+        "recall": 0.4125,
+        "f1-score": 0.43209626630679254,
+        "support": 120.0
+      },
+      "weighted avg": {
+        "precision": 0.6070175438596491,
+        "recall": 0.55,
+        "f1-score": 0.5761283550757235,
+        "support": 120.0
+      }
+    }
+  }
+}

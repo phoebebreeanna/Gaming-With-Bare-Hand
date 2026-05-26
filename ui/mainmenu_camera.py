@@ -187,7 +187,6 @@ class MainMenuCamera(QWidget):
         content_layout.addLayout(panel_row, stretch=1)
         layout.addWidget(self.content, stretch=1)
 
-        # FOOTER
         self.footer = QWidget()
         self.footer.setFixedHeight(58)
         footer_layout = QHBoxLayout(self.footer)

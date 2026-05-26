@@ -169,10 +169,6 @@ def split_hands(result):
     return lms_left, lms_right
 
 def split_hands_by_handedness(result):
-    """Split hands using MediaPipe's own handedness classification.
-    For a horizontally flipped (mirrored) frame, 'Left' = user's left hand,
-    'Right' = user's right hand. Falls back to spatial split if handedness
-    is unavailable."""
     if not result or not result.hand_landmarks:
         return None, None
     user_left = user_right = None

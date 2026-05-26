@@ -1688,4 +1688,3 @@ class MainMenu(QWidget):
     @Slot(str)
     def _on_error(self, msg: str):
         self.camera_label.setText(f"⚠  {msg}")
-        self._on_finished()
