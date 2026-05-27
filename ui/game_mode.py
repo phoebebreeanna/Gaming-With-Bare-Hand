@@ -24,6 +24,7 @@ class GameMode(QWidget):
     model_source_changed  = Signal(str, str)
     zone_changed          = Signal(str)
     mouse_side_changed    = Signal(str)
+    perf_stats_changed    = Signal(bool)
 
     def __init__(self):
         super().__init__()
@@ -35,12 +36,13 @@ class GameMode(QWidget):
         self._zone         = 'large'
         self._mouse_side   = 'right'
         self._mode_sources = {k: 'default' for k in ('mouse', 'subway', 'racing')}
-        self._source_btns  = {}
-        self._mode_cards   = {}
-        self._camera_combo = None
-        self._cursor_btns  = {}
-        self._zone_btns    = {}
-        self._side_btns    = {}
+        self._source_btns    = {}
+        self._mode_cards     = {}
+        self._camera_combo   = None
+        self._cursor_btns    = {}
+        self._zone_btns      = {}
+        self._side_btns      = {}
+        self._show_perf_stats = True
 
         self._load_state()
         self._init_ui()
@@ -48,13 +50,14 @@ class GameMode(QWidget):
 
     def _load_state(self):
         try:
-            from logic.app_config import get_game_mode, get_mouse_enabled, get_model_source, get_camera_index, get_cursor_point, get_saved_zone, get_mouse_side
-            self.selected_mode = get_game_mode()
-            self.mouse_enabled = get_mouse_enabled()
-            self._camera_index = get_camera_index()
-            self._cursor_point = get_cursor_point()
-            self._zone         = get_saved_zone()
-            self._mouse_side   = get_mouse_side()
+            from logic.app_config import get_game_mode, get_mouse_enabled, get_model_source, get_camera_index, get_cursor_point, get_saved_zone, get_mouse_side, get_show_perf_stats
+            self.selected_mode    = get_game_mode()
+            self.mouse_enabled    = get_mouse_enabled()
+            self._camera_index    = get_camera_index()
+            self._cursor_point    = get_cursor_point()
+            self._zone            = get_saved_zone()
+            self._mouse_side      = get_mouse_side()
+            self._show_perf_stats = get_show_perf_stats()
             for m in ('mouse', 'subway', 'racing'):
                 self._mode_sources[m] = get_model_source(m)
         except Exception:
@@ -260,6 +263,33 @@ class GameMode(QWidget):
         cl.addWidget(self.camera_panel)
         self._populate_cameras()
 
+        self.div1e = QWidget()
+        self.div1e.setFixedHeight(1)
+        cl.addWidget(self.div1e)
+
+        self.perf_panel = QWidget()
+        self.perf_panel.setMinimumHeight(52)
+        pfp = QHBoxLayout(self.perf_panel)
+        pfp.setContentsMargins(16, 0, 16, 0)
+        pfp.setSpacing(0)
+
+        perf_text_col = QVBoxLayout()
+        perf_text_col.setSpacing(2)
+        self.perf_hdr_lbl = QLabel("PERFORMANCE DISPLAY")
+        self.perf_sub_lbl = QLabel("Show FPS and latency in the home screen footer")
+        self.perf_sub_lbl.setWordWrap(True)
+        perf_text_col.addWidget(self.perf_hdr_lbl)
+        perf_text_col.addWidget(self.perf_sub_lbl)
+        pfp.addLayout(perf_text_col, stretch=1)
+
+        self.perf_toggle_btn = QPushButton("ON" if self._show_perf_stats else "OFF")
+        self.perf_toggle_btn.setFixedHeight(26)
+        self.perf_toggle_btn.setMinimumWidth(46)
+        self.perf_toggle_btn.setCursor(Qt.PointingHandCursor)
+        self.perf_toggle_btn.clicked.connect(self._toggle_perf_stats)
+        pfp.addWidget(self.perf_toggle_btn)
+        cl.addWidget(self.perf_panel)
+
         self.div2 = QWidget()
         self.div2.setFixedHeight(1)
         cl.addWidget(self.div2)
@@ -426,6 +456,17 @@ class GameMode(QWidget):
         except Exception:
             pass
         self.mouse_side_changed.emit(side)
+        self.apply_theme(self.is_dark)
+
+    def _toggle_perf_stats(self):
+        self._show_perf_stats = not self._show_perf_stats
+        self.perf_toggle_btn.setText("ON" if self._show_perf_stats else "OFF")
+        try:
+            from logic.app_config import set_show_perf_stats
+            set_show_perf_stats(self._show_perf_stats)
+        except Exception:
+            pass
+        self.perf_stats_changed.emit(self._show_perf_stats)
         self.apply_theme(self.is_dark)
 
     def _set_model_source(self, mode: str, source: str):
@@ -640,6 +681,32 @@ class GameMode(QWidget):
                     QPushButton:hover {{ background-color: {hover}; color: {text}; }}
                 """)
         self.div1d.setStyleSheet(f"background-color: {border};")
+
+        self.div1e.setStyleSheet(f"background-color: {border};")
+
+        self.perf_panel.setStyleSheet(
+            f"background-color: {panel}; border: 1px solid {border};")
+        self.perf_hdr_lbl.setStyleSheet(
+            f"font-size: 9px; font-weight: 700; color: {text}; letter-spacing: 1.5px; background: transparent; border: none;")
+        self.perf_sub_lbl.setStyleSheet(
+            f"font-size: 8px; color: {muted}; letter-spacing: 1px; background: transparent; border: none;")
+        if self._show_perf_stats:
+            self.perf_toggle_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {tog_on_bg}; color: {tog_on_txt};
+                    font-size: 8px; font-weight: 700; letter-spacing: 1px;
+                    border: 1px solid {tog_on_bg}; border-radius: 2px;
+                }}
+            """)
+        else:
+            self.perf_toggle_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {tog_off_bg}; color: {tog_off_txt};
+                    font-size: 8px; font-weight: 700; letter-spacing: 1px;
+                    border: 1px solid {border}; border-radius: 2px;
+                }}
+                QPushButton:hover {{ background-color: {hover}; }}
+            """)
 
         self.div2.setStyleSheet(f"background-color: {border};")
 

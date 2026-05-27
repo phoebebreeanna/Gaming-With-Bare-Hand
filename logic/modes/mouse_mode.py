@@ -155,7 +155,11 @@ class MouseModeMixin:
             return
         elif triggered_meta == 'close':
             self._release_drag()
-            self._running = False
+            self._confirm_close_from   = 'running'
+            self._confirm_close_hold_t = None
+            self.meta_hold = {k: None for k in self.meta_hold}
+            self.app_state = 'confirm_close'
+            self.state_changed.emit('confirm_close')
             return
 
         any_meta = any(v is not None for v in self.meta_hold.values()) or game_opt_frac > 0

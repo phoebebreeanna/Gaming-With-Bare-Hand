@@ -57,7 +57,8 @@ RACING_ENCODER_CUSTOM = os.path.join(CUSTOM_DIR, 'racing_label_encoder.pkl')
 
 OW_MODEL_PATH = os.path.join(DATA_DIR, 'hagridv2_gesture_recognizer.task')
 
-MP_PRESENCE_THRESH = 0.7
+MP_PRESENCE_THRESH   = 0.7
+CONFIRM_CLOSE_HOLD   = 3.0
 
 def list_cameras(max_test=6):
     available = []
@@ -174,6 +175,8 @@ class HandControllerThread(
     error_occurred    = Signal(str)
     game_mode_changed = Signal(str)
     distance_live     = Signal(float, bool)
+    nn_latency        = Signal(float)
+    close_requested   = Signal()
 
     slide_progress  = Signal(float, float)
     distance_update = Signal(float, bool, float)
@@ -269,8 +272,11 @@ class HandControllerThread(
         self.rc_prev_row_right = None
         self.rc_tap_cooldown   = {}
 
-        self.ow_gesture_start_times = {}
-        self.ow_held_keys           = set()
+        self.ow_gesture_start_times   = {}
+        self.ow_held_keys             = set()
+        self._current_frame_t         = 0.0
+        self._confirm_close_from      = None
+        self._confirm_close_hold_t    = None
 
     def _full_reset(self):
         self._release_drag()
@@ -488,12 +494,13 @@ class HandControllerThread(
         cap.set(cv2.CAP_PROP_FPS,          30)
         cap.set(cv2.CAP_PROP_BUFFERSIZE,   1)
 
-        _latest_frame     = [None]
-        _latest_ts        = [0]
-        _latest_result    = [None]
-        _latest_ow_result = [None]
-        _latest_rgb       = [None]
-        _latest_rgb_ts    = [0]
+        _latest_frame      = [None]
+        _latest_ts         = [0]
+        _latest_result     = [None]
+        _latest_result_ts  = [0.0]
+        _latest_ow_result  = [None]
+        _latest_rgb        = [None]
+        _latest_rgb_ts     = [0]
         _fl  = threading.Lock()
         _rl  = threading.Lock()
         _owl = threading.Lock()
@@ -516,7 +523,9 @@ class HandControllerThread(
                 except Exception as e:
                     print(f"[MediaPipe] detection error: {e}")
                     continue
-                with _rl:  _latest_result[0] = result
+                with _rl:
+                    _latest_result[0]    = result
+                    _latest_result_ts[0] = ts / 1000.0
                 with _rgl:
                     _latest_rgb[0]    = rgb
                     _latest_rgb_ts[0] = ts
@@ -567,13 +576,17 @@ class HandControllerThread(
 
             ret, frame = cap.read()
             if not ret: break
+            t_frame = time.time()
 
             frame = cv2.flip(frame, 1)
-            ts_ms = int(time.time() * 1000)
+            ts_ms = int(t_frame * 1000)
             with _fl:
                 _latest_frame[0] = frame.copy()
                 _latest_ts[0]    = ts_ms
-            with _rl: result = _latest_result[0]
+            with _rl:
+                result    = _latest_result[0]
+                result_ts = _latest_result_ts[0]
+            self._current_frame_t = result_ts
 
             has_hand = bool(result and result.hand_landmarks)
             lms  = result.hand_landmarks[0] if has_hand else None
@@ -733,6 +746,9 @@ class HandControllerThread(
                     with _owl: ow_result = _latest_ow_result[0]
                     self._tick_open_world_mode(lms, lms2, result, display, now, game_opt_frac, ow_result)
 
+                if lms is not None and self._current_frame_t > 0:
+                    self.nn_latency.emit((time.time() - self._current_frame_t) * 1000)
+
                 self.distance_live.emit(hand_size(lms) if lms else 0.0, lms is not None)
 
             elif self.app_state == 'stopped':
@@ -754,13 +770,42 @@ class HandControllerThread(
                     if self.meta_hold['close'] is None: self.meta_hold['close'] = now
                     close_frac = min((now - self.meta_hold['close']) / HOLD_CLOSE, 1.0)
                     if close_frac >= 1.0:
-                        self._running = False; break
+                        self.meta_hold['close'] = None
+                        self._confirm_close_from   = 'stopped'
+                        self._confirm_close_hold_t = None
+                        self.app_state = 'confirm_close'
+                        self.state_changed.emit('confirm_close')
                 else:
                     self.meta_hold['close'] = None
 
                 if lms:  draw_hand(display, lms)
                 if lms2: draw_hand(display, lms2)
                 self.stopped_data.emit(resume_frac, close_frac)
+                self.distance_live.emit(hand_size(lms) if lms else 0.0, lms is not None)
+
+            elif self.app_state == 'confirm_close':
+                both_fists = lms and lms2 and is_fist(lms) and is_fist(lms2)
+                confirm_frac = 0.0
+                if both_fists:
+                    if self._confirm_close_hold_t is None:
+                        self._confirm_close_hold_t = now
+                    confirm_frac = min((now - self._confirm_close_hold_t) / CONFIRM_CLOSE_HOLD, 1.0)
+                    if confirm_frac >= 1.0:
+                        self._release_drag()
+                        self._rc_release_all()
+                        self._ow_release_all()
+                        self.close_requested.emit()
+                        self._running = False
+                        break
+                else:
+                    if self._confirm_close_hold_t is not None:
+                        self._confirm_close_hold_t = None
+                        self.app_state = self._confirm_close_from or 'running'
+                        self._confirm_close_from = None
+                        self.state_changed.emit(self.app_state)
+                if lms:  draw_hand(display, lms)
+                if lms2: draw_hand(display, lms2)
+                self.stopped_data.emit(0.0, confirm_frac)
                 self.distance_live.emit(hand_size(lms) if lms else 0.0, lms is not None)
 
             h_img, w_img, ch = display.shape

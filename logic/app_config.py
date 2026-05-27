@@ -106,6 +106,14 @@ def set_cursor_point(point: str) -> None:
     config['cursor_point'] = point
     _write(config)
 
+def get_show_perf_stats() -> bool:
+    return _read().get('show_perf_stats', True)
+
+def set_show_perf_stats(enabled: bool) -> None:
+    config = _read()
+    config['show_perf_stats'] = enabled
+    _write(config)
+
 def get_key_bindings(mode: str) -> dict:
     defaults = BINDINGS_DEFAULT.get(mode, {})
     saved    = _read().get('key_bindings', {}).get(mode, {})

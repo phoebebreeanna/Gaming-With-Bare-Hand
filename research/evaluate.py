@@ -160,6 +160,31 @@ NEURAL_FORBIDDEN = {
     'release_right_click': 'right_click',
 }
 
+RELEASE_LABELS = {'release_left_click', 'release_right_click'}
+
+RULE_GESTURE_TO_DATASET = {
+    'index_pinch': 'left_click',
+    'tm_pinch':    'right_click',
+    'scroll_up':   'scroll_up',
+    'scroll_down': 'scroll_down',
+    'move':        'release_left_click',
+}
+
+NEURAL_GESTURE_TO_DATASET = {
+    'left_click':  'left_click',
+    'right_click': 'right_click',
+    'scroll_up':   'scroll_up',
+    'scroll_down': 'scroll_down',
+    'move':        'release_left_click',
+}
+
+def dataset_pred_label(detected, true_label, gesture_to_dataset, forbidden_map=None):
+    if true_label in RELEASE_LABELS and forbidden_map and true_label in forbidden_map:
+        if detected != forbidden_map[true_label]:
+            return true_label
+        return gesture_to_dataset.get(detected, detected)
+    return gesture_to_dataset.get(detected, detected)
+
 IMG_EXTS = {'.jpg', '.jpeg', '.png', '.bmp', '.webp', '.heic', '.heif'}
 
 KNOWN_LABELS = set(RULE_EXPECTED)
@@ -229,8 +254,8 @@ def plot_evaluation(rule_data, neural_data, labels_found, output_dir):
         latencies = data['latencies']
         records   = data['records']
         report    = data['report']
-        classes   = sorted(set(y_true + y_pred))
-        cm_raw    = data['cm']
+        classes   = data.get('cm_dataset_classes', sorted(set(y_true + y_pred)))
+        cm_raw    = data.get('cm_dataset', data['cm'])
 
         ax = axes[row_idx][0]
         cm_arr = np.array(cm_raw)
@@ -326,6 +351,7 @@ def plot_evaluation(rule_data, neural_data, labels_found, output_dir):
 def run_evaluation(dataset_dir, detector, labels_found, expected_map,
                    predict_fn, system_name, forbidden_map=None):
     y_true, y_pred = [], []
+    cm_y_true, cm_y_pred = [], []
     latencies = {lbl: [] for lbl in labels_found}
     records   = []
 
@@ -366,6 +392,8 @@ def run_evaluation(dataset_dir, detector, labels_found, expected_map,
                 correct = (detected == expected)
             y_true.append(expected)
             y_pred.append(detected)
+            cm_y_true.append(label)
+            cm_y_pred.append(dataset_pred_label(detected, label, RULE_GESTURE_TO_DATASET, RULE_FORBIDDEN))
             latencies[label].append(gesture_ms)
             records.append({
                 'label': label, 'expected': expected,
@@ -395,12 +423,15 @@ def run_evaluation(dataset_dir, detector, labels_found, expected_map,
         cm = build_cm(y_true, y_pred, all_classes)
 
     report['accuracy'] = sum(r['correct'] for r in records) / len(records)
+    cm_dataset = build_cm(cm_y_true, cm_y_pred, labels_found)
 
     return {
         'y_true': y_true, 'y_pred': y_pred,
         'latencies': latencies, 'records': records,
         'report': report, 'cm': cm,
         'classes': all_classes,
+        'cm_dataset': cm_dataset,
+        'cm_dataset_classes': list(labels_found),
     }
 
 def print_summary(data, system_name, labels_found, expected_map, forbidden_map=None):
@@ -553,6 +584,7 @@ def main():
 
             def run_neural_eval():
                 y_true, y_pred = [], []
+                cm_y_true, cm_y_pred = [], []
                 latencies = {lbl: [] for lbl in labels_found}
                 records   = []
                 print(f"\n{'─'*60}")
@@ -589,6 +621,8 @@ def main():
                         else:
                             correct = (detected == expected)
                         y_true.append(expected); y_pred.append(detected)
+                        cm_y_true.append(label)
+                        cm_y_pred.append(dataset_pred_label(detected, label, NEURAL_GESTURE_TO_DATASET, NEURAL_FORBIDDEN))
                         latencies[label].append(lat)
                         records.append({
                             'label': label, 'expected': expected,
@@ -616,11 +650,14 @@ def main():
                     cm = build_cm(y_true, y_pred, all_classes)
 
                 report['accuracy'] = sum(r['correct'] for r in records) / len(records)
+                cm_dataset = build_cm(cm_y_true, cm_y_pred, labels_found)
 
                 return {
                     'y_true': y_true, 'y_pred': y_pred,
                     'latencies': latencies, 'records': records,
                     'report': report, 'cm': cm, 'classes': all_classes,
+                    'cm_dataset': cm_dataset,
+                    'cm_dataset_classes': list(labels_found),
                 }
 
             neural_data = run_neural_eval()

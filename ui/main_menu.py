@@ -36,12 +36,21 @@ class MainMenu(QWidget):
         self._zone_pending = None
         self._current_zone = get_saved_zone()
         self.start_time = time.time()
+        self._frame_count = 0
+        self._fps = 0.0
+        self._last_frame_time = None
+        self._nn_lat_sum = 0.0
+        self._nn_lat_count = 0
+        self._nn_lat_ms = 0.0
+        self._hand_present = False
+        self._show_perf_stats = True
         self.init_ui()
 
         try:
-            from logic.app_config import get_game_mode
+            from logic.app_config import get_game_mode, get_show_perf_stats
             _mode_labels = {'mouse': 'MOUSE', 'subway': 'SUBWAY', 'racing': 'RACING', 'open_world': 'OPEN WORLD'}
             self.info_cards["MODE"].setText(_mode_labels.get(get_game_mode(), 'MOUSE'))
+            self._show_perf_stats = get_show_perf_stats()
         except Exception:
             pass
 
@@ -101,6 +110,7 @@ class MainMenu(QWidget):
         self.game_mode_widget.model_source_changed.connect(self._on_model_source_changed)
         self.game_mode_widget.zone_changed.connect(self._on_zone_changed)
         self.game_mode_widget.mouse_side_changed.connect(self._on_mouse_side_changed)
+        self.game_mode_widget.perf_stats_changed.connect(self._on_perf_stats_changed)
         self.pages.addWidget(self.game_mode_widget)
 
         self.pipeline_ui = PipelineUI(is_dark=self.is_dark)
@@ -1268,6 +1278,14 @@ class MainMenu(QWidget):
         if self._is_running and self.controller:
             self.controller.set_mouse_side(side)
 
+    def _on_perf_stats_changed(self, enabled: bool):
+        self._show_perf_stats = enabled
+
+    @Slot(float)
+    def _on_nn_latency(self, ms: float):
+        self._nn_lat_sum += ms
+        self._nn_lat_count += 1
+
     def _on_binding_changed(self, mode: str, gesture: str, key: str):
         if self.controller:
             self.controller.set_key_binding(mode, gesture, key)
@@ -1301,10 +1319,24 @@ class MainMenu(QWidget):
         seconds = elapsed % 60
         uptime = f"{hours:02}:{minutes:02}:{seconds:02}"
 
+        self._fps = float(self._frame_count)
+        self._frame_count = 0
+
+        if self._nn_lat_count > 0:
+            self._nn_lat_ms = self._nn_lat_sum / self._nn_lat_count
+        else:
+            self._nn_lat_ms = 0.0
+        self._nn_lat_sum = 0.0
+        self._nn_lat_count = 0
+
         if hasattr(self, "footer_status"):
-            self.footer_status.setText(
-                f"ZONE · {self._current_zone.upper()}    UPTIME · {uptime}"
-            )
+            base = f"ZONE · {self._current_zone.upper()}    UPTIME · {uptime}"
+            if self._show_perf_stats and self._is_running:
+                fps_str  = f"{self._fps:.0f}"
+                gest_str = f"{self._nn_lat_ms:.1f}ms" if self._hand_present else "--"
+                self.footer_status.setText(f"{base}    FPS · {fps_str}    GEST · {gest_str}")
+            else:
+                self.footer_status.setText(base)
         if hasattr(self, "rec_lbl"):
             self.rec_lbl.setText(f"● REC  ·  {uptime}")
 
@@ -1509,6 +1541,8 @@ class MainMenu(QWidget):
         self.controller.stopped_data.connect(self._on_stopped_data)
         self.controller.game_mode_changed.connect(self._on_controller_game_mode)
         self.controller.distance_live.connect(self._update_distance_live)
+        self.controller.nn_latency.connect(self._on_nn_latency)
+        self.controller.close_requested.connect(QApplication.quit)
         self.controller.start()
 
         self._is_running = True
@@ -1581,6 +1615,12 @@ class MainMenu(QWidget):
         self._is_paused  = False
         self._is_frozen  = False
         self.controller  = None
+        self._frame_count = 0
+        self._fps = 0.0
+        self._nn_lat_sum = 0.0
+        self._nn_lat_count = 0
+        self._nn_lat_ms = 0.0
+        self._hand_present = False
         self.start_btn.setEnabled(True)
         self.start_btn.setText("Start")
         self.pause_btn.setEnabled(False)
@@ -1620,6 +1660,7 @@ class MainMenu(QWidget):
 
     @Slot(object)
     def _update_frame(self, image):
+        self._frame_count += 1
         pixmap = QPixmap.fromImage(image)
         self._last_camera_pixmap = pixmap
         self._rescale_camera_frame()
@@ -1658,9 +1699,10 @@ class MainMenu(QWidget):
             'intro': 'INTRO', 'zone_intro': 'ZONE',
             'zone_pick': 'PICK ZONE', 'distance_check': 'CALIBRATING',
             'running': 'RUNNING', 'stopped': 'PAUSED', 'idle': 'IDLE',
+            'confirm_close': 'CONFIRM EXIT',
         }
         self.info_cards["STATUS"].setText(labels.get(state, state.upper()))
-        if state == 'stopped':
+        if state in ('stopped', 'confirm_close'):
             self._is_frozen = True
             self.pause_btn.setText("Resume")
         elif state == 'running':
@@ -1669,6 +1711,7 @@ class MainMenu(QWidget):
 
     @Slot(float, bool)
     def _update_distance_live(self, dist: float, has_hand: bool):
+        self._hand_present = has_hand
         _TARGET = 0.18
         _TOL    = 0.03
         base = "font-size: 8px; font-weight: 700; letter-spacing: 1.2px; background: transparent; border: none;"

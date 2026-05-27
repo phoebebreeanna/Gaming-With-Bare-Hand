@@ -10,12 +10,12 @@
       "scroll_up": 0.7
     },
     "per_label_avg_lat_ms": {
-      "left_click": 19.379,
-      "release_left_click": 19.105,
-      "release_right_click": 19.069,
-      "right_click": 20.049,
-      "scroll_down": 19.428,
-      "scroll_up": 19.258
+      "left_click": 22.347,
+      "release_left_click": 20.28,
+      "release_right_click": 20.092,
+      "right_click": 20.265,
+      "scroll_down": 20.203,
+      "scroll_up": 20.381
     },
     "classification_report": {
       "idle": {
@@ -80,12 +80,12 @@
       "scroll_up": 0.8
     },
     "per_label_avg_lat_ms": {
-      "left_click": 19.816,
-      "release_left_click": 20.11,
-      "release_right_click": 19.96,
-      "right_click": 20.715,
-      "scroll_down": 20.059,
-      "scroll_up": 19.955
+      "left_click": 20.9,
+      "release_left_click": 21.906,
+      "release_right_click": 20.767,
+      "right_click": 20.928,
+      "scroll_down": 21.656,
+      "scroll_up": 20.531
     },
     "classification_report": {
       "idle": {
