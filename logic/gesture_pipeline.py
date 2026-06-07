@@ -189,7 +189,7 @@ class _CameraWorker(QThread):
         options   = mp_vision.HandLandmarkerOptions(base_options=base_opts, num_hands=1)
         detector  = mp_vision.HandLandmarker.create_from_options(options)
 
-        cap = cv2.VideoCapture(self._cam_idx)
+        cap = cv2.VideoCapture(self._cam_idx, cv2.CAP_DSHOW)
         cap.set(cv2.CAP_PROP_FRAME_WIDTH,  640)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         cap.set(cv2.CAP_PROP_FPS, 30)

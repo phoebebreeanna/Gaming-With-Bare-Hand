@@ -68,7 +68,7 @@ def list_cameras(max_test=6):
     os.close(devnull)
     try:
         for i in range(max_test):
-            cap = cv2.VideoCapture(i)
+            cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
             if cap.isOpened():
                 available.append(i)
                 cap.release()
@@ -107,7 +107,7 @@ class CameraPreviewThread(QThread):
             print(f"[Preview] detector error: {e}")
             return
 
-        cap = cv2.VideoCapture(self.camera_index)
+        cap = cv2.VideoCapture(self.camera_index, cv2.CAP_DSHOW)
         if not cap.isOpened():
             detector.close()
             return
@@ -484,7 +484,7 @@ class HandControllerThread(
         if ow_recognizer is not None:
             print('[OW] GestureRecognizer loaded')
 
-        cap = cv2.VideoCapture(self.camera_index)
+        cap = cv2.VideoCapture(self.camera_index, cv2.CAP_DSHOW)
         if not cap.isOpened():
             self.error_occurred.emit(f"Cannot open camera {self.camera_index}")
             detector.close()
