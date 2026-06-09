@@ -24,7 +24,7 @@ from logic.hand_utils import (
     INTRO_DURATION, ZONE_INTRO_DURATION, ZONE_DURATION, GUIDE_DURATION,
     SKIP_LOCKOUT, HOLD_META, HOLD_CLOSE, HOLD_GAME, ZONE_CONFIRM_TIME,
     hand_size, count_fingers_up, is_thumbs_up, is_open_palm,
-    is_fist, is_peace_sign, get_game_option, tick_game_opt,
+    is_fist, is_peace_sign, is_devil_horn, get_game_option, tick_game_opt,
     split_hands, draw_hand, draw_zone_rect, draw_finger_dot,
     landmark_gesture,
 )
@@ -720,11 +720,15 @@ class HandControllerThread(
                     game_opt_hold_t = None; self.game_opt_number = None; game_opt_frac = 0.0
                     self._pending_mode = None
 
-                game_opt_hold_t, self.game_opt_number, game_opt_frac, triggered_opt = \
-                    tick_game_opt(lms, lms2, now, game_opt_hold_t, self.game_opt_number)
-                if triggered_opt is not None:
-                    self._activate_game_mode(triggered_opt)
+                _any_devil = (lms and is_devil_horn(lms)) or (lms2 and is_devil_horn(lms2))
+                if _any_devil:
                     game_opt_hold_t = None; self.game_opt_number = None; game_opt_frac = 0.0
+                else:
+                    game_opt_hold_t, self.game_opt_number, game_opt_frac, triggered_opt = \
+                        tick_game_opt(lms, lms2, now, game_opt_hold_t, self.game_opt_number)
+                    if triggered_opt is not None:
+                        self._activate_game_mode(triggered_opt)
+                        game_opt_hold_t = None; self.game_opt_number = None; game_opt_frac = 0.0
 
                 if self.range_min_x is not None:
                     draw_zone_rect(display,

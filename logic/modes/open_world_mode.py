@@ -24,7 +24,7 @@ OW_GESTURE_KEY_MAP = {
     'dislike':          'q',
     'ok':               'f',
     'grip':             'alt',
-    'thumb_index':      'e',
+    'thumb_index':      'left_click',
     'little_finger':    'right_click',
     'holy':             'esc',
     'three2':           'tab',
@@ -35,7 +35,7 @@ OW_GESTURE_KEY_MAP = {
     'stop':             'none',
     'mute':             'none',
     'point':            'none',
-    'grabbing':         'none',
+    'grabbing':         'e',
     'middle_finger':    'none',
 }
 

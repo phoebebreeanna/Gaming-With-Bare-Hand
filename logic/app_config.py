@@ -11,7 +11,7 @@ BINDINGS_DEFAULT = {
         'horn': 'h', 'camera': 'c',
     },
     'open_world': {
-        'like': 'shift', 'palm': 'space', 'thumb_index': 'e',
+        'like': 'shift', 'palm': 'space', 'grabbing': 'e',
         'ok': 'f', 'call': 'r', 'dislike': 'q', 'holy': 'esc',
         'grip': 'alt', 'one': '1', 'peace': '2', 'three': '3', 'four': '4',
         'peace_inverted': 't', 'three2': 'tab', 'three3': 'g',
