@@ -3,11 +3,13 @@ import pyautogui
 from logic.hand_utils import (
     draw_hand, draw_finger_dot, is_devil_horn,
     split_hands_by_handedness, MOUSE_CONF_THRESH,
+    _mouse_move_relative,
 )
 from logic.gesture_net import run_nn
 
-OW_TAP_THRESHOLD = 0.075
-OW_SCORE_THRESH  = 0.7
+OW_TAP_THRESHOLD     = 0.075
+OW_SCORE_THRESH      = 0.7
+OW_MOUSE_SENSITIVITY = 1.5
 
 OW_GESTURE_KEY_MAP = {
     'two_up':           'controller',
@@ -113,9 +115,42 @@ class OpenWorldModeMixin:
                 if _g in eff_map:
                     eff_map[_g] = _k
 
+            right_one_lms = None
+            right_one_idx = -1
+            if ow_result and ow_result.gestures:
+                for _i, _hg in enumerate(ow_result.gestures):
+                    _g0 = _hg[0]
+                    if _g0.category_name == 'one' and _g0.score >= OW_SCORE_THRESH:
+                        _raw_hand = (ow_result.handedness[_i][0].category_name
+                                     if ow_result.handedness and _i < len(ow_result.handedness) else '')
+                        if _raw_hand == 'Left':
+                            right_one_lms = (ow_result.hand_landmarks[_i]
+                                             if ow_result.hand_landmarks and _i < len(ow_result.hand_landmarks) else None)
+                            right_one_idx = _i
+                            break
+
+            if right_one_lms is not None:
+                wrist = right_one_lms[0]
+                if not self.ow_rel_mouse_active:
+                    self.ow_rel_mouse_active   = True
+                    self.ow_rel_mouse_prev_pos = (wrist.x, wrist.y)
+                else:
+                    dx = wrist.x - self.ow_rel_mouse_prev_pos[0]
+                    dy = wrist.y - self.ow_rel_mouse_prev_pos[1]
+                    move_x = int(dx * 1000 * OW_MOUSE_SENSITIVITY)
+                    move_y = int(dy * 1000 * OW_MOUSE_SENSITIVITY)
+                    if move_x != 0 or move_y != 0:
+                        _mouse_move_relative(move_x, move_y)
+                    self.ow_rel_mouse_prev_pos = (wrist.x, wrist.y)
+            else:
+                self.ow_rel_mouse_active   = False
+                self.ow_rel_mouse_prev_pos = None
+
             detected = {}
             if ow_result and ow_result.gestures:
                 for _i, _hg in enumerate(ow_result.gestures):
+                    if _i == right_one_idx:
+                        continue
                     _g0 = _hg[0]
                     if _g0.score < OW_SCORE_THRESH:
                         continue

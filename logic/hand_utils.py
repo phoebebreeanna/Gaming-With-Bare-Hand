@@ -259,3 +259,6 @@ def _mouse_scroll(amount):
     #     _mouse_ctrl.scroll(0, amount)
     # else:
         pyautogui.scroll(amount)
+
+def _mouse_move_relative(dx, dy):
+    pyautogui.move(int(dx), int(dy))

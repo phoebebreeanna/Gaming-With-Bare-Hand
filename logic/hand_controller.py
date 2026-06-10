@@ -282,6 +282,8 @@ class HandControllerThread(
 
         self.ow_gesture_start_times   = {}
         self.ow_held_keys             = set()
+        self.ow_rel_mouse_active      = False
+        self.ow_rel_mouse_prev_pos    = None
         self._current_frame_t         = 0.0
         self._confirm_close_from      = None
         self._confirm_close_hold_t    = None
@@ -313,10 +315,12 @@ class HandControllerThread(
         self.ss_last_space_t  = 0.0
         self.ss_space_pressed = False
         self.ss_prev_row      = None
-        self.rc_prev_row_left  = None
-        self.rc_prev_row_right = None
-        self.rc_tap_cooldown   = {}
-        self._devilhorn_mouse  = False
+        self.rc_prev_row_left      = None
+        self.rc_prev_row_right     = None
+        self.rc_tap_cooldown       = {}
+        self._devilhorn_mouse      = False
+        self.ow_rel_mouse_active   = False
+        self.ow_rel_mouse_prev_pos = None
 
     def _set_zone(self, zone_name):
         size = ZONE_PRESETS.get(zone_name, 0.55)
