@@ -16,17 +16,20 @@ def _ow_mouse_move_relative(dx, dy):
     else:
         try:
             from Quartz import (CGEventCreateMouseEvent, CGEventPost,
-                                CGEventSetIntegerValueField,
+                                CGEventSetIntegerValueField, CGEventSourceCreate,
                                 kCGEventMouseMoved, kCGHIDEventTap,
+                                kCGEventSourceStateHIDSystemState,
                                 CGEventCreate, CGEventGetLocation)
+            src = CGEventSourceCreate(kCGEventSourceStateHIDSystemState)
             cur = CGEventGetLocation(CGEventCreate(None))
-            ev = CGEventCreateMouseEvent(None, kCGEventMouseMoved,
+            ev = CGEventCreateMouseEvent(src, kCGEventMouseMoved,
                                          (cur.x + dx, cur.y + dy), 0)
             CGEventSetIntegerValueField(ev, 63, dx)
             CGEventSetIntegerValueField(ev, 64, dy)
             CGEventPost(kCGHIDEventTap, ev)
-        except Exception:
-            pyautogui.move(int(dx), int(dy))
+        except Exception as e:
+            print(f'[OW] mac mouse err: {e}', flush=True)
+            pyautogui.moveRel(int(dx), int(dy), _pause=False)
 from logic.gesture_net import run_nn
 
 OW_TAP_THRESHOLD     = 0.075
