@@ -1,10 +1,32 @@
+import ctypes
+import platform
 import pyautogui
 
 from logic.hand_utils import (
     draw_hand, draw_finger_dot, is_devil_horn,
     split_hands_by_handedness, MOUSE_CONF_THRESH,
-    _mouse_move_relative,
 )
+
+_IS_WINDOWS = platform.system() == 'Windows'
+_MOUSEEVENTF_MOVE = 0x0001
+
+def _ow_mouse_move_relative(dx, dy):
+    if _IS_WINDOWS:
+        ctypes.windll.user32.mouse_event(_MOUSEEVENTF_MOVE, dx, dy, 0, 0)
+    else:
+        try:
+            from Quartz import (CGEventCreateMouseEvent, CGEventPost,
+                                CGEventSetIntegerValueField,
+                                kCGEventMouseMoved, kCGHIDEventTap,
+                                CGEventCreate, CGEventGetLocation)
+            cur = CGEventGetLocation(CGEventCreate(None))
+            ev = CGEventCreateMouseEvent(None, kCGEventMouseMoved,
+                                         (cur.x + dx, cur.y + dy), 0)
+            CGEventSetIntegerValueField(ev, 63, dx)
+            CGEventSetIntegerValueField(ev, 64, dy)
+            CGEventPost(kCGHIDEventTap, ev)
+        except Exception:
+            pyautogui.move(int(dx), int(dy))
 from logic.gesture_net import run_nn
 
 OW_TAP_THRESHOLD     = 0.075
@@ -140,7 +162,7 @@ class OpenWorldModeMixin:
                     move_x = int(dx * 1000 * OW_MOUSE_SENSITIVITY)
                     move_y = int(dy * 1000 * OW_MOUSE_SENSITIVITY)
                     if move_x != 0 or move_y != 0:
-                        _mouse_move_relative(move_x, move_y)
+                        _ow_mouse_move_relative(move_x, move_y)
                     self.ow_rel_mouse_prev_pos = (wrist.x, wrist.y)
             else:
                 self.ow_rel_mouse_active   = False
