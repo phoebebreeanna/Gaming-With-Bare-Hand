@@ -1,4 +1,5 @@
 import os
+import platform
 import cv2
 import mediapipe as mp
 from mediapipe.tasks import python as mp_python
@@ -8,6 +9,13 @@ import threading
 
 from PySide6.QtCore import QThread, Signal
 from PySide6.QtGui import QImage
+
+_IS_WINDOWS = platform.system() == 'Windows'
+
+def _open_camera(index):
+    if _IS_WINDOWS:
+        return cv2.VideoCapture(index, cv2.CAP_DSHOW)
+    return cv2.VideoCapture(index)
 
 try:
     import torch
@@ -68,7 +76,7 @@ def list_cameras(max_test=6):
     os.close(devnull)
     try:
         for i in range(max_test):
-            cap = cv2.VideoCapture(i)
+            cap = _open_camera(i)
             if cap.isOpened():
                 available.append(i)
                 cap.release()
@@ -107,7 +115,7 @@ class CameraPreviewThread(QThread):
             print(f"[Preview] detector error: {e}")
             return
 
-        cap = cv2.VideoCapture(self.camera_index)
+        cap = _open_camera(self.camera_index)
         if not cap.isOpened():
             detector.close()
             return
@@ -378,9 +386,6 @@ class HandControllerThread(
 
     def set_camera(self, index):
         self.camera_index = index
-        if self._running:
-            self.stop(); self.wait()
-            self._init_state(); self.start()
 
     def set_cursor_point(self, point: str):
         self._cursor_point = point
@@ -484,7 +489,7 @@ class HandControllerThread(
         if ow_recognizer is not None:
             print('[OW] GestureRecognizer loaded')
 
-        cap = cv2.VideoCapture(self.camera_index)
+        cap = _open_camera(self.camera_index)
         if not cap.isOpened():
             self.error_occurred.emit(f"Cannot open camera {self.camera_index}")
             detector.close()
