@@ -6,7 +6,7 @@ from logic.hand_utils import (
 )
 from logic.gesture_net import run_nn
 
-RC_STEER_DEADZONE = 30
+RC_STEER_DEADZONE = 20
 RC_STEER_MAX      = 40
 RC_CONF_THRESH    = 0.6
 RC_TAP_COOLDOWN   = 0.4
