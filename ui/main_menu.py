@@ -17,7 +17,7 @@ from ui.mainmenu_setup import MainMenuSetup
 from ui.mainmenu_calibration import MainMenuCalibration
 from ui.mainmenu_zone import MainMenuZone
 from ui.mainmenu_camera import MainMenuCamera
-from ui.handbot import HandBotOverlay
+from ui.handbot import HandBotOverlay #Add handbot overlay to main menu
 
 from logic.hand_controller import HandControllerThread, CameraPreviewThread, list_cameras
 from logic.app_config import is_setup_done, get_saved_zone, mark_setup_done, get_camera_index, set_camera_index, set_zone, get_mouse_side, set_mouse_side
