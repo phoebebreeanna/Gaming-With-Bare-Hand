@@ -42,8 +42,10 @@ popup_content ={
     },
 
     "zone" : {
-        "body":("<b>Place information here !</b><br><br>"
-                "......."
+        "body":("<b>Choose your movement zone !</b><br><br>"
+                "Show 1,2,3 fingers to the camera to select or click your preferred option directly.<br><br>"
+                "Hold for 3 seconds to auto-advance to Home dashboard. <br><br>"
+                "You can always change your zone later in the settings."
         ),
         "button":[("OK","press ok")],
     }
@@ -51,11 +53,11 @@ popup_content ={
 }
 
 
-# Maps home_stack page index -> content key
+
 step_for_index = {1: "guide_intro", 2: "camera", 3: "calibration", 4: "zone"}
 default_card_width = 340
 card_width_for_content = {"guide_intro": 340, "guide_overview": 340, "camera": 340}
-card_min_height_for_content = {"guide_intro": 300, "guide_overview": 314}
+card_min_height_for_content = {"guide_intro": 300, "guide_overview": 314, "zone": 314}
 
 
 class HandBotCard(QFrame):
