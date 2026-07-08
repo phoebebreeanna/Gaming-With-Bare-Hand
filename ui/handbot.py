@@ -1,59 +1,94 @@
-from PySide6.QtWidgets import (QWidget, QLabel, QVBoxLayout, QHBoxLayout, QPushButton, QFrame)
+from PySide6.QtWidgets import (QWidget, QLabel, QVBoxLayout, QHBoxLayout, QPushButton, QFrame,
+                                QGraphicsOpacityEffect)
+from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve, QPoint, QEvent, QRect
+from PySide6.QtGui import QColor, QPen, QPixmap, QPainter, QPainterPath
 
-from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve, QPoint, QEvent
+
+# --- HandBot image assets ---
+HANDBOT_EXPLAINING = "assets/handbot/handbot_explaining.png"
+HANDBOT_NEUTRAL = "assets/handbot/handbot_neutral_icon.png"
 
 
-popup_content ={
-    "guide_intro" : {
-        "body":("<b>Hi! I am Handbot</b><br><br>"
-                "I am your friendly guide to help you get started with HandMouse.<br><br>"
-               "HandMouse is developed by <b>FYP-26-S2-02</b>, a team of six from SIM - University of Wollongong. <br><br>"
-               "Before jumping into the application, would you like me to guide you through the first-time setup?"
-        ),
-        "button":[("Yes - Guide me through","guide_yes"),("Skip - I will explore myself","guide_no")],
+def make_circular_pixmap(source_pixmap: QPixmap, diameter: int, bg_color: str, border_color: str, padding_ratio: float = 0.78) -> QPixmap:
+    """Returns a circularly-clipped pixmap with a solid background circle
+    (so it matches the app's light/dark theme) and padding around the character."""
+    result = QPixmap(diameter, diameter)
+    result.fill(Qt.transparent)
+
+    painter = QPainter(result)
+    painter.setRenderHint(QPainter.Antialiasing)
+
+    path = QPainterPath()
+    path.addEllipse(0, 0, diameter, diameter)
+    painter.setClipPath(path)
+
+    painter.setBrush(QColor(bg_color))
+    painter.setPen(Qt.NoPen)
+    painter.drawEllipse(0, 0, diameter, diameter)
+
+    inner_size = int(diameter * padding_ratio)
+    scaled = source_pixmap.scaled(inner_size, inner_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+    offset_x = (diameter - scaled.width()) // 2
+    offset_y = (diameter - scaled.height()) // 2
+    painter.drawPixmap(offset_x, offset_y, scaled)
+
+    painter.setClipping(False)
+    painter.setBrush(Qt.NoBrush)
+    painter.setPen(QPen(QColor(border_color), 1))
+    painter.drawEllipse(0, 0, diameter - 1, diameter - 1)
+
+    painter.end()
+    return result
+
+
+popup_content = {
+    "guide_intro": {
+        "body": ("<b>Hi! I am Handbot</b><br><br>"
+                 "I am your friendly guide to help you get started with HandMouse.<br><br>"
+                 "HandMouse is developed by <b>FYP-26-S2-02</b>, a team of six from SIM - University of Wollongong. <br><br>"
+                 "Before jumping into the application, would you like me to guide you through the first-time setup?"
+                 ),
+        "button": [("Yes - Guide me through", "guide_yes"), ("Skip - I will explore myself", "guide_no")],
     },
 
-    "guide_overview" : {
-        "body":("<b>Great ! Here is what we will do:</b><br><br>"
-                "I will guide you through 4 quick steps:<br>"
-                "01 - Read the Setup Guide<br>"
-                "02 - Select your camera<br>"
-                "03 - Calibrate your distance<br>"
-                "04 - Choose your movement zone<br><br>"
-                "I will appear at each step to guide you. Click OK to begin!"
-        ),
-        "button":[("OK","press ok")],
+    "guide_overview": {
+        "body": ("<b>Great ! Here is what we will do:</b><br><br>"
+                 "I will guide you through 4 quick steps:<br>"
+                 "01 - Read the Setup Guide<br>"
+                 "02 - Select your camera<br>"
+                 "03 - Calibrate your distance<br>"
+                 "04 - Choose your movement zone<br><br>"
+                 "I will appear at each step to guide you. Click OK to begin!"
+                 ),
+        "button": [("OK", "press ok")],
     },
 
-    "camera" : {
-        "body":("<b>Select your camera !</b><br><br>"
-                "Choose your camera from the dropdown.<br><br>"
-                "Check the preview looks correct - you should see yourself clearly.<br><br>"
-                "Then click <b>Continue</b> to proceed to the next step."
-        ),
-        "button":[("OK","press ok")],
+    "camera": {
+        "body": ("<b>Select your camera !</b><br><br>"
+                 "Choose your camera from the dropdown.<br><br>"
+                 "Check the preview looks correct - you should see yourself clearly.<br><br>"
+                 "Then click <b>Continue</b> to proceed to the next step."
+                 ),
+        "button": [("OK", "press ok")],
     },
 
-    "calibration" : {
-        "body":("<b>Calibrate your distance !</b><br><br>"
-                "Hold your palm facing the camera at arm's length.<br><br>"
-                "Move until the gauge shows <span style='color: #008000;'><b>OPTIMAL</b></span> in green,then hold for 3 seconds - I will automatically move you to the next step!"
-        ),
-        "button":[("OK","press ok")],
+    "calibration": {
+        "body": ("<b>Calibrate your distance !</b><br><br>"
+                 "Hold your palm facing the camera at arm's length.<br><br>"
+                 "Move until the gauge shows <span style='color: #008000;'><b>OPTIMAL</b></span> in green,then hold for 3 seconds - I will automatically move you to the next step!"
+                 ),
+        "button": [("OK", "press ok")],
     },
 
-    "zone" : {
-        "body":("<b>Choose your movement zone !</b><br><br>"
-                "Show 1,2,3 fingers to the camera to select or click your preferred option directly.<br><br>"
-                "Hold for 3 seconds to auto-advance to Home dashboard. <br><br>"
-                "You can always change your zone later in the settings."
-        ),
-        "button":[("OK","press ok")],
+    "zone": {
+        "body": ("<b>Choose your movement zone !</b><br><br>"
+                 "Show 1,2,3 fingers to the camera to select or click your preferred option directly.<br><br>"
+                 "Hold for 3 seconds to auto-advance to Home dashboard. <br><br>"
+                 "You can always change your zone later in the settings."
+                 ),
+        "button": [("OK", "press ok")],
     }
-    
 }
-
-
 
 step_for_index = {1: "guide_intro", 2: "camera", 3: "calibration", 4: "zone"}
 default_card_width = 340
@@ -73,7 +108,12 @@ class HandBotCard(QFrame):
         self.setFixedWidth(default_card_width)
         self._build()
         self.apply_theme(self.is_dark)
-    
+
+        # --- Pop-in animation setup ---
+        self.opacity_effect = QGraphicsOpacityEffect(self)
+        self.setGraphicsEffect(self.opacity_effect)
+        self.opacity_effect.setOpacity(1.0)
+
     def _build(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(22, 20, 22, 20)
@@ -81,8 +121,12 @@ class HandBotCard(QFrame):
 
         head = QHBoxLayout()
         head.setSpacing(10)
-        icon_lbl = QLabel("🤖")
-        icon_lbl.setStyleSheet("font-size:20px; background:transparent; border:none;")
+
+        # --- CHANGED: real HandBot image instead of emoji ---
+        icon_lbl = QLabel()
+        icon_lbl.setStyleSheet("background:transparent; border:none;")
+        pixmap = QPixmap(HANDBOT_EXPLAINING)
+        icon_lbl.setPixmap(pixmap.scaled(48, 48, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         head.addWidget(icon_lbl)
         self.card_icon_lbl = icon_lbl
 
@@ -113,7 +157,7 @@ class HandBotCard(QFrame):
     def set_content(self, key):
         data = popup_content.get(key)
         self.setFixedWidth(card_width_for_content.get(key, default_card_width))
-        self.setMinimumHeight(card_min_height_for_content.get(key, 0))
+        self.body_lbl.setFixedWidth(self.width() - 64)
         self.body_lbl.setText(data["body"])
         self.body_lbl.adjustSize()
 
@@ -123,7 +167,7 @@ class HandBotCard(QFrame):
             if widget:
                 widget.deleteLater()
 
-        for i,(label, action_id) in enumerate(data['button']):
+        for i, (label, action_id) in enumerate(data['button']):
             btn = QPushButton(label)
             btn.setCursor(Qt.PointingHandCursor)
             btn.setProperty("action_id", action_id)
@@ -132,7 +176,35 @@ class HandBotCard(QFrame):
             self.btn_row.addWidget(btn)
 
         self.layout().invalidate()
+        self.layout().activate()
         self.adjustSize()
+
+    def play_pop_in(self):
+        """Scale + fade entrance animation. Call this right after the
+        card is positioned and shown."""
+        final_geometry = self.geometry()
+        start_geometry = QRect(
+            final_geometry.center().x() - int(final_geometry.width() * 0.4),
+            final_geometry.center().y() - int(final_geometry.height() * 0.4),
+            int(final_geometry.width() * 0.8),
+            int(final_geometry.height() * 0.8),
+        )
+        self.setGeometry(start_geometry)
+        self.opacity_effect.setOpacity(0.0)
+
+        self.scale_anim = QPropertyAnimation(self, b"geometry")
+        self.scale_anim.setDuration(300)
+        self.scale_anim.setStartValue(start_geometry)
+        self.scale_anim.setEndValue(final_geometry)
+        self.scale_anim.setEasingCurve(QEasingCurve.OutCubic)
+
+        self.fade_anim = QPropertyAnimation(self.opacity_effect, b"opacity")
+        self.fade_anim.setDuration(300)
+        self.fade_anim.setStartValue(0.0)
+        self.fade_anim.setEndValue(1.0)
+
+        self.scale_anim.start()
+        self.fade_anim.start()
 
     def apply_theme(self, is_dark):
         self.is_dark = is_dark
@@ -158,8 +230,6 @@ class HandBotCard(QFrame):
         """)
         self.body_lbl.setStyleSheet(
             f"font-size:12px; color:{text}; background:transparent; border:none;")
-        self.card_icon_lbl.setStyleSheet(
-            f"font-size:20px; color:{text}; background:transparent; border:none;")
         self.title_lbl.setStyleSheet(
             f"font-size:16px; font-weight:700; color:{text}; background:transparent; border:none;")
 
@@ -217,24 +287,24 @@ class HandBotCard(QFrame):
                 QPushButton:pressed {{ background: {primary_pressed}; }}
             """)
 
-    
-#draggable icon
+#draggable icon 
 class HandBotIcon(QLabel):
-    "Floating Handbot icon that can be dragged around the screen."
+    """Floating HandBot icon that can be dragged around the screen."""
     clicked = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setText("🤖")
         self.setFixedSize(52, 52)
         self.setAlignment(Qt.AlignCenter)
         self.setCursor(Qt.PointingHandCursor)
+        self.setScaledContents(False)
+        self.setStyleSheet("background: transparent; border: none;")
         self.apply_theme(False)
 
         self._dragging = False
         self._drag_offset = QPoint()
         self._moved = False
-        #Breathing animation
+
         self._anim = QPropertyAnimation(self, b"pos")
         self._anim.setDuration(1400)
         self._anim.setEasingCurve(QEasingCurve.InOutSine)
@@ -274,16 +344,14 @@ class HandBotIcon(QLabel):
         self._anim.start()
 
     def apply_theme(self, is_dark):
-        bg = "#111111" if is_dark else "#FFFFFF"
+        # --- CHANGED: bake theme-colored background circle + real image
+        # into the pixmap, instead of emoji text + CSS border ---
+        bg_color = "#111111" if is_dark else "#FFFFFF"
         border = "#E8E8E8" if is_dark else "#D8CEC7"
-        color = "#E8E8E8" if is_dark else "#D8CEC7"
-        self.setStyleSheet(f"""
-            background: {bg};
-            color: {color};
-            border: 1px solid {border};
-            border-radius: 26px;
-            font-size: 22px;
-        """)
+        source = QPixmap(HANDBOT_NEUTRAL)
+        circular = make_circular_pixmap(source, self.width(), bg_color, border)
+        self.setPixmap(circular)
+
 
 class HandBotOverlay(QWidget):
     def __init__(self, stack):
@@ -295,6 +363,11 @@ class HandBotOverlay(QWidget):
 
         self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         self.setStyleSheet("background: transparent;")
+
+        self.dim_bg = QWidget(self.stack)
+        self.dim_bg.setStyleSheet("background-color: rgba(0, 0, 0, 60);")
+        self.dim_bg.setAttribute(Qt.WA_StyledBackground, True)
+        self.dim_bg.hide()
 
         self.icon = HandBotIcon(self.stack)
         self.icon.hide()
@@ -314,7 +387,7 @@ class HandBotOverlay(QWidget):
     def apply_theme(self, is_dark):
         self.icon.apply_theme(is_dark)
         self.card.apply_theme(is_dark)
-    
+
     def eventFilter(self, obj, event):
         if obj is self.stack and event.type() in (QEvent.Resize, QEvent.Show):
             self._reposition()
@@ -322,6 +395,7 @@ class HandBotOverlay(QWidget):
 
     def _reposition(self):
         self.setGeometry(0, 0, self.stack.width(), self.stack.height())
+        self.dim_bg.setGeometry(0, 0, self.stack.width(), self.stack.height())  # NEW
         if not self.icon._dragging and not self.icon._moved:
             self.icon._anim.stop()
             self.icon.move(self.width() - self.icon.width() - 1, 110)
@@ -339,9 +413,19 @@ class HandBotOverlay(QWidget):
     def _on_step_changed(self, index):
         self.raise_()
         if index == 0:
-            # Dashboard - HandBot stays out of the way entirely.
             self.icon.hide()
+            self.dim_bg.hide()
             self._hide_card()
+            return
+
+        key = step_for_index.get(index)
+
+        if key == 'guide_intro' and not self._intro_shown:
+            self._intro_shown = True
+            self.dim_bg.show()
+            self.dim_bg.raise_()
+            self.icon.hide()  # icon stays hidden until Skip/Yes dismisses the intro
+            self._show_card('guide_intro')
             return
 
         self.icon.show()
@@ -366,6 +450,7 @@ class HandBotOverlay(QWidget):
         self.card.show()
         self.card.raise_()
         self._center_card()
+        self.card.play_pop_in()  # --- CHANGED: animate every card appearance ---
 
     def _hide_card(self):
         self.card.hide()
@@ -382,10 +467,49 @@ class HandBotOverlay(QWidget):
     def _on_action(self, action_id):
         if action_id == 'guide_yes':
             self.guide_enabled = True
+            self.dim_bg.hide()  # NEW: dim goes away once intro is dismissed
+            self.icon.show()
+            self.icon.raise_()
+            self.icon.start_idle_bounce()
             self._show_card('guide_overview')
         elif action_id in ('guide_skip', 'guide_no'):
             self.guide_enabled = False
-            self._hide_card()
+            self._skip_with_fly_animation()
         elif action_id in ('ack', 'press ok'):
             self._current_key = step_for_index.get(self.stack.currentIndex(), self._current_key)
             self._hide_card()
+
+    def _skip_with_fly_animation(self):
+        target_rect = QRect(
+            self.icon.x(), self.icon.y(), self.icon.width(), self.icon.height()
+        )
+        start_rect = self.card.geometry()
+
+        # NEW: fade the dim out at the same time as the shrink
+        self.dim_fade = QPropertyAnimation(self.dim_bg, b"windowOpacity")
+        self.dim_opacity_effect = QGraphicsOpacityEffect(self.dim_bg)
+        self.dim_bg.setGraphicsEffect(self.dim_opacity_effect)
+        self.dim_opacity_effect.setOpacity(1.0)
+        self.dim_fade = QPropertyAnimation(self.dim_opacity_effect, b"opacity")
+        self.dim_fade.setDuration(500)
+        self.dim_fade.setStartValue(1.0)
+        self.dim_fade.setEndValue(0.0)
+        self.dim_fade.finished.connect(self.dim_bg.hide)
+        self.dim_fade.start()
+
+        self.icon.show()  # NEW: reveal the icon just as the card starts flying toward it
+        self.icon.raise_()
+
+        self.fly_anim = QPropertyAnimation(self.card, b"geometry")
+        self.fly_anim.setDuration(500)
+        self.fly_anim.setStartValue(start_rect)
+        self.fly_anim.setEndValue(target_rect)
+        self.fly_anim.setEasingCurve(QEasingCurve.InBack)
+        self.fly_anim.finished.connect(self._on_skip_fly_finished)
+        self.fly_anim.start()
+
+    def _on_skip_fly_finished(self):
+        self._hide_card()
+        # Restore card to its normal size for next time it's shown
+        self.card.setGeometry(self.card.x(), self.card.y(), default_card_width, self.card.minimumHeight())
+        self.icon.start_idle_bounce()
