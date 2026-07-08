@@ -6,7 +6,8 @@ from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve, QPoint,
 popup_content ={
     "guide_intro" : {
         "body":("<b>Hi! I am Handbot</b><br><br>"
-               "HandMouse is developed by FYP-26-S2-02, a team of six from SIM - University of Wollongong. <br><br>"
+                "I am your friendly guide to help you get started with HandMouse.<br><br>"
+               "HandMouse is developed by <b>FYP-26-S2-02</b>, a team of six from SIM - University of Wollongong. <br><br>"
                "Before jumping into the application, would you like me to guide you through the first-time setup?"
         ),
         "button":[("Yes - Guide me through","guide_yes"),("Skip - I will explore myself","guide_no")],
@@ -274,12 +275,12 @@ class HandBotIcon(QLabel):
 
     def apply_theme(self, is_dark):
         bg = "#111111" if is_dark else "#FFFFFF"
-        border = "#E8E8E8" if is_dark else "#111111"
-        color = "#E8E8E8" if is_dark else "#111111"
+        border = "#E8E8E8" if is_dark else "#D8CEC7"
+        color = "#E8E8E8" if is_dark else "#D8CEC7"
         self.setStyleSheet(f"""
             background: {bg};
             color: {color};
-            border: 2px solid {border};
+            border: 1px solid {border};
             border-radius: 26px;
             font-size: 22px;
         """)
