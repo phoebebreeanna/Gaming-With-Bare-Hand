@@ -304,6 +304,7 @@ class HandBotIcon(QLabel):
         self._dragging = False
         self._drag_offset = QPoint()
         self._moved = False
+        self._bounce_paused = False
 
         self._anim = QPropertyAnimation(self, b"pos")
         self._anim.setDuration(1400)
@@ -332,10 +333,12 @@ class HandBotIcon(QLabel):
             self._dragging = False
             if not self._moved:
                 self.clicked.emit()
-            if self.isVisible():
+            if self.isVisible() and not self._bounce_paused:
                 self.start_idle_bounce()
 
     def start_idle_bounce(self):
+        if self._bounce_paused:
+            return
         base = self.pos()
         self._anim.stop()
         self._anim.setStartValue(base)
@@ -446,6 +449,8 @@ class HandBotOverlay(QWidget):
 
     def _show_card(self, key):
         self._current_key = key
+        self.icon._bounce_paused = True
+        self.icon._anim.stop()
         self.card.set_content(key)
         self.card.show()
         self.card.raise_()
@@ -454,6 +459,9 @@ class HandBotOverlay(QWidget):
 
     def _hide_card(self):
         self.card.hide()
+        self.icon._bounce_paused = False
+        if self.icon.isVisible():
+            self.icon.start_idle_bounce()
 
     def _on_icon_clicked(self):
         if self.card.isVisible():
