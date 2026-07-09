@@ -17,7 +17,7 @@ from ui.mainmenu_setup import MainMenuSetup
 from ui.mainmenu_calibration import MainMenuCalibration
 from ui.mainmenu_zone import MainMenuZone
 from ui.mainmenu_camera import MainMenuCamera
-from ui.handbot import HandBotOverlay #Add handbot overlay to main menu
+from ui.handbot import HandBotOverlay,HandBotPagesOverlay #Add handbot overlay and pages overlay
 
 from logic.hand_controller import HandControllerThread, CameraPreviewThread, list_cameras
 from logic.app_config import is_setup_done, get_saved_zone, mark_setup_done, get_camera_index, set_camera_index, set_zone, get_mouse_side, set_mouse_side
@@ -325,6 +325,7 @@ class MainMenu(QWidget):
         self.zone_guide.on_menu_toggle.connect(self.toggle_sidebar)
         self.home_stack.addWidget(self.zone_guide)
         self.handbot = HandBotOverlay(self.home_stack)
+        self.handbot_pages = HandBotPagesOverlay(self.pages, self.home_stack)
 
         return page
 
@@ -1240,6 +1241,7 @@ class MainMenu(QWidget):
         self.pipeline_ui.apply_theme(self.is_dark)
         self.key_bindings_widget.apply_theme(self.is_dark)
         self.handbot.apply_theme(self.is_dark)
+        self.handbot_pages.apply_theme(self.is_dark)
         self.update()
         self.repaint()
 

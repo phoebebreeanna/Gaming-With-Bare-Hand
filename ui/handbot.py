@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (QWidget, QLabel, QVBoxLayout, QHBoxLayout, QPushButton, QFrame,
                                 QGraphicsOpacityEffect)
-from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve, QPoint, QEvent, QRect
+from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve, QPoint, QEvent, QRect, QTimer
 from PySide6.QtGui import QColor, QPen, QPixmap, QPainter, QPainterPath
 
 
@@ -287,10 +287,97 @@ class HandBotCard(QFrame):
                 QPushButton:pressed {{ background: {primary_pressed}; }}
             """)
 
+class HandBotChatPanel(QFrame):
+    ### The floating chat panel that appears when the HandBot icon is clicked on the Home dashboard.
+    closed = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.is_dark = False
+        self.setObjectName("handbotChatPanel")
+        self.setFixedWidth(300)
+        self.setFixedHeight(315)
+        self._build()
+        self.apply_theme(self.is_dark)
+
+        self.opacity_effect = QGraphicsOpacityEffect(self)
+        self.setGraphicsEffect(self.opacity_effect)
+        self.opacity_effect.setOpacity(1.0)
+
+    def _build(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        header = QWidget()
+        header.setFixedHeight(50)
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(16, 0, 12, 0)
+
+        self.header_title = QLabel("HandBot")
+        self.header_title.setStyleSheet("font-size:14px; font-weight:600; background:transparent; border:none;")
+        header_layout.addWidget(self.header_title)
+        header_layout.addStretch()
+
+        close_btn = QPushButton("✗")
+        close_btn.setFixedSize(24, 24)
+        close_btn.setCursor(Qt.PointingHandCursor)
+        close_btn.setStyleSheet("QPushButton{background:transparent; border:none; font-size:18px;} QPushButton:hover{color:#999;}")
+        close_btn.clicked.connect(self.closed.emit)
+        header_layout.addWidget(close_btn)
+        layout.addWidget(header)
+        self.header = header
+
+        self.content_area = QWidget()
+        self.content_layout = QVBoxLayout(self.content_area)
+        self.content_layout.setContentsMargins(12, 12, 12, 12)
+        layout.addWidget(self.content_area, stretch=1)
+
+    def apply_theme(self, is_dark):
+        self.is_dark = is_dark
+        bg = "#111111" if is_dark else "#FFFFFF"
+        border = "#262626" if is_dark else "#E5E5E5"
+        text = "#E8E8E8" if is_dark else "#111111"
+        self.setStyleSheet(f"""
+            QFrame#handbotChatPanel {{
+                background: {bg};
+                border-radius: 10px;
+                border: 2px solid {border};
+            }}
+        """)
+        self.header.setStyleSheet(f"background:transparent; border-bottom:1px solid {border};")
+        self.header_title.setStyleSheet(f"font-size:14px; font-weight:600; color:{text}; background:transparent; border:none;")
+
+    def play_pop_in(self):
+        final_geometry = self.geometry()
+        start_geometry = QRect(
+            final_geometry.center().x() - int(final_geometry.width() * 0.4),
+            final_geometry.center().y() - int(final_geometry.height() * 0.4),
+            int(final_geometry.width() * 0.8),
+            int(final_geometry.height() * 0.8),
+        )
+        self.setGeometry(start_geometry)
+        self.opacity_effect.setOpacity(0.0)
+
+        self.scale_anim = QPropertyAnimation(self, b"geometry")
+        self.scale_anim.setDuration(300)
+        self.scale_anim.setStartValue(start_geometry)
+        self.scale_anim.setEndValue(final_geometry)
+        self.scale_anim.setEasingCurve(QEasingCurve.OutCubic)
+
+        self.fade_anim = QPropertyAnimation(self.opacity_effect, b"opacity")
+        self.fade_anim.setDuration(300)
+        self.fade_anim.setStartValue(0.0)
+        self.fade_anim.setEndValue(1.0)
+
+        self.scale_anim.start()
+        self.fade_anim.start()
+
 #draggable icon 
 class HandBotIcon(QLabel):
     """Floating HandBot icon that can be dragged around the screen."""
     clicked = Signal()
+    position_reset = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -305,11 +392,17 @@ class HandBotIcon(QLabel):
         self._drag_offset = QPoint()
         self._moved = False
         self._bounce_paused = False
+        self._ignore_next_release = False
 
         self._anim = QPropertyAnimation(self, b"pos")
         self._anim.setDuration(1400)
         self._anim.setEasingCurve(QEasingCurve.InOutSine)
         self._anim.setLoopCount(-1)
+
+        self._click_timer = QTimer(self)
+        self._click_timer.setSingleShot(True)
+        self._click_timer.setInterval(200)
+        self._click_timer.timeout.connect(self.clicked.emit)
 
     def mousePressEvent(self, e):
         if e.button() == Qt.LeftButton:
@@ -331,10 +424,31 @@ class HandBotIcon(QLabel):
     def mouseReleaseEvent(self, e):
         if e.button() == Qt.LeftButton:
             self._dragging = False
-            if not self._moved:
-                self.clicked.emit()
+            if self._ignore_next_release:
+                self._ignore_next_release = False
+            elif not self._moved:
+                self._click_timer.start()
             if self.isVisible() and not self._bounce_paused:
                 self.start_idle_bounce()
+
+    def mouseDoubleClickEvent(self, e):
+        if e.button() == Qt.LeftButton:
+            self._click_timer.stop()
+            self._ignore_next_release = True
+            self.reset_position()
+            e.accept()
+
+    def reset_position(self):
+        parent = self.parentWidget()
+        if not parent:
+            return
+        self._anim.stop()
+        self._dragging = False
+        self._moved = False
+        self.move(parent.width() - self.width() - 1, 110)
+        self.position_reset.emit()
+        if self.isVisible() and not self._bounce_paused:
+            self.start_idle_bounce()
 
     def start_idle_bounce(self):
         if self._bounce_paused:
@@ -375,13 +489,19 @@ class HandBotOverlay(QWidget):
         self.icon = HandBotIcon(self.stack)
         self.icon.hide()
         self.icon.clicked.connect(self._on_icon_clicked)
+        self.icon.position_reset.connect(self._on_icon_position_reset)
 
         self.card = HandBotCard(self.stack)
         self.card.hide()
         self.card.action.connect(self._on_action)
 
+        self.chat_panel = HandBotChatPanel(self.stack)
+        self.chat_panel.hide()
+        self.chat_panel.closed.connect(self._hide_chat)
+
         self.stack.installEventFilter(self)
         self.stack.currentChanged.connect(self._on_step_changed)
+        self._on_step_changed(self.stack.currentIndex())
 
         self._reposition()
         self.show()
@@ -390,6 +510,7 @@ class HandBotOverlay(QWidget):
     def apply_theme(self, is_dark):
         self.icon.apply_theme(is_dark)
         self.card.apply_theme(is_dark)
+        self.chat_panel.apply_theme(is_dark)
 
     def eventFilter(self, obj, event):
         if obj is self.stack and event.type() in (QEvent.Resize, QEvent.Show):
@@ -413,12 +534,13 @@ class HandBotOverlay(QWidget):
             y = (self.height() - self.card.height()) // 2
             self.card.move(x, y)
 
-    def _on_step_changed(self, index):
+    def _on_step_changed(self, index): #icon appears on the home dashboard 
         self.raise_()
         if index == 0:
-            self.icon.hide()
             self.dim_bg.hide()
             self._hide_card()
+            self._hide_chat()
+            self.icon.hide()
             return
 
         key = step_for_index.get(index)
@@ -464,6 +586,13 @@ class HandBotOverlay(QWidget):
             self.icon.start_idle_bounce()
 
     def _on_icon_clicked(self):
+        if self.stack.currentIndex() == 0:
+            if self.chat_panel.isVisible():
+                self._hide_chat()
+            else:
+                self._show_chat()
+            return
+
         if self.card.isVisible():
             self._hide_card()
             return
@@ -471,6 +600,34 @@ class HandBotOverlay(QWidget):
         key = self._current_key or step_for_index.get(self.stack.currentIndex())
         if key:
             self._show_card(key)
+
+    def _show_chat(self):
+        self.icon._bounce_paused = True
+        self.icon._anim.stop()
+        self.chat_panel.show()
+        self.chat_panel.raise_()
+        self._position_chat()
+        self.chat_panel.play_pop_in()
+
+    def _position_chat(self):
+        gap = 12
+        x = self.icon.x() - self.chat_panel.width() - gap
+        if x < gap:
+            x = self.icon.x() + self.icon.width() + gap
+        x = max(gap, min(x, self.width() - self.chat_panel.width() - gap))
+        y = self.icon.y()
+        y = max(gap, min(y, self.height() - self.chat_panel.height() - gap))
+        self.chat_panel.move(x, y)
+
+    def _on_icon_position_reset(self):
+        if self.chat_panel.isVisible():
+            self._position_chat()
+
+    def _hide_chat(self):
+        self.chat_panel.hide()
+        self.icon._bounce_paused = False
+        if self.icon.isVisible():
+            self.icon.start_idle_bounce()
 
     def _on_action(self, action_id):
         if action_id == 'guide_yes':
@@ -521,3 +678,94 @@ class HandBotOverlay(QWidget):
         # Restore card to its normal size for next time it's shown
         self.card.setGeometry(self.card.x(), self.card.y(), default_card_width, self.card.minimumHeight())
         self.icon.start_idle_bounce()
+
+
+class HandBotPagesOverlay(QWidget):
+    def __init__(self, pages_stack, home_stack=None):
+        super().__init__(pages_stack)
+        self.pages_stack = pages_stack
+        self.home_stack = home_stack
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        self.setStyleSheet("background: transparent;")
+
+        self.icon = HandBotIcon(self.pages_stack)
+        self.icon.hide()
+        self.icon.clicked.connect(self._on_icon_clicked)
+        self.icon.position_reset.connect(self._on_icon_position_reset)
+
+        self.chat_panel = HandBotChatPanel(self.pages_stack)
+        self.chat_panel.hide()
+        self.chat_panel.closed.connect(self._hide_chat)
+
+        self.pages_stack.installEventFilter(self)
+        self.pages_stack.currentChanged.connect(self._on_page_changed)
+        if self.home_stack:
+            self.home_stack.currentChanged.connect(lambda _: self._on_page_changed(self.pages_stack.currentIndex()))
+        self._on_page_changed(self.pages_stack.currentIndex())
+
+        self._reposition()
+        self.show()
+        self.raise_()
+
+    def apply_theme(self, is_dark):
+        self.icon.apply_theme(is_dark)
+        self.chat_panel.apply_theme(is_dark)
+
+    def eventFilter(self, obj, event):
+        if obj is self.pages_stack and event.type() in (QEvent.Resize, QEvent.Show):
+            self._reposition()
+        return False
+
+    def _reposition(self):
+        self.setGeometry(0, 0, self.pages_stack.width(), self.pages_stack.height())
+        if not self.icon._dragging and not self.icon._moved:
+            self.icon._anim.stop()
+            self.icon.move(self.width() - self.icon.width() - 1, 110)
+            if self.icon.isVisible():
+                self.icon.start_idle_bounce()
+        if self.chat_panel.isVisible():
+            self._position_chat()
+
+    def _position_chat(self):
+        gap = 12
+        x = self.icon.x() - self.chat_panel.width() - gap
+        if x < gap:
+            x = self.icon.x() + self.icon.width() + gap
+        x = max(gap, min(x, self.width() - self.chat_panel.width() - gap))
+        y = self.icon.y()
+        y = max(gap, min(y, self.height() - self.chat_panel.height() - gap))
+        self.chat_panel.move(x, y)
+
+    def _on_icon_position_reset(self):
+        if self.chat_panel.isVisible():
+            self._position_chat()
+
+    def _on_page_changed(self, index):
+        self.raise_()
+        if index == 0 and self.home_stack and self.home_stack.currentIndex() != 0:
+            self.icon.hide()
+            self._hide_chat()
+            return
+        self.icon.show()
+        self.icon.raise_()
+        self.icon.start_idle_bounce()
+
+    def _on_icon_clicked(self):
+        if self.chat_panel.isVisible():
+            self._hide_chat()
+        else:
+            self._show_chat()
+
+    def _show_chat(self):
+        self.icon._bounce_paused = True
+        self.icon._anim.stop()
+        self.chat_panel.show()
+        self.chat_panel.raise_()
+        self._position_chat()
+        self.chat_panel.play_pop_in()
+
+    def _hide_chat(self):
+        self.chat_panel.hide()
+        self.icon._bounce_paused = False
+        if self.icon.isVisible():
+            self.icon.start_idle_bounce()
