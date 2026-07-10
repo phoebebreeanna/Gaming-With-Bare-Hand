@@ -93,7 +93,12 @@ popup_content = {
 step_for_index = {1: "guide_intro", 2: "camera", 3: "calibration", 4: "zone"}
 default_card_width = 340
 card_width_for_content = {"guide_intro": 340, "guide_overview": 340, "camera": 340}
-card_min_height_for_content = {"guide_intro": 300, "guide_overview": 328, "zone": 314}
+card_min_height_for_content = {
+    "guide_intro": 300,
+    "guide_overview": 340,
+    "calibration": 328,
+    "zone": 314,
+}
 
 
 class HandBotCard(QFrame):
@@ -157,6 +162,7 @@ class HandBotCard(QFrame):
     def set_content(self, key):
         data = popup_content.get(key)
         self.setFixedWidth(card_width_for_content.get(key, default_card_width))
+        self.setMinimumHeight(card_min_height_for_content.get(key, 0))
         self.body_lbl.setFixedWidth(self.width() - 64)
         self.body_lbl.setText(data["body"])
         self.body_lbl.adjustSize()
