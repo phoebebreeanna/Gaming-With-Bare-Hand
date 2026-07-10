@@ -12,3 +12,5 @@ research/dataset
 build
 dist
 main.spec
+.python-version
+install-pyenv-win.ps1
