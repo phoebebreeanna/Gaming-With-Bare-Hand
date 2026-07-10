@@ -17,6 +17,7 @@ from ui.mainmenu_setup import MainMenuSetup
 from ui.mainmenu_calibration import MainMenuCalibration
 from ui.mainmenu_zone import MainMenuZone
 from ui.mainmenu_camera import MainMenuCamera
+from ui.mini_camera_overlay import MiniCameraOverlay
 
 from logic.hand_controller import HandControllerThread, CameraPreviewThread, list_cameras
 from logic.app_config import is_setup_done, get_saved_zone, mark_setup_done, get_camera_index, set_camera_index, set_zone, get_mouse_side, set_mouse_side
@@ -45,6 +46,12 @@ class MainMenu(QWidget):
         self._nn_lat_ms = 0.0
         self._hand_present = False
         self._show_perf_stats = True
+
+        self._mini_overlay = MiniCameraOverlay(on_restore=self._restore_main_window)
+        app = QApplication.instance()
+        if app is not None:
+            app.applicationStateChanged.connect(self._on_app_state_changed)
+            
         self.init_ui()
 
         try:
@@ -663,6 +670,7 @@ class MainMenu(QWidget):
     def _on_game_mode_from_ui(self, mode: str):
         labels = {'mouse': 'MOUSE', 'subway': 'SUBWAY', 'racing': 'RACING', 'open_world': 'OPEN WORLD'}
         self.info_cards["MODE"].setText(labels.get(mode, mode.upper()))
+        self._sync_mini_overlay()
         if self._is_running and self.controller:
             self.controller.switch_game_mode(mode)
 
@@ -670,6 +678,7 @@ class MainMenu(QWidget):
     def _on_controller_game_mode(self, mode: str):
         labels = {'mouse': 'MOUSE', 'subway': 'SUBWAY', 'racing': 'RACING', 'open_world': 'OPEN WORLD'}
         self.info_cards["MODE"].setText(labels.get(mode, mode.upper()))
+        self._sync_mini_overlay()
         self.game_mode_widget.set_selected_mode(mode)
 
     def switch_page(self, index):
@@ -1560,6 +1569,7 @@ class MainMenu(QWidget):
         self.pause_btn.setEnabled(True)
         self.stop_btn.setEnabled(True)
         self.info_cards["STATUS"].setText("RUNNING")
+        self._sync_mini_overlay()
 
     def _on_pause(self):
         if not self._is_running or not self.controller:
@@ -1603,10 +1613,12 @@ class MainMenu(QWidget):
         w = self.hold_bar_bg.width()
         if w > 0:
             self.hold_bar_fill.setGeometry(0, 0, int(frac * w), 4)
+        self._mini_overlay.show_hold(label, frac)
 
     def _hide_hold_bar(self):
         self.hold_bar_label.setText("ACTION")
         self.hold_bar_fill.setGeometry(0, 0, 0, 4)
+        self._mini_overlay.hide_hold()
 
     def _on_stop(self):
         if hasattr(self, "home_stack"):
@@ -1618,6 +1630,7 @@ class MainMenu(QWidget):
 
     @Slot()
     def _on_finished(self):
+        self._mini_overlay.hide()
         self._hide_hold_bar()
         if self._pending_restart:
             self._pending_restart = False
@@ -1680,6 +1693,26 @@ class MainMenu(QWidget):
         pixmap = QPixmap.fromImage(image)
         self._last_camera_pixmap = pixmap
         self._rescale_camera_frame()
+        if self._mini_overlay.isVisible():
+            self._mini_overlay.update_frame(image)
+
+    def _on_app_state_changed(self, state):
+        if state == Qt.ApplicationActive:
+            self._mini_overlay.hide()
+        elif self._is_running:
+            self._mini_overlay.show()
+
+    def _sync_mini_overlay(self):
+        self._mini_overlay.set_mode(self.info_cards["MODE"].text())
+        self._mini_overlay.set_status(self.info_cards["STATUS"].text())
+        self._mini_overlay.set_gesture(self.info_cards["GESTURE"].text(), self.info_cards["ACTION"].text())
+
+    def _restore_main_window(self):
+        self._mini_overlay.hide()
+        win = self.window()
+        win.showNormal()
+        win.raise_()
+        win.activateWindow()
 
     def _rescale_camera_frame(self):
         if self._last_camera_pixmap is None:
@@ -1708,6 +1741,7 @@ class MainMenu(QWidget):
     def _update_gesture(self, gesture: str, action: str):
         self.info_cards["GESTURE"].setText(gesture.upper())
         self.info_cards["ACTION"].setText(action)
+        self._mini_overlay.set_gesture(gesture.upper(), action)
 
     @Slot(str)
     def _update_state(self, state: str):
@@ -1718,6 +1752,7 @@ class MainMenu(QWidget):
             'confirm_close': 'CONFIRM EXIT',
         }
         self.info_cards["STATUS"].setText(labels.get(state, state.upper()))
+        self._mini_overlay.set_status(labels.get(state, state.upper()))
         if state in ('stopped', 'confirm_close'):
             self._is_frozen = True
             self.pause_btn.setText("Resume")
