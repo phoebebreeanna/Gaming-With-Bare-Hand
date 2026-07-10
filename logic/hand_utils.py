@@ -17,7 +17,7 @@ pyautogui.PAUSE = 0
 SCREEN_W, SCREEN_H = pyautogui.size()
 
 MOUSE_SMOOTHING    = 0.45
-MOUSE_CONF_THRESH  = 0.51
+MOUSE_CONF_THRESH  = 0.60
 DRAG_HOLD_THRESH   = 0.5
 MP_PRESENCE_THRESH = 0.7
 CLICK_COOLDOWN     = 0.5
@@ -259,3 +259,6 @@ def _mouse_scroll(amount):
     #     _mouse_ctrl.scroll(0, amount)
     # else:
         pyautogui.scroll(amount)
+
+def _mouse_move_relative(dx, dy):
+    pyautogui.move(int(dx), int(dy))

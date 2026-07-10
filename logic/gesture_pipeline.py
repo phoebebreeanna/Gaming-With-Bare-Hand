@@ -4,6 +4,7 @@ from mediapipe.tasks import python as mp_tasks
 from mediapipe.tasks.python import vision as mp_vision
 import csv
 import os
+import platform
 import shutil
 import time
 import sys
@@ -11,6 +12,13 @@ import math
 import glob
 import argparse
 from collections import defaultdict, Counter
+
+_IS_WINDOWS = platform.system() == 'Windows'
+
+def _open_camera(index):
+    if _IS_WINDOWS:
+        return cv2.VideoCapture(index, cv2.CAP_DSHOW)
+    return cv2.VideoCapture(index)
 
 import pandas as pd
 import numpy as np
@@ -189,7 +197,7 @@ class _CameraWorker(QThread):
         options   = mp_vision.HandLandmarkerOptions(base_options=base_opts, num_hands=1)
         detector  = mp_vision.HandLandmarker.create_from_options(options)
 
-        cap = cv2.VideoCapture(self._cam_idx, cv2.CAP_DSHOW)
+        cap = _open_camera(self._cam_idx)
         cap.set(cv2.CAP_PROP_FRAME_WIDTH,  640)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         cap.set(cv2.CAP_PROP_FPS, 30)

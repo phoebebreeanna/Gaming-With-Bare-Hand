@@ -30,6 +30,7 @@ class MainMenu(QWidget):
         self._is_running = False
         self._is_paused = False
         self._is_frozen = False
+        self._pending_restart = False
         self._last_camera_pixmap = None
         self._optimal_since = None
         self._zone_hold_since = None
@@ -1254,8 +1255,12 @@ class MainMenu(QWidget):
     def _on_camera_changed(self, combo_idx: int):
         if not self._is_running: return
         cam = self.camera_combo.itemData(combo_idx)
-        if cam is not None and cam >= 0 and self.controller:
-            self.controller.set_camera(cam)
+        if cam is not None and cam >= 0:
+            set_camera_index(cam)
+            if self.controller and self.controller.isRunning():
+                self.controller.set_camera(cam)
+                self._pending_restart = True
+                self.controller.stop()
 
     def _on_zone_changed(self, zone: str):
         self._current_zone = zone
@@ -1296,14 +1301,17 @@ class MainMenu(QWidget):
 
     def _on_game_camera_changed(self, cam_idx: int):
         if not self._is_running: return
-        if self.controller:
-            self.controller.set_camera(cam_idx)
+        set_camera_index(cam_idx)
         for i in range(self.camera_combo.count()):
             if self.camera_combo.itemData(i) == cam_idx:
                 self.camera_combo.blockSignals(True)
                 self.camera_combo.setCurrentIndex(i)
                 self.camera_combo.blockSignals(False)
                 break
+        if self.controller and self.controller.isRunning():
+            self.controller.set_camera(cam_idx)
+            self._pending_restart = True
+            self.controller.stop()
 
     def _get_selected_camera(self) -> int:
         d = self.camera_combo.itemData(self.camera_combo.currentIndex())
@@ -1611,6 +1619,14 @@ class MainMenu(QWidget):
     @Slot()
     def _on_finished(self):
         self._hide_hold_bar()
+        if self._pending_restart:
+            self._pending_restart = False
+            self.controller = None
+            self._is_running = False
+            self._is_paused  = False
+            self._is_frozen  = False
+            self._start_controller()
+            return
         self._is_running = False
         self._is_paused  = False
         self._is_frozen  = False
