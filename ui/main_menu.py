@@ -1483,7 +1483,13 @@ class MainMenu(QWidget):
             if frac >= 1.0:
                 self._optimal_since = None
                 self.calibration_guide.set_progress(0.0)
-                self._on_distance_continue()
+                if hasattr(self, "handbot"):
+                    self.handbot.play_celebration(
+                        "Optimal! Great job!",
+                        on_finished=self._on_distance_continue
+                    )
+                else:
+                    self._on_distance_continue()
         else:
             self._optimal_since = None
             self.calibration_guide.set_progress(0.0)
@@ -1524,7 +1530,15 @@ class MainMenu(QWidget):
             if hasattr(self, "zone_guide"):
                 self.zone_guide._select_zone(pending)
                 self.zone_guide.set_zone_progress(None, 0.0)
-            self._on_zone_continue()
+            zone_labels = {'small': 'Small', 'medium': 'Medium', 'large': 'Large'}
+            zone_name = zone_labels.get(pending, pending.title())
+            if hasattr(self, "handbot"):
+                self.handbot.play_celebration(
+                    f"{zone_name} zone selected!",
+                    on_finished=self._on_zone_continue
+                )
+            else:
+                self._on_zone_continue()
 
     def _start_controller(self):
         from logic.app_config import get_model_source, get_game_mode, get_mouse_enabled, get_cursor_point, get_mouse_side

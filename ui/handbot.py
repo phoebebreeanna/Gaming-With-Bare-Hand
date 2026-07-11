@@ -7,6 +7,7 @@ from PySide6.QtGui import QColor, QPen, QPixmap, QPainter, QPainterPath
 # --- HandBot image assets ---
 HANDBOT_EXPLAINING = "assets/handbot/handbot_explaining.png"
 HANDBOT_NEUTRAL = "assets/handbot/handbot_neutral_icon.png"
+HANDBOT_CELEBRATING = "assets/handbot/handbot_celebrating.png"  
 
 
 def make_circular_pixmap(source_pixmap: QPixmap, diameter: int, bg_color: str, border_color: str, padding_ratio: float = 0.78) -> QPixmap:
@@ -332,12 +333,20 @@ class HandBotChatPanel(QFrame):
         self.content_layout = QVBoxLayout(self.content_area)
         self.content_layout.setContentsMargins(12, 12, 12, 12)
         layout.addWidget(self.content_area, stretch=1)
+        
+        # --- Placeholder until Darren wires in the real chatbot ---
+        self.placeholder_label = QLabel("💬 Chat coming soon!\n\nAsk me anything about gestures, setup, or HandMouse.")
+        self.placeholder_label.setWordWrap(True)
+        self.placeholder_label.setAlignment(Qt.AlignCenter)
+        self.placeholder_label.setStyleSheet("font-size:12px; color:#999; background:transparent; border:none;")
+        self.content_layout.addWidget(self.placeholder_label, stretch=1)
 
     def apply_theme(self, is_dark):
         self.is_dark = is_dark
         bg = "#111111" if is_dark else "#FFFFFF"
         border = "#262626" if is_dark else "#E5E5E5"
         text = "#E8E8E8" if is_dark else "#111111"
+        placeholder_color = "#777777" if is_dark else "#999999"  # add this line
         self.setStyleSheet(f"""
             QFrame#handbotChatPanel {{
                 background: {bg};
@@ -347,6 +356,7 @@ class HandBotChatPanel(QFrame):
         """)
         self.header.setStyleSheet(f"background:transparent; border-bottom:1px solid {border};")
         self.header_title.setStyleSheet(f"font-size:14px; font-weight:600; color:{text}; background:transparent; border:none;")
+        self.placeholder_label.setStyleSheet(f"font-size:12px; color:{placeholder_color}; background:transparent; border:none;")  
 
     def play_pop_in(self):
         final_geometry = self.geometry()
@@ -459,15 +469,39 @@ class HandBotIcon(QLabel):
         self._anim.setKeyValueAt(0.5, base + QPoint(0, -6))
         self._anim.setEndValue(base)
         self._anim.start()
+        
+    def play_celebrate(self, duration_ms=1200):
+        bg_color = "#111111" if self.is_dark else "#FFFFFF"
+        border = "#E8E8E8" if self.is_dark else "#D8CEC7"
+        source = QPixmap(HANDBOT_CELEBRATING)
+        circular = make_circular_pixmap(source, self.width(), bg_color, border)
+        self.setPixmap(circular)
+
+        self._anim.stop()
+        base = self.pos()
+        self._anim.setStartValue(base)
+        self._anim.setKeyValueAt(0.3, base + QPoint(0, -10))
+        self._anim.setEndValue(base)
+        self._anim.setLoopCount(1)  
+        self._anim.start()
+
+        QTimer.singleShot(duration_ms, self._end_celebrate)
+
+    def _end_celebrate(self):
+        self.apply_theme(self.is_dark)  
+        self._anim.setLoopCount(-1)  
+        if not self._bounce_paused:
+            self.start_idle_bounce()
 
     def apply_theme(self, is_dark):
-        # --- CHANGED: bake theme-colored background circle + real image
-        # into the pixmap, instead of emoji text + CSS border ---
+        self.is_dark = is_dark
         bg_color = "#111111" if is_dark else "#FFFFFF"
         border = "#E8E8E8" if is_dark else "#D8CEC7"
         source = QPixmap(HANDBOT_NEUTRAL)
         circular = make_circular_pixmap(source, self.width(), bg_color, border)
         self.setPixmap(circular)
+        
+        
 
 
 class HandBotOverlay(QWidget):
@@ -506,11 +540,15 @@ class HandBotOverlay(QWidget):
         self._reposition()
         self.show()
         self.raise_()
+        
+        self.celebrate_toast = HandBotCelebrateToast(self.stack)
+        self.celebrate_toast.hide()
 
     def apply_theme(self, is_dark):
         self.icon.apply_theme(is_dark)
         self.card.apply_theme(is_dark)
         self.chat_panel.apply_theme(is_dark)
+        self.celebrate_toast.apply_theme(is_dark)
 
     def eventFilter(self, obj, event):
         if obj is self.stack and event.type() in (QEvent.Resize, QEvent.Show):
@@ -678,6 +716,13 @@ class HandBotOverlay(QWidget):
         # Restore card to its normal size for next time it's shown
         self.card.setGeometry(self.card.x(), self.card.y(), default_card_width, self.card.minimumHeight())
         self.icon.start_idle_bounce()
+        
+    def play_celebration(self, message="Optimal! Great job!", on_finished=None):
+        self.celebrate_toast.message_label.setText(message)
+        center_x = self.stack.width() // 2
+        center_y = self.stack.height() // 2
+        self.celebrate_toast.play(center_x, center_y, hold_ms=900, on_finished=on_finished)
+        self.icon.play_celebrate()  # keep the icon animation too, as a bonus
 
 
 class HandBotPagesOverlay(QWidget):
@@ -769,3 +814,104 @@ class HandBotPagesOverlay(QWidget):
         self.icon._bounce_paused = False
         if self.icon.isVisible():
             self.icon.start_idle_bounce()
+
+class HandBotCelebrateToast(QFrame):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("celebrateToast")
+        self.setFixedSize(300, 240)  # bigger, was 240x180
+        self._build()
+        self.apply_theme(False)
+
+        self.opacity_effect = QGraphicsOpacityEffect(self)
+        self.setGraphicsEffect(self.opacity_effect)
+        self.opacity_effect.setOpacity(0.0)
+
+    def _build(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(14)
+        layout.setAlignment(Qt.AlignCenter)
+
+        self.avatar_label = QLabel()
+        self.avatar_label.setAlignment(Qt.AlignCenter)
+        self.avatar_label.setStyleSheet("background:transparent; border:none;")
+        pixmap = QPixmap(HANDBOT_CELEBRATING)
+        self.avatar_label.setPixmap(pixmap.scaled(120, 120, Qt.KeepAspectRatio, Qt.SmoothTransformation))  # bigger, was 80x80
+        layout.addWidget(self.avatar_label)
+
+        self.message_label = QLabel("Optimal! Great job!")
+        self.message_label.setAlignment(Qt.AlignCenter)
+        self.message_label.setStyleSheet("font-size:16px; font-weight:700; background:transparent; border:none;")  # bigger, was 14px
+        layout.addWidget(self.message_label)
+
+    def apply_theme(self, is_dark):
+        bg = "#111111" if is_dark else "#FFFFFF"
+        border = "#262626" if is_dark else "#E5E5E5"
+        text = "#E8E8E8" if is_dark else "#111111"
+        self.setStyleSheet(f"""
+            QFrame#celebrateToast {{
+                background: {bg};
+                border-radius: 16px;
+                border: 1px solid {border};
+            }}
+        """)
+        self.message_label.setStyleSheet(f"font-size:16px; font-weight:700; color:{text}; background:transparent; border:none;")
+
+    def play(self, center_x, center_y, hold_ms=1600, on_finished=None):
+        """Pop in with a bounce, jump twice, hold, then fade out."""
+        final_rect = QRect(
+            center_x - self.width() // 2, center_y - self.height() // 2,
+            self.width(), self.height()
+        )
+        start_rect = QRect(
+            final_rect.center().x() - int(final_rect.width() * 0.3),
+            final_rect.center().y() - int(final_rect.height() * 0.3),
+            int(final_rect.width() * 0.6), int(final_rect.height() * 0.6)
+        )
+
+        self.setGeometry(start_rect)
+        self.opacity_effect.setOpacity(0.0)
+        self.show()
+        self.raise_()
+
+        self.pop_scale = QPropertyAnimation(self, b"geometry")
+        self.pop_scale.setDuration(450)  # slower pop-in, was 250
+        self.pop_scale.setStartValue(start_rect)
+        self.pop_scale.setEndValue(final_rect)
+        self.pop_scale.setEasingCurve(QEasingCurve.OutBack)
+
+        self.pop_fade_in = QPropertyAnimation(self.opacity_effect, b"opacity")
+        self.pop_fade_in.setDuration(300)  # was 200
+        self.pop_fade_in.setStartValue(0.0)
+        self.pop_fade_in.setEndValue(1.0)
+
+        self.pop_scale.start()
+        self.pop_fade_in.start()
+
+        # Jump animation once settled - two noticeable hops
+        def _start_jump():
+            self.jump_anim = QPropertyAnimation(self, b"geometry")
+            self.jump_anim.setDuration(700)
+            self.jump_anim.setStartValue(final_rect)
+            jump_up = QRect(final_rect.x(), final_rect.y() - 18, final_rect.width(), final_rect.height())
+            self.jump_anim.setKeyValueAt(0.25, jump_up)
+            self.jump_anim.setKeyValueAt(0.5, final_rect)
+            self.jump_anim.setKeyValueAt(0.75, jump_up)
+            self.jump_anim.setKeyValueAt(1.0, final_rect)
+            self.jump_anim.setEasingCurve(QEasingCurve.OutQuad)
+            self.jump_anim.start()
+
+        QTimer.singleShot(450, _start_jump)  # starts right as pop-in finishes
+
+        def _start_fade_out():
+            self.fade_out = QPropertyAnimation(self.opacity_effect, b"opacity")
+            self.fade_out.setDuration(400)  # was 300
+            self.fade_out.setStartValue(1.0)
+            self.fade_out.setEndValue(0.0)
+            self.fade_out.finished.connect(self.hide)
+            if on_finished:
+                self.fade_out.finished.connect(on_finished)
+            self.fade_out.start()
+
+        QTimer.singleShot(hold_ms, _start_fade_out)
