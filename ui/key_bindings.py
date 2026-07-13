@@ -126,12 +126,12 @@ class KeyBindings(QWidget):
         self.header_rule.setFixedHeight(1)
         root.addWidget(self.header_rule)
 
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QScrollArea.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setFrameShape(QScrollArea.NoFrame)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
-        content = QWidget()
+        self.scroll_content = content = QWidget()
         cl = QVBoxLayout(content)
         cl.setContentsMargins(24, 16, 24, 16)
         cl.setSpacing(0)
@@ -211,8 +211,8 @@ class KeyBindings(QWidget):
             self._section_widgets[mode] = {'hdr': sec_hdr, 'rows': rows, 'sep': sep, 'reset_btn': reset_btn}
 
         cl.addStretch()
-        scroll.setWidget(content)
-        root.addWidget(scroll, stretch=1)
+        self.scroll.setWidget(content)
+        root.addWidget(self.scroll, stretch=1)
 
     def _reset_mode(self, mode: str):
         try:
@@ -267,17 +267,39 @@ class KeyBindings(QWidget):
         if is_dark:
             bg      = "#0a0a0a"; panel  = "#111111"; border = "#262626"
             text    = "#e8e8e8"; muted  = "#6b6b6b"; hover  = "#161616"
+            dim     = "#9a9a9a"
             sec_clr = "#6b6b6b"
             btn_bg  = "#1a1a1a"; btn_txt = "#e8e8e8"
             cap_bg  = "#e8e8e8"; cap_txt = "#111111"
         else:
             bg      = "#F4F4F4"; panel  = "#FFFFFF"; border = "#D8CEC7"
             text    = "#111111"; muted  = "#B8B0AB"; hover  = "#EDE5DF"
+            dim     = "#6F655F"
             sec_clr = "#9AA0A6"
             btn_bg  = "#F7F3F0"; btn_txt = "#111111"
             cap_bg  = "#1A1A1A"; cap_txt = "#FFFFFF"
 
         self.setStyleSheet(f"background-color: {bg};")
+        self.scroll.setStyleSheet(f"""
+            QScrollArea {{ background-color: {bg}; border: none; }}
+            QScrollBar:vertical {{
+                width: 4px;
+                background: transparent;
+                border: none;
+                margin: 0;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {muted};
+                border-radius: 2px;
+                min-height: 24px;
+            }}
+            QScrollBar::handle:vertical:hover {{ background: {dim}; }}
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical {{ height: 0px; }}
+            QScrollBar::add-page:vertical,
+            QScrollBar::sub-page:vertical {{ background: none; }}
+        """)
+        self.scroll_content.setStyleSheet(f"background-color: {bg};")
         self.header.setStyleSheet(f"background-color: {bg};")
         self.header_rule.setStyleSheet(f"background-color: {border};")
         self.menu_btn.setStyleSheet(f"""

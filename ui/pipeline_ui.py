@@ -1034,7 +1034,25 @@ class PipelineUI(QWidget):
 
         self._collect_cam_lbl.setStyleSheet(f"background-color: transparent; border: none;")
         self._collect_ctrl.setStyleSheet(f"background-color: {panel}; border: 1px solid {border};")
-        self._collect_scroll.setStyleSheet(f"background-color: {panel}; border: none;")
+        self._collect_scroll.setStyleSheet(f"""
+            QScrollArea {{ background-color: {panel}; border: none; }}
+            QScrollBar:vertical {{
+                width: 4px;
+                background: transparent;
+                border: none;
+                margin: 0;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {muted};
+                border-radius: 2px;
+                min-height: 24px;
+            }}
+            QScrollBar::handle:vertical:hover {{ background: {dim}; }}
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical {{ height: 0px; }}
+            QScrollBar::add-page:vertical,
+            QScrollBar::sub-page:vertical {{ background: none; }}
+        """)
         self._collect_scroll.viewport().setStyleSheet(f"background-color: {panel}; border: none;")
         self._collect_sep1.setStyleSheet(f"background-color: {border};")
         self._collect_sep2.setStyleSheet(f"background-color: {border};")
@@ -1126,7 +1144,25 @@ class PipelineUI(QWidget):
 
         self._review_hand_lbl.setStyleSheet(f"background-color: transparent; border: none;")
         self._review_ctrl.setStyleSheet(f"background-color: {panel}; border: 1px solid {border};")
-        self._review_scroll.setStyleSheet(f"background-color: {panel}; border: none;")
+        self._review_scroll.setStyleSheet(f"""
+            QScrollArea {{ background-color: {panel}; border: none; }}
+            QScrollBar:vertical {{
+                width: 4px;
+                background: transparent;
+                border: none;
+                margin: 0;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {muted};
+                border-radius: 2px;
+                min-height: 24px;
+            }}
+            QScrollBar::handle:vertical:hover {{ background: {dim}; }}
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical {{ height: 0px; }}
+            QScrollBar::add-page:vertical,
+            QScrollBar::sub-page:vertical {{ background: none; }}
+        """)
         self._review_scroll.viewport().setStyleSheet(f"background-color: {panel}; border: none;")
         self._review_sep1.setStyleSheet(f"background-color: {border};")
         self._review_sep2.setStyleSheet(f"background-color: {border};")

@@ -557,7 +557,25 @@ class GameMode(QWidget):
 
         self.setStyleSheet(f"background-color: {bg};")
 
-        self._settings_scroll.setStyleSheet(f"background-color: {bg}; border: none;")
+        self._settings_scroll.setStyleSheet(f"""
+            QScrollArea {{ background-color: {bg}; border: none; }}
+            QScrollBar:vertical {{
+                width: 4px;
+                background: transparent;
+                border: none;
+                margin: 0;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {muted};
+                border-radius: 2px;
+                min-height: 24px;
+            }}
+            QScrollBar::handle:vertical:hover {{ background: {dim}; }}
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical {{ height: 0px; }}
+            QScrollBar::add-page:vertical,
+            QScrollBar::sub-page:vertical {{ background: none; }}
+        """)
         self._settings_scroll.viewport().setStyleSheet(f"background-color: {bg}; border: none;")
 
         self.header.setStyleSheet(f"background-color: {bg};")
