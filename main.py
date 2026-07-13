@@ -28,8 +28,6 @@ class MainWindow(QMainWindow):
         self.resize(980, 660)
         self.setMinimumSize(800, 560)
 
-        self.setAttribute(Qt.WA_ShowWithoutActivating)
-
         self.setStyleSheet("""
             QMainWindow {
                 background-color: #F4F4F4;

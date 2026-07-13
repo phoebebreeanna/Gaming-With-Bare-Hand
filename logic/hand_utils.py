@@ -230,13 +230,11 @@ def draw_finger_dot(img, lms, gesture, drag_active, cursor_lm=8):
     cv2.circle(img, (fx, fy), 12, col, 2)
     cv2.circle(img, (fx, fy),  4, col, -1)
 
-def draw_wrist_marker(img, lms, color, radius=14):
-    """Crosshair + ring on the wrist landmark (0) so the user can see
-    exactly which point is being tracked for movement."""
+def draw_wrist_marker(img, lms, color, radius=14, lm_index=0):
     if lms is None:
         return
     h, w = img.shape[:2]
-    cx, cy = int(lms[0].x * w), int(lms[0].y * h)
+    cx, cy = int(lms[lm_index].x * w), int(lms[lm_index].y * h)
     cv2.circle(img, (cx, cy), radius, color, 2)
     cv2.circle(img, (cx, cy), 3, color, -1)
     cv2.line(img, (cx - radius - 6, cy), (cx - radius + 4, cy), color, 2)

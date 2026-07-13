@@ -15,10 +15,11 @@ AH_KEYS = {
 }
 
 AH_QUARTER_W = 0.25
-AH_CENTER = {1: (0.125, 0.5), 2: (0.625, 0.5)}
+AH_CENTER = {1: (0.375, 0.5), 2: (0.875, 0.5)}
 AH_DEADZONE = 0.07
 
 AH_BOX_HALF_W = AH_QUARTER_W * 0.70 / 2
+AH_MOVER_LM = 8
 
 AH_SKILL_DEBOUNCE = 0.18
 
@@ -70,9 +71,9 @@ class AirHockeyModeMixin:
         roles = {1: {'mover': None, 'skill': None}, 2: {'mover': None, 'skill': None}}
         for half, hands in buckets.items():
             for hand, handed in hands:
-                if handed == 'Right' and roles[half]['mover'] is None:
+                if handed == 'Left' and roles[half]['mover'] is None:
                     roles[half]['mover'] = hand
-                elif handed == 'Left' and roles[half]['skill'] is None:
+                elif handed == 'Right' and roles[half]['skill'] is None:
                     roles[half]['skill'] = hand
             for hand, handed in hands:
                 if hand is roles[half]['mover'] or hand is roles[half]['skill']:
@@ -99,14 +100,14 @@ class AirHockeyModeMixin:
         dir_x = dir_y = None
         if mover_lms is not None:
             cx, cy = AH_CENTER[player]
-            dx = mover_lms[0].x - cx
-            dy = mover_lms[0].y - cy
+            dx = mover_lms[AH_MOVER_LM].x - cx
+            dy = mover_lms[AH_MOVER_LM].y - cy
             if dx < -AH_DEADZONE: dir_x = 'left'
             elif dx > AH_DEADZONE: dir_x = 'right'
             if dy < -AH_DEADZONE: dir_y = 'up'
             elif dy > AH_DEADZONE: dir_y = 'down'
             draw_hand(display, mover_lms, AH_COLOR_MOVER)
-            draw_wrist_marker(display, mover_lms, AH_COLOR_MOVER)
+            draw_wrist_marker(display, mover_lms, AH_COLOR_MOVER, lm_index=AH_MOVER_LM)
 
         desired = set()
         if dir_x: desired.add(keys[dir_x])

@@ -32,6 +32,7 @@ class GameMode(QWidget):
     perf_stats_changed    = Signal(bool)
     custom_mode_selected  = Signal(str, str)
     chatbot_enabled_changed = Signal(bool)
+    mini_overlay_enabled_changed = Signal(bool)
 
     def __init__(self):
         super().__init__()
@@ -51,6 +52,7 @@ class GameMode(QWidget):
         self._side_btns      = {}
         self._show_perf_stats = True
         self._chatbot_enabled = True
+        self._mini_overlay_enabled = True
         self._custom_mode_combo   = None
         self._custom_src_btns     = {}
         self._selected_custom_id  = ''
@@ -66,7 +68,7 @@ class GameMode(QWidget):
                 get_game_mode, get_mouse_enabled, get_model_source, get_camera_index,
                 get_cursor_point, get_saved_zone, get_mouse_side, get_show_perf_stats,
                 get_selected_custom_mode_id, get_selected_custom_mode_source,
-                get_chatbot_enabled,
+                get_chatbot_enabled, get_mini_overlay_enabled,
             )
             self.selected_mode      = get_game_mode()
             self.mouse_enabled      = get_mouse_enabled()
@@ -76,6 +78,7 @@ class GameMode(QWidget):
             self._mouse_side        = get_mouse_side()
             self._show_perf_stats   = get_show_perf_stats()
             self._chatbot_enabled   = get_chatbot_enabled()
+            self._mini_overlay_enabled = get_mini_overlay_enabled()
             self._selected_custom_id = get_selected_custom_mode_id()
             self._custom_src         = get_selected_custom_mode_source()
             for m in ('mouse', 'subway', 'racing'):
@@ -339,6 +342,33 @@ class GameMode(QWidget):
         self.chatbot_toggle_btn.clicked.connect(self._toggle_chatbot_enabled)
         cbp.addWidget(self.chatbot_toggle_btn)
         cl.addWidget(self.chatbot_panel)
+
+        self.div1g = QWidget()
+        self.div1g.setFixedHeight(1)
+        cl.addWidget(self.div1g)
+
+        self.overlay_panel = QWidget()
+        self.overlay_panel.setMinimumHeight(52)
+        ovp = QHBoxLayout(self.overlay_panel)
+        ovp.setContentsMargins(16, 0, 16, 0)
+        ovp.setSpacing(0)
+
+        overlay_text_col = QVBoxLayout()
+        overlay_text_col.setSpacing(2)
+        self.overlay_hdr_lbl = QLabel("STATUS OVERLAY")
+        self.overlay_sub_lbl = QLabel("Show a small status panel when you switch to another app")
+        self.overlay_sub_lbl.setWordWrap(True)
+        overlay_text_col.addWidget(self.overlay_hdr_lbl)
+        overlay_text_col.addWidget(self.overlay_sub_lbl)
+        ovp.addLayout(overlay_text_col, stretch=1)
+
+        self.overlay_toggle_btn = QPushButton("ON" if self._mini_overlay_enabled else "OFF")
+        self.overlay_toggle_btn.setFixedHeight(26)
+        self.overlay_toggle_btn.setMinimumWidth(46)
+        self.overlay_toggle_btn.setCursor(Qt.PointingHandCursor)
+        self.overlay_toggle_btn.clicked.connect(self._toggle_mini_overlay_enabled)
+        ovp.addWidget(self.overlay_toggle_btn)
+        cl.addWidget(self.overlay_panel)
 
         self.div2 = QWidget()
         self.div2.setFixedHeight(1)
@@ -666,6 +696,18 @@ class GameMode(QWidget):
         self.chatbot_enabled_changed.emit(self._chatbot_enabled)
         self.apply_theme(self.is_dark)
 
+    def _toggle_mini_overlay_enabled(self):
+        self._mini_overlay_enabled = not self._mini_overlay_enabled
+        self.overlay_toggle_btn.setText("ON" if self._mini_overlay_enabled else "OFF")
+        try:
+            from logic.app_config import set_mini_overlay_enabled
+            set_mini_overlay_enabled(self._mini_overlay_enabled)
+        except Exception:
+            pass
+
+        self.mini_overlay_enabled_changed.emit(self._mini_overlay_enabled)
+        self.apply_theme(self.is_dark)
+
     def _set_model_source(self, mode: str, source: str):
         if source == 'custom' and not self._custom_exists(mode):
             return
@@ -944,6 +986,32 @@ class GameMode(QWidget):
             """)
         else:
             self.chatbot_toggle_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {tog_off_bg}; color: {tog_off_txt};
+                    font-size: 8px; font-weight: 700; letter-spacing: 1px;
+                    border: 1px solid {border}; border-radius: 2px;
+                }}
+                QPushButton:hover {{ background-color: {hover}; }}
+            """)
+
+        self.div1g.setStyleSheet(f"background-color: {border};")
+
+        self.overlay_panel.setStyleSheet(
+            f"background-color: {panel}; border: 1px solid {border};")
+        self.overlay_hdr_lbl.setStyleSheet(
+            f"font-size: 9px; font-weight: 700; color: {text}; letter-spacing: 1.5px; background: transparent; border: none;")
+        self.overlay_sub_lbl.setStyleSheet(
+            f"font-size: 8px; color: {muted}; letter-spacing: 1px; background: transparent; border: none;")
+        if self._mini_overlay_enabled:
+            self.overlay_toggle_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {tog_on_bg}; color: {tog_on_txt};
+                    font-size: 8px; font-weight: 700; letter-spacing: 1px;
+                    border: 1px solid {tog_on_bg}; border-radius: 2px;
+                }}
+            """)
+        else:
+            self.overlay_toggle_btn.setStyleSheet(f"""
                 QPushButton {{
                     background-color: {tog_off_bg}; color: {tog_off_txt};
                     font-size: 8px; font-weight: 700; letter-spacing: 1px;
