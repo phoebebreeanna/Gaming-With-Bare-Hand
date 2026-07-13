@@ -322,6 +322,7 @@ class HandControllerThread(
         self._current_frame_t         = 0.0
         self._confirm_close_from      = None
         self._confirm_close_hold_t    = None
+        self._ow_rebuild_eff_map()
 
         self.custom_prev_row = None
         self.custom_held_key = None
@@ -490,6 +491,7 @@ class HandControllerThread(
             self._rc_release_all()
         elif mode == 'open_world':
             self.ow_key_map[gesture] = key
+            self._ow_rebuild_eff_map()
         elif mode.startswith('custom_') and mode == f'custom_{self.custom_mode_id}':
             self.custom_key_map[gesture] = key
             self._custom_release_all()
@@ -608,9 +610,14 @@ class HandControllerThread(
 
         def _detect_gestures():
             last_ts = -1
+            was_active = False
             while not _stop[0]:
-                if ow_recognizer is None:
-                    time.sleep(0.05); continue
+                if ow_recognizer is None or self.active_game_mode != 4:
+                    if was_active:
+                        with _owl: _latest_ow_result[0] = None
+                        was_active = False
+                    time.sleep(0.03); continue
+                was_active = True
                 with _rgl:
                     rgb = _latest_rgb[0]
                     ts  = _latest_rgb_ts[0]

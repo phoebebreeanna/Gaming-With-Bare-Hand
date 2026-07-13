@@ -9,10 +9,11 @@ from logic.hand_utils import (
 
 _IS_WINDOWS = platform.system() == 'Windows'
 _MOUSEEVENTF_MOVE = 0x0001
+_mouse_event = ctypes.windll.user32.mouse_event if _IS_WINDOWS else None
 
 def _ow_mouse_move_relative(dx, dy):
     if _IS_WINDOWS:
-        ctypes.windll.user32.mouse_event(_MOUSEEVENTF_MOVE, dx, dy, 0, 0)
+        _mouse_event(_MOUSEEVENTF_MOVE, dx, dy, 0, 0)
     else:
         try:
             from Quartz import (CGEventCreateMouseEvent, CGEventPost,
@@ -77,6 +78,13 @@ def _ow_move(gesture_name, landmarks):
 
 class OpenWorldModeMixin:
 
+    def _ow_rebuild_eff_map(self):
+        eff = dict(OW_GESTURE_KEY_MAP)
+        for _g, _k in self.ow_key_map.items():
+            if _g in eff:
+                eff[_g] = _k
+        self._ow_eff_map = eff
+
     def _ow_release_all(self):
         for k in list(self.ow_held_keys):
             try:
@@ -135,10 +143,7 @@ class OpenWorldModeMixin:
                 'meta': {'game_opt': game_opt_frac},
             })
         else:
-            eff_map = dict(OW_GESTURE_KEY_MAP)
-            for _g, _k in self.ow_key_map.items():
-                if _g in eff_map:
-                    eff_map[_g] = _k
+            eff_map = self._ow_eff_map
 
             right_one_lms = None
             right_one_idx = -1
@@ -180,13 +185,13 @@ class OpenWorldModeMixin:
                     if _g0.score < OW_SCORE_THRESH:
                         continue
                     _gname = _g0.category_name
-                    _lms_ow = (ow_result.hand_landmarks[_i]
-                               if ow_result.hand_landmarks and
-                               _i < len(ow_result.hand_landmarks) else None)
                     _key = eff_map.get(_gname)
                     if not _key or _key == 'none':
                         continue
                     if _key == 'controller':
+                        _lms_ow = (ow_result.hand_landmarks[_i]
+                                   if ow_result.hand_landmarks and
+                                   _i < len(ow_result.hand_landmarks) else None)
                         _mk = _ow_move(_gname, _lms_ow)
                         if _mk:
                             detected[_gname] = _mk
@@ -241,7 +246,7 @@ class OpenWorldModeMixin:
             if lms:  draw_hand(display, lms)
             if lms2: draw_hand(display, lms2)
 
-            _top      = list(detected.keys())[0] if detected else 'none'
+            _top      = next(iter(detected)) if detected else 'none'
             _keys_str = ', '.join(sorted(self.ow_held_keys)) or 'Idle'
             self.gesture_changed.emit(_top.upper(), _keys_str)
             self.running_data.emit({
