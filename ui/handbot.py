@@ -1,7 +1,242 @@
+import html
+import threading
+
 from PySide6.QtWidgets import (QWidget, QLabel, QVBoxLayout, QHBoxLayout, QPushButton, QFrame,
-                                QGraphicsOpacityEffect)
+                                QGraphicsOpacityEffect, QTextEdit, QLineEdit, QDialog,
+                                QProgressBar, QApplication)
 from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve, QPoint, QEvent, QRect, QTimer
 from PySide6.QtGui import QColor, QPen, QPixmap, QPainter, QPainterPath
+
+from logic import app_config
+from logic.chatbot_worker import ChatbotQueryThread, ModelDownloadThread
+
+
+def _markdown_to_html(text: str) -> str:
+    try:
+        import markdown
+        return markdown.markdown(text, extensions=["nl2br", "sane_lists"])
+    except Exception:
+        return f"<p>{html.escape(text).replace(chr(10), '<br>')}</p>"
+
+
+class _CardDialog(QDialog):
+    """Frameless, rounded-corner dialog card matching the app's flat style."""
+
+    def __init__(self, parent=None, is_dark=False, width=340):
+        super().__init__(parent)
+        self.is_dark = is_dark
+        self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setModal(True)
+        self.setFixedWidth(width)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+
+        self.card = QFrame()
+        self.card.setObjectName("cardDialog")
+        outer.addWidget(self.card)
+
+        self.body = QVBoxLayout(self.card)
+        self.body.setContentsMargins(24, 22, 24, 22)
+        self.body.setSpacing(12)
+
+    def _palette(self):
+        return dict(
+            card_bg="#111111" if self.is_dark else "#FFFFFF",
+            border="#262626" if self.is_dark else "#E5E5E5",
+            text="#E8E8E8" if self.is_dark else "#111111",
+            muted="#9A9A9A" if self.is_dark else "#6B6B6B",
+            input_bg="#1A1A1A" if self.is_dark else "#F1F1F1",
+            primary_bg="#E8E8E8" if self.is_dark else "#000000",
+            primary_text="#0A0A0A" if self.is_dark else "#FFFFFF",
+        )
+
+    def _style_card(self):
+        p = self._palette()
+        self.card.setStyleSheet(f"""
+            QFrame#cardDialog {{
+                background: {p['card_bg']};
+                border-radius: 14px;
+                border: 1px solid {p['border']};
+            }}
+        """)
+        return p
+
+
+class ModelDownloadPromptDialog(_CardDialog):
+    """Asks the user to confirm the one-time chatbot model download."""
+
+    def __init__(self, parent=None, is_dark=False):
+        super().__init__(parent, is_dark)
+
+        title = QLabel("Download Chatbot Model")
+        title.setAlignment(Qt.AlignCenter)
+        self.body.addWidget(title)
+
+        subtitle = QLabel(
+            "HandBot needs to download its AI model (about 2 GB) the first "
+            "time it's used. This only happens once."
+        )
+        subtitle.setWordWrap(True)
+        subtitle.setAlignment(Qt.AlignCenter)
+        self.body.addWidget(subtitle)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        self.not_now_btn = QPushButton("Not Now")
+        self.not_now_btn.setCursor(Qt.PointingHandCursor)
+        self.not_now_btn.setFixedHeight(34)
+        self.not_now_btn.clicked.connect(self.reject)
+        self.download_btn = QPushButton("Download")
+        self.download_btn.setCursor(Qt.PointingHandCursor)
+        self.download_btn.setFixedHeight(34)
+        self.download_btn.clicked.connect(self.accept)
+        btn_row.addWidget(self.not_now_btn)
+        btn_row.addWidget(self.download_btn)
+        self.body.addLayout(btn_row)
+
+        p = self._style_card()
+        title.setStyleSheet(f"font-size:15px; font-weight:700; color:{p['text']}; background:transparent; border:none;")
+        subtitle.setStyleSheet(f"font-size:12px; color:{p['muted']}; background:transparent; border:none;")
+        self.not_now_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {p['card_bg']}; color: {p['text']};
+                border: 1px solid {p['border']}; border-radius: 8px;
+                font-size: 12px; font-weight: 600;
+            }}
+            QPushButton:hover {{ background: {p['input_bg']}; }}
+        """)
+        self.download_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {p['primary_bg']}; color: {p['primary_text']};
+                border: none; border-radius: 8px;
+                font-size: 12px; font-weight: 700;
+            }}
+        """)
+
+
+class ModelDownloadDialog(_CardDialog):
+    """Progress card shown while the chatbot's GGUF model downloads."""
+
+    def __init__(self, parent=None, is_dark=False):
+        super().__init__(parent, is_dark)
+
+        title = QLabel("Setting Up Chatbot")
+        title.setAlignment(Qt.AlignCenter)
+        self.body.addWidget(title)
+
+        self.status_lbl = QLabel("Starting download…")
+        self.status_lbl.setWordWrap(True)
+        self.status_lbl.setAlignment(Qt.AlignCenter)
+        self.body.addWidget(self.status_lbl)
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setTextVisible(False)
+        self.progress_bar.setFixedHeight(10)
+        self.body.addWidget(self.progress_bar)
+
+        self.pct_lbl = QLabel("0%")
+        self.pct_lbl.setAlignment(Qt.AlignCenter)
+        self.body.addWidget(self.pct_lbl)
+
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.setCursor(Qt.PointingHandCursor)
+        self.cancel_btn.setFixedHeight(34)
+        self.cancel_btn.clicked.connect(self._on_cancel)
+        self.body.addWidget(self.cancel_btn)
+
+        p = self._style_card()
+        title.setStyleSheet(f"font-size:15px; font-weight:700; color:{p['text']}; background:transparent; border:none;")
+        self.status_lbl.setStyleSheet(f"font-size:12px; color:{p['muted']}; background:transparent; border:none;")
+        self.pct_lbl.setStyleSheet(f"font-size:11px; font-weight:600; color:{p['muted']}; background:transparent; border:none;")
+        self.progress_bar.setStyleSheet(f"""
+            QProgressBar {{
+                background: {p['input_bg']};
+                border: none;
+                border-radius: 5px;
+            }}
+            QProgressBar::chunk {{
+                background-color: {p['primary_bg']};
+                border-radius: 5px;
+            }}
+        """)
+        self.cancel_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {p['card_bg']}; color: {p['text']};
+                border: 1px solid {p['border']}; border-radius: 8px;
+                font-size: 12px; font-weight: 600;
+            }}
+            QPushButton:hover {{ background: {p['input_bg']}; }}
+        """)
+
+        self._cancelling = False
+        self._cancel_event = threading.Event()
+        self._thread = ModelDownloadThread(self._cancel_event, self)
+        self._thread.progress.connect(self._on_progress)
+        self._thread.finished_ok.connect(self.accept)
+        self._thread.failed.connect(self._on_failed)
+        self._thread.finished.connect(self._on_thread_finished)
+        self._thread.start()
+
+    def _on_progress(self, downloaded: int, total: int):
+        mb_done = downloaded / (1024 * 1024)
+        self.status_lbl.setText("Downloading the chatbot's AI model…")
+        if total:
+            pct = min(int(downloaded * 100 / total), 100)
+            self.progress_bar.setRange(0, 100)
+            self.progress_bar.setValue(pct)
+            mb_total = total / (1024 * 1024)
+            self.pct_lbl.setText(f"{pct}%  ·  {mb_done:.0f} MB / {mb_total:.0f} MB")
+        else:
+            self.progress_bar.setRange(0, 0)
+            self.pct_lbl.setText(f"{mb_done:.0f} MB downloaded")
+
+    def _on_cancel(self):
+        if self._cancelling:
+            return
+        self._cancelling = True
+        self._cancel_event.set()
+        self.cancel_btn.setEnabled(False)
+        self.status_lbl.setText("Cancelling…")
+
+    def _on_failed(self, message: str):
+        self.status_lbl.setText(message)
+        self.progress_bar.setRange(0, 1)
+        self.progress_bar.setValue(0)
+        self.pct_lbl.setText("")
+        self.cancel_btn.setText("Close")
+
+    def _on_thread_finished(self):
+        if self._cancelling:
+            QDialog.reject(self)
+
+    def closeEvent(self, event):
+        if self._thread.isRunning():
+            self._cancelling = True
+            self._cancel_event.set()
+            self.cancel_btn.setEnabled(False)
+            self.status_lbl.setText("Cancelling…")
+            event.ignore()
+            return
+        super().closeEvent(event)
+
+
+def ensure_model_ready(parent: QWidget, is_dark: bool = False) -> bool:
+    """Returns True if the chatbot model is ready to use, prompting the user
+    to download it first if it isn't."""
+    from logic.chatbot import rag_service
+
+    if rag_service.is_primary_model_ready():
+        return True
+
+    prompt = ModelDownloadPromptDialog(parent, is_dark=is_dark)
+    if prompt.exec() != QDialog.Accepted:
+        return False
+
+    dialog = ModelDownloadDialog(parent, is_dark=is_dark)
+    return dialog.exec() == QDialog.Accepted
 
 
 # --- HandBot image assets ---
@@ -292,18 +527,30 @@ class HandBotChatPanel(QFrame):
     ### The floating chat panel that appears when the HandBot icon is clicked on the Home dashboard.
     closed = Signal()
 
+    MIN_WIDTH = 300
+    MAX_WIDTH = 420
+    MIN_HEIGHT = 315
+    MAX_HEIGHT = 620
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.is_dark = False
         self.setObjectName("handbotChatPanel")
-        self.setFixedWidth(300)
-        self.setFixedHeight(315)
+        self.setFixedWidth(self.MIN_WIDTH)
+        self.setFixedHeight(self.MIN_HEIGHT)
         self._build()
         self.apply_theme(self.is_dark)
 
         self.opacity_effect = QGraphicsOpacityEffect(self)
         self.setGraphicsEffect(self.opacity_effect)
         self.opacity_effect.setOpacity(1.0)
+
+    def resize_to_fit(self, available_width: int, available_height: int):
+        target_w = int(available_width * 0.34)
+        target_h = int(available_height * 0.62)
+        width = max(self.MIN_WIDTH, min(target_w, self.MAX_WIDTH, available_width - 24))
+        height = max(self.MIN_HEIGHT, min(target_h, self.MAX_HEIGHT, available_height - 24))
+        self.setFixedSize(width, height)
 
     def _build(self):
         layout = QVBoxLayout(self)
@@ -332,21 +579,121 @@ class HandBotChatPanel(QFrame):
         self.content_area = QWidget()
         self.content_layout = QVBoxLayout(self.content_area)
         self.content_layout.setContentsMargins(12, 12, 12, 12)
+        self.content_layout.setSpacing(8)
         layout.addWidget(self.content_area, stretch=1)
-        
-        # --- Placeholder until Darren wires in the real chatbot ---
-        self.placeholder_label = QLabel("💬 Chat coming soon!\n\nAsk me anything about gestures, setup, or HandMouse.")
-        self.placeholder_label.setWordWrap(True)
-        self.placeholder_label.setAlignment(Qt.AlignCenter)
-        self.placeholder_label.setStyleSheet("font-size:12px; color:#999; background:transparent; border:none;")
-        self.content_layout.addWidget(self.placeholder_label, stretch=1)
+
+        self.transcript = QTextEdit()
+        self.transcript.setReadOnly(True)
+        self.transcript.setPlaceholderText("Ask me anything about gestures, setup, or HandMouse.")
+        self.transcript.document().setDefaultStyleSheet(
+            "p, ul, ol { margin: 0; padding: 0; }"
+            "li { margin: 0 0 2px 18px; }"
+            ".sender { margin: 0 0 2px 0; }"
+            ".spacer { margin: 0; line-height: 14px; }"
+        )
+        self.content_layout.addWidget(self.transcript, stretch=1)
+
+        self.typing_lbl = QLabel("")
+        self.typing_lbl.hide()
+        self.content_layout.addWidget(self.typing_lbl)
+
+        self._typing_timer = QTimer(self)
+        self._typing_timer.setInterval(400)
+        self._typing_timer.timeout.connect(self._tick_typing)
+        self._typing_frame = 0
+
+        input_row = QHBoxLayout()
+        input_row.setSpacing(6)
+
+        self.input_box = QLineEdit()
+        self.input_box.setPlaceholderText("Type a message…")
+        self.input_box.returnPressed.connect(self._on_send)
+        input_row.addWidget(self.input_box, stretch=1)
+
+        self.send_btn = QPushButton("Send")
+        self.send_btn.setCursor(Qt.PointingHandCursor)
+        self.send_btn.clicked.connect(self._on_send)
+        input_row.addWidget(self.send_btn)
+
+        self.content_layout.addLayout(input_row)
+
+        self._query_thread = None
+        self._messages = []
+
+    def _append_line(self, sender: str, text: str, is_markdown: bool = False):
+        body = _markdown_to_html(text) if is_markdown else html.escape(text)
+        self._messages.append((sender, body))
+        self._render_transcript()
+
+    def _render_transcript(self):
+        blocks = []
+        for sender, body in self._messages:
+            blocks.append(
+                f'<p class="sender"><b>{sender}:</b></p>'
+                f'{body}'
+                f'<p class="spacer">&nbsp;</p>'
+            )
+        self.transcript.setHtml("".join(blocks))
+        scrollbar = self.transcript.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
+
+    def _on_send(self):
+        question = self.input_box.text().strip()
+        if not question or self._query_thread is not None:
+            return
+
+        self._append_line("You", question)
+        self.input_box.clear()
+
+        if not app_config.get_chatbot_enabled():
+            self._append_line("HandBot", "Chatbot is disabled - enable it in Settings.")
+            return
+
+        self.input_box.setEnabled(False)
+        self.send_btn.setEnabled(False)
+        self._show_typing()
+
+        self._query_thread = ChatbotQueryThread(question, self)
+        self._query_thread.answer_ready.connect(self._on_answer_ready)
+        self._query_thread.answer_failed.connect(self._on_answer_failed)
+        self._query_thread.finished.connect(self._on_query_finished)
+        self._query_thread.start()
+
+    def _show_typing(self):
+        self._typing_frame = 0
+        self.typing_lbl.setText("HandBot is thinking")
+        self.typing_lbl.show()
+        self._typing_timer.start()
+
+    def _tick_typing(self):
+        self._typing_frame = (self._typing_frame + 1) % 4
+        self.typing_lbl.setText("HandBot is thinking" + "." * self._typing_frame)
+
+    def _hide_typing(self):
+        self._typing_timer.stop()
+        self.typing_lbl.hide()
+
+    def _on_answer_ready(self, answer: str):
+        self._hide_typing()
+        self._append_line("HandBot", answer, is_markdown=True)
+
+    def _on_answer_failed(self, message: str):
+        self._hide_typing()
+        self._append_line("HandBot", message)
+
+    def _on_query_finished(self):
+        self._hide_typing()
+        self.input_box.setEnabled(True)
+        self.send_btn.setEnabled(True)
+        self.input_box.setFocus()
+        self._query_thread = None
 
     def apply_theme(self, is_dark):
         self.is_dark = is_dark
         bg = "#111111" if is_dark else "#FFFFFF"
         border = "#262626" if is_dark else "#E5E5E5"
         text = "#E8E8E8" if is_dark else "#111111"
-        placeholder_color = "#777777" if is_dark else "#999999"  # add this line
+        input_bg = "#1A1A1A" if is_dark else "#F4F4F4"
         self.setStyleSheet(f"""
             QFrame#handbotChatPanel {{
                 background: {bg};
@@ -356,7 +703,60 @@ class HandBotChatPanel(QFrame):
         """)
         self.header.setStyleSheet(f"background:transparent; border-bottom:1px solid {border};")
         self.header_title.setStyleSheet(f"font-size:14px; font-weight:600; color:{text}; background:transparent; border:none;")
-        self.placeholder_label.setStyleSheet(f"font-size:12px; color:{placeholder_color}; background:transparent; border:none;")  
+        muted = "#8A8A8A" if is_dark else "#777777"
+        self.typing_lbl.setStyleSheet(
+            f"font-size:11px; font-style:italic; color:{muted}; background:transparent; border:none;")
+        scroll_track = "#1A1A1A" if is_dark else "#F4F4F4"
+        scroll_handle = "#3A3A3A" if is_dark else "#C9C9C9"
+        scroll_handle_hover = "#555555" if is_dark else "#AFAFAF"
+        self.transcript.setStyleSheet(f"""
+            QTextEdit {{
+                background: {input_bg};
+                color: {text};
+                border: 1px solid {border};
+                border-radius: 6px;
+                font-size: 12px;
+                padding: 6px;
+            }}
+            QScrollBar:vertical {{
+                width: 4px;
+                background: {scroll_track};
+                border: none;
+                margin: 0;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {scroll_handle};
+                border-radius: 2px;
+                min-height: 24px;
+            }}
+            QScrollBar::handle:vertical:hover {{ background: {scroll_handle_hover}; }}
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical {{ height: 0px; }}
+            QScrollBar::add-page:vertical,
+            QScrollBar::sub-page:vertical {{ background: none; }}
+        """)
+        self.input_box.setStyleSheet(f"""
+            QLineEdit {{
+                background: {input_bg};
+                color: {text};
+                border: 1px solid {border};
+                border-radius: 6px;
+                font-size: 12px;
+                padding: 6px;
+            }}
+        """)
+        primary_bg = "#E8E8E8" if is_dark else "#000000"
+        primary_text = "#0A0A0A" if is_dark else "#FFFFFF"
+        self.send_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {primary_bg};
+                color: {primary_text};
+                border: none;
+                border-radius: 6px;
+                padding: 6px 14px;
+                font-size: 12px;
+            }}
+        """)
 
     def play_pop_in(self):
         final_geometry = self.geometry()
@@ -400,6 +800,7 @@ class HandBotIcon(QLabel):
 
         self._dragging = False
         self._drag_offset = QPoint()
+        self._press_pos = QPoint()
         self._moved = False
         self._bounce_paused = False
         self._ignore_next_release = False
@@ -420,10 +821,15 @@ class HandBotIcon(QLabel):
             self._dragging = True
             self._moved = False
             self._drag_offset = e.pos()
+            self._press_pos = e.pos()
 
     def mouseMoveEvent(self, e):
         if self._dragging:
-            self._moved = True
+            if not self._moved:
+                delta = e.pos() - self._press_pos
+                if delta.manhattanLength() < QApplication.startDragDistance():
+                    return
+                self._moved = True
             new_pos = self.mapToParent(e.pos() - self._drag_offset)
             parent = self.parentWidget()
             if parent:
@@ -511,6 +917,7 @@ class HandBotOverlay(QWidget):
         self.guide_enabled = False
         self._intro_shown = False
         self._current_key = None
+        self.is_dark = False
 
         self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         self.setStyleSheet("background: transparent;")
@@ -545,6 +952,7 @@ class HandBotOverlay(QWidget):
         self.celebrate_toast.hide()
 
     def apply_theme(self, is_dark):
+        self.is_dark = is_dark
         self.icon.apply_theme(is_dark)
         self.card.apply_theme(is_dark)
         self.chat_panel.apply_theme(is_dark)
@@ -627,7 +1035,7 @@ class HandBotOverlay(QWidget):
         if self.stack.currentIndex() == 0:
             if self.chat_panel.isVisible():
                 self._hide_chat()
-            else:
+            elif ensure_model_ready(self, self.is_dark):
                 self._show_chat()
             return
 
@@ -649,6 +1057,7 @@ class HandBotOverlay(QWidget):
 
     def _position_chat(self):
         gap = 12
+        self.chat_panel.resize_to_fit(self.width(), self.height())
         x = self.icon.x() - self.chat_panel.width() - gap
         if x < gap:
             x = self.icon.x() + self.icon.width() + gap
@@ -730,6 +1139,8 @@ class HandBotPagesOverlay(QWidget):
         super().__init__(pages_stack)
         self.pages_stack = pages_stack
         self.home_stack = home_stack
+        self._chatbot_enabled = app_config.get_chatbot_enabled()
+        self.is_dark = False
         self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         self.setStyleSheet("background: transparent;")
 
@@ -753,6 +1164,7 @@ class HandBotPagesOverlay(QWidget):
         self.raise_()
 
     def apply_theme(self, is_dark):
+        self.is_dark = is_dark
         self.icon.apply_theme(is_dark)
         self.chat_panel.apply_theme(is_dark)
 
@@ -773,6 +1185,7 @@ class HandBotPagesOverlay(QWidget):
 
     def _position_chat(self):
         gap = 12
+        self.chat_panel.resize_to_fit(self.width(), self.height())
         x = self.icon.x() - self.chat_panel.width() - gap
         if x < gap:
             x = self.icon.x() + self.icon.width() + gap
@@ -787,18 +1200,27 @@ class HandBotPagesOverlay(QWidget):
 
     def _on_page_changed(self, index):
         self.raise_()
+        self._hide_chat()
+        if not self._chatbot_enabled:
+            self.icon.hide()
+            return
         if index == 0 and self.home_stack and self.home_stack.currentIndex() != 0:
             self.icon.hide()
-            self._hide_chat()
             return
         self.icon.show()
         self.icon.raise_()
         self.icon.start_idle_bounce()
 
+    def set_chatbot_enabled(self, enabled: bool):
+        self._chatbot_enabled = enabled
+        self._on_page_changed(self.pages_stack.currentIndex())
+
     def _on_icon_clicked(self):
+        if not self._chatbot_enabled:
+            return
         if self.chat_panel.isVisible():
             self._hide_chat()
-        else:
+        elif ensure_model_ready(self, self.is_dark):
             self._show_chat()
 
     def _show_chat(self):

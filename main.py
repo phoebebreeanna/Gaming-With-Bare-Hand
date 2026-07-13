@@ -1,3 +1,4 @@
+import os
 import sys
 from PySide6.QtWidgets import QApplication, QMainWindow, QStackedWidget
 from PySide6.QtCore import Qt, QObject, QEvent
@@ -55,6 +56,9 @@ class MainWindow(QMainWindow):
         if ctrl is not None and ctrl.isRunning():
             ctrl.stop()
             ctrl.wait(4000)
+        ah_proc = getattr(self.main_menu.air_hockey_launch_page, '_proc', None)
+        if ah_proc is not None and ah_proc.poll() is None:
+            ah_proc.terminate()
         event.accept()
 
 if __name__ == "__main__":
@@ -64,4 +68,8 @@ if __name__ == "__main__":
     blocker = _GestureKeyBlocker(window)
     app.installEventFilter(blocker)
     window.show()
-    sys.exit(app.exec())
+    exit_code = app.exec()
+
+    import atexit
+    atexit._run_exitfuncs()
+    os._exit(exit_code)

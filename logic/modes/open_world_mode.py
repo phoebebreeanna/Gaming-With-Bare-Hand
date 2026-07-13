@@ -24,8 +24,8 @@ def _ow_mouse_move_relative(dx, dy):
             cur = CGEventGetLocation(CGEventCreate(None))
             ev = CGEventCreateMouseEvent(src, kCGEventMouseMoved,
                                          (cur.x + dx, cur.y + dy), 0)
-            CGEventSetIntegerValueField(ev, 63, dx)
-            CGEventSetIntegerValueField(ev, 64, dy)
+            CGEventSetIntegerValueField(ev, 4, dx)
+            CGEventSetIntegerValueField(ev, 5, dy)
             CGEventPost(kCGHIDEventTap, ev)
         except Exception as e:
             print(f'[OW] mac mouse err: {e}', flush=True)
