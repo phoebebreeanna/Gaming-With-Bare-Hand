@@ -17,7 +17,10 @@ from ui.mainmenu_setup import MainMenuSetup
 from ui.mainmenu_calibration import MainMenuCalibration
 from ui.mainmenu_zone import MainMenuZone
 from ui.mainmenu_camera import MainMenuCamera
-from ui.handbot import HandBotOverlay,HandBotPagesOverlay #Add handbot overlay and pages overlay
+from ui.handbot import HandBotOverlay, HandBotPagesOverlay #Add handbot overlay and pages overlay
+from ui.air_hockey_status import AirHockeyStatusPanel
+from ui.air_hockey_loading import AirHockeyLoadingOverlay
+from ui.air_hockey_launch_page import AirHockeyLaunchPage
 
 from logic.hand_controller import HandControllerThread, CameraPreviewThread, list_cameras
 from logic.app_config import is_setup_done, get_saved_zone, mark_setup_done, get_camera_index, set_camera_index, set_zone, get_mouse_side, set_mouse_side
@@ -46,13 +49,16 @@ class MainMenu(QWidget):
         self._nn_lat_ms = 0.0
         self._hand_present = False
         self._show_perf_stats = True
+        self._current_running_mode = 'mouse'
         self.init_ui()
 
         try:
             from logic.app_config import get_game_mode, get_show_perf_stats
-            _mode_labels = {'mouse': 'MOUSE', 'subway': 'SUBWAY', 'racing': 'RACING', 'open_world': 'OPEN WORLD'}
+            _mode_labels = {'mouse': 'MOUSE', 'subway': 'SUBWAY', 'racing': 'RACING',
+                            'open_world': 'OPEN WORLD', 'custom': 'CUSTOM', 'air_hockey': 'AIR HOCKEY'}
             self.info_cards["MODE"].setText(_mode_labels.get(get_game_mode(), 'MOUSE'))
             self._show_perf_stats = get_show_perf_stats()
+            self._current_running_mode = get_game_mode()
         except Exception:
             pass
 
@@ -113,17 +119,23 @@ class MainMenu(QWidget):
         self.game_mode_widget.zone_changed.connect(self._on_zone_changed)
         self.game_mode_widget.mouse_side_changed.connect(self._on_mouse_side_changed)
         self.game_mode_widget.perf_stats_changed.connect(self._on_perf_stats_changed)
+        self.game_mode_widget.custom_mode_selected.connect(self._on_custom_mode_selected)
+        self.game_mode_widget.chatbot_enabled_changed.connect(self.handbot_pages.set_chatbot_enabled)
         self.pages.addWidget(self.game_mode_widget)
 
         self.pipeline_ui = PipelineUI(is_dark=self.is_dark)
         self.pipeline_ui.on_menu_toggle.connect(self.toggle_sidebar)
-        self.pipeline_ui.training_complete.connect(self.game_mode_widget.refresh_custom_availability)
+        self.pipeline_ui.training_complete.connect(self._on_training_complete)
         self.pages.addWidget(self.pipeline_ui)
 
         self.key_bindings_widget = KeyBindings()
         self.key_bindings_widget.on_menu_toggle.connect(self.toggle_sidebar)
         self.key_bindings_widget.binding_changed.connect(self._on_binding_changed)
         self.pages.addWidget(self.key_bindings_widget)
+
+        self.air_hockey_launch_page = AirHockeyLaunchPage()
+        self.air_hockey_launch_page.on_menu_toggle.connect(self.toggle_sidebar)
+        self.pages.addWidget(self.air_hockey_launch_page)
 
         self.pages.setCurrentIndex(0)
 
@@ -243,6 +255,7 @@ class MainMenu(QWidget):
             ("04      -     SETTING", 3),
             ("05      -     TRAIN MODEL", 4),
             ("06      -     KEY BINDINGS", 5),
+            ("07      -     AIR HOCKEY", 6),
         ]:
             btn = QPushButton(label)
             btn.setCheckable(True)
@@ -326,6 +339,7 @@ class MainMenu(QWidget):
         self.home_stack.addWidget(self.zone_guide)
         self.handbot = HandBotOverlay(self.home_stack)
         self.handbot_pages = HandBotPagesOverlay(self.pages, self.home_stack)
+        self.air_hockey_loading = AirHockeyLoadingOverlay(self.home_stack)
 
         return page
 
@@ -472,7 +486,13 @@ class MainMenu(QWidget):
             self.info_cards[lbl] = v
             self.info_card_widgets[lbl] = card
             top_row.addWidget(card)
-        layout.addLayout(top_row)
+        self.info_cards_row = QWidget()
+        self.info_cards_row.setLayout(top_row)
+        layout.addWidget(self.info_cards_row)
+
+        self.air_hockey_status = AirHockeyStatusPanel()
+        self.air_hockey_status.hide()
+        layout.addWidget(self.air_hockey_status)
 
         self.camera_frame = QWidget()
         self.camera_frame.setStyleSheet("""
@@ -663,17 +683,41 @@ class MainMenu(QWidget):
 
         return page
 
+    def _on_training_complete(self):
+        self.game_mode_widget.refresh_custom_availability()
+        self.key_bindings_widget.refresh_custom_modes()
+        if self.controller and self.game_mode_widget._selected_custom_id:
+            self.controller.set_custom_mode(self.game_mode_widget._selected_custom_id)
+
+    def _mode_label(self, mode: str) -> str:
+        _base = {'mouse': 'MOUSE', 'subway': 'SUBWAY', 'racing': 'RACING',
+                 'open_world': 'OPEN WORLD', 'custom': 'CUSTOM', 'air_hockey': 'AIR HOCKEY'}
+        if mode in _base:
+            return _base[mode]
+        return mode.upper()
+
     def _on_game_mode_from_ui(self, mode: str):
-        labels = {'mouse': 'MOUSE', 'subway': 'SUBWAY', 'racing': 'RACING', 'open_world': 'OPEN WORLD'}
-        self.info_cards["MODE"].setText(labels.get(mode, mode.upper()))
-        if self._is_running and self.controller:
+        self.info_cards["MODE"].setText(self._mode_label(mode))
+        if not (self._is_running and self.controller):
+            return
+        if (self._current_running_mode == 'air_hockey') != (mode == 'air_hockey'):
+            self._pending_restart = True
+            self.air_hockey_loading.show_loading(
+                "SWITCHING TO AIR HOCKEY" if mode == 'air_hockey' else "SWITCHING MODE")
+            self.controller.stop()
+        else:
             self.controller.switch_game_mode(mode)
 
     @Slot(str)
     def _on_controller_game_mode(self, mode: str):
-        labels = {'mouse': 'MOUSE', 'subway': 'SUBWAY', 'racing': 'RACING', 'open_world': 'OPEN WORLD'}
-        self.info_cards["MODE"].setText(labels.get(mode, mode.upper()))
+        self.info_cards["MODE"].setText(self._mode_label(mode))
         self.game_mode_widget.set_selected_mode(mode)
+        self._current_running_mode = mode
+        self._set_air_hockey_ui_active(mode == 'air_hockey')
+
+    def _set_air_hockey_ui_active(self, active: bool):
+        self.info_cards_row.setVisible(not active)
+        self.air_hockey_status.setVisible(active)
 
     def switch_page(self, index):
         self.pages.setCurrentIndex(index)
@@ -1240,8 +1284,11 @@ class MainMenu(QWidget):
         self.game_mode_widget.apply_theme(self.is_dark)
         self.pipeline_ui.apply_theme(self.is_dark)
         self.key_bindings_widget.apply_theme(self.is_dark)
+        self.air_hockey_launch_page.apply_theme(self.is_dark)
         self.handbot.apply_theme(self.is_dark)
         self.handbot_pages.apply_theme(self.is_dark)
+        self.air_hockey_status.apply_theme(self.is_dark)
+        self.air_hockey_loading.apply_theme(self.is_dark)
         self.update()
         self.repaint()
 
@@ -1299,6 +1346,10 @@ class MainMenu(QWidget):
     def _on_binding_changed(self, mode: str, gesture: str, key: str):
         if self.controller:
             self.controller.set_key_binding(mode, gesture, key)
+
+    def _on_custom_mode_selected(self, mode_id: str, source: str):
+        if self.controller:
+            self.controller.set_custom_mode(mode_id)
 
     def _on_model_source_changed(self, mode: str, source: str):
         if self.controller:
@@ -1547,9 +1598,10 @@ class MainMenu(QWidget):
         model_sources['cursor_point']  = get_cursor_point()
         model_sources['mouse_side']    = get_mouse_side()
         initial_game_mode = get_game_mode()
+        self._current_running_mode = initial_game_mode
+        self._set_air_hockey_ui_active(initial_game_mode == 'air_hockey')
 
-        _mode_labels = {'mouse': 'MOUSE', 'subway': 'SUBWAY', 'racing': 'RACING', 'open_world': 'OPEN WORLD'}
-        self.info_cards["MODE"].setText(_mode_labels.get(initial_game_mode, initial_game_mode.upper()))
+        self.info_cards["MODE"].setText(self._mode_label(initial_game_mode))
 
         zone = getattr(self.zone_guide, 'selected_zone', None) or get_saved_zone()
         self.controller = HandControllerThread(
@@ -1590,6 +1642,8 @@ class MainMenu(QWidget):
 
     @Slot(object)
     def _on_running_data(self, data: dict):
+        if data.get('mode') == 'air_hockey':
+            self.air_hockey_status.update_status(data)
         meta = data.get('meta', {})
         label_map = {
             'stop':     'PAUSING',
@@ -1630,6 +1684,7 @@ class MainMenu(QWidget):
     def _on_stop(self):
         if hasattr(self, "home_stack"):
             self.home_stack.setCurrentIndex(0)
+        self.air_hockey_loading.hide_loading()
         if self.controller and self.controller.isRunning():
             self.controller.stop()
             self.controller.wait(4000)
@@ -1650,6 +1705,7 @@ class MainMenu(QWidget):
         self._is_paused  = False
         self._is_frozen  = False
         self.controller  = None
+        self._set_air_hockey_ui_active(False)
         self._frame_count = 0
         self._fps = 0.0
         self._nn_lat_sum = 0.0
@@ -1743,6 +1799,7 @@ class MainMenu(QWidget):
         elif state == 'running':
             self._is_frozen = False
             self.pause_btn.setText("Pause")
+            self.air_hockey_loading.hide_loading()
 
     @Slot(float, bool)
     def _update_distance_live(self, dist: float, has_hand: bool):
@@ -1765,4 +1822,5 @@ class MainMenu(QWidget):
 
     @Slot(str)
     def _on_error(self, msg: str):
+        self.air_hockey_loading.hide_loading()
         self.camera_label.setText(f"⚠  {msg}")

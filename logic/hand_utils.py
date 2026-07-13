@@ -92,6 +92,12 @@ def fingers_extended(lms):
 def count_fingers_up(lms):
     return sum(fingers_extended(lms).values())
 
+def is_thumb_extended(lms):
+    return is_finger_extended(lms, 4, 3)
+
+def count_fingers_up_5(lms):
+    return count_fingers_up(lms) + (1 if is_thumb_extended(lms) else 0)
+
 def count_vertical_fingers(lms):
     tips_mcps = [(8, 5), (12, 9), (16, 13), (20, 17)]
     count = 0
@@ -224,41 +230,37 @@ def draw_finger_dot(img, lms, gesture, drag_active, cursor_lm=8):
     cv2.circle(img, (fx, fy), 12, col, 2)
     cv2.circle(img, (fx, fy),  4, col, -1)
 
+def draw_wrist_marker(img, lms, color, radius=14):
+    """Crosshair + ring on the wrist landmark (0) so the user can see
+    exactly which point is being tracked for movement."""
+    if lms is None:
+        return
+    h, w = img.shape[:2]
+    cx, cy = int(lms[0].x * w), int(lms[0].y * h)
+    cv2.circle(img, (cx, cy), radius, color, 2)
+    cv2.circle(img, (cx, cy), 3, color, -1)
+    cv2.line(img, (cx - radius - 6, cy), (cx - radius + 4, cy), color, 2)
+    cv2.line(img, (cx + radius - 4, cy), (cx + radius + 6, cy), color, 2)
+    cv2.line(img, (cx, cy - radius - 6), (cx, cy - radius + 4), color, 2)
+    cv2.line(img, (cx, cy + radius - 4), (cx, cy + radius + 6), color, 2)
+
 def _mouse_move(x, y):
-    # if PYNPUT_AVAILABLE:
-    #     _mouse_ctrl.position = (int(x), int(y))
-    # else:
-        pyautogui.moveTo(int(x), int(y))
+    pyautogui.moveTo(int(x), int(y))
 
 def _mouse_left_down():
-    # if PYNPUT_AVAILABLE:
-    #     _mouse_ctrl.press(_PynputButton.left)
-    # else:
-        pyautogui.mouseDown()
+    pyautogui.mouseDown()
 
 def _mouse_left_up():
-    # if PYNPUT_AVAILABLE:
-    #     _mouse_ctrl.release(_PynputButton.left)
-    # else:
-        pyautogui.mouseUp()
+    pyautogui.mouseUp()
 
 def _mouse_left_click():
-    # if PYNPUT_AVAILABLE:
-    #     _mouse_ctrl.click(_PynputButton.left)
-    # else:
-        pyautogui.click()
+    pyautogui.click()
 
 def _mouse_right_click():
-    # if PYNPUT_AVAILABLE:
-    #     _mouse_ctrl.click(_PynputButton.right)
-    # else:
-        pyautogui.rightClick()
+    pyautogui.rightClick()
 
 def _mouse_scroll(amount):
-    # if PYNPUT_AVAILABLE:
-    #     _mouse_ctrl.scroll(0, amount)
-    # else:
-        pyautogui.scroll(amount)
+    pyautogui.scroll(amount)
 
 def _mouse_move_relative(dx, dy):
     pyautogui.move(int(dx), int(dy))

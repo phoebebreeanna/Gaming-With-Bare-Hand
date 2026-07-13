@@ -4,6 +4,8 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QKeyEvent
 
+_CUSTOM_SECTION_TAG = "__custom__"
+
 _GESTURE_META = {
     'subway': [
         ('jump',  'JUMP',         'Two fingers up'),
@@ -80,6 +82,7 @@ class KeyBindings(QWidget):
         self._bindings   = {}
         self._key_btns   = {}
         self._capturing  = None
+        self._custom_section_widgets = []
 
         self._load_bindings()
         self._init_ui()
@@ -210,9 +213,120 @@ class KeyBindings(QWidget):
 
             self._section_widgets[mode] = {'hdr': sec_hdr, 'rows': rows, 'sep': sep, 'reset_btn': reset_btn}
 
+        self._custom_insert_idx = cl.count()
         cl.addStretch()
+        self._content_layout = cl
         self.scroll.setWidget(content)
         root.addWidget(self.scroll, stretch=1)
+        self._build_custom_sections()
+
+    def _build_custom_sections(self):
+        cl = self._content_layout
+        for w in self._custom_section_widgets:
+            cl.removeWidget(w)
+            w.deleteLater()
+        self._custom_section_widgets.clear()
+        for key in list(self._key_btns.keys()):
+            if isinstance(key, tuple) and key[0].startswith('custom_'):
+                del self._key_btns[key]
+        for key in list(self._bindings.keys()):
+            if key.startswith('custom_'):
+                del self._bindings[key]
+
+        try:
+            from logic.app_config import get_custom_modes, get_key_bindings
+            custom_modes = get_custom_modes()
+        except Exception:
+            custom_modes = []
+
+        if not custom_modes:
+            return
+
+        grp_lbl = QLabel("CUSTOM MODES")
+        grp_lbl.setContentsMargins(6, 12, 0, 6)
+        grp_lbl.setProperty(_CUSTOM_SECTION_TAG, True)
+        cl.insertWidget(cl.count() - 1, grp_lbl)
+        self._custom_section_widgets.append(grp_lbl)
+
+        for mode in custom_modes:
+            mode_id  = mode['id']
+            mode_key = f"custom_{mode_id}"
+            try:
+                bindings = get_key_bindings(mode_key)
+            except Exception:
+                bindings = {}
+            self._bindings[mode_key] = bindings
+
+            gestures = mode.get('gestures', [])
+            if not gestures:
+                continue
+
+            sec_row = QWidget()
+            sec_row.setFixedHeight(20)
+            srl = QHBoxLayout(sec_row)
+            srl.setContentsMargins(0, 0, 0, 0)
+            srl.setSpacing(0)
+            sec_hdr = QLabel(mode.get('name', mode_id).upper())
+            srl.addWidget(sec_hdr)
+            srl.addStretch()
+            reset_btn = QPushButton("RESET ALL")
+            reset_btn.setFixedHeight(18)
+            reset_btn.setMinimumWidth(60)
+            reset_btn.setCursor(Qt.PointingHandCursor)
+            reset_btn.clicked.connect(lambda _, mk=mode_key: self._reset_mode(mk))
+            srl.addWidget(reset_btn)
+            sec_row.setProperty(_CUSTOM_SECTION_TAG, True)
+            cl.insertWidget(cl.count() - 1, sec_row)
+            self._custom_section_widgets.append(sec_row)
+
+            rows_meta = []
+            for gesture in gestures:
+                key_str  = bindings.get(gesture, '?')
+                row = QWidget()
+                row.setMinimumHeight(44)
+                rl = QHBoxLayout(row)
+                rl.setContentsMargins(16, 4, 16, 4)
+                rl.setSpacing(0)
+                text_col = QVBoxLayout()
+                text_col.setSpacing(2)
+                name_lbl = QLabel(gesture.replace('_', ' ').upper())
+                desc_lbl = QLabel(f"Custom gesture · {mode.get('name', mode_id)}")
+                desc_lbl.setWordWrap(True)
+                text_col.addWidget(name_lbl)
+                text_col.addWidget(desc_lbl)
+                rl.addLayout(text_col, stretch=1)
+                key_btn = QPushButton(key_str.upper() if key_str != '?' else '—')
+                key_btn.setFixedHeight(26)
+                key_btn.setMinimumWidth(56)
+                key_btn.setCursor(Qt.PointingHandCursor)
+                key_btn.clicked.connect(
+                    lambda _, mk=mode_key, g=gesture: self._start_capture(mk, g))
+                rl.addWidget(key_btn)
+                self._key_btns[(mode_key, gesture)] = key_btn
+                row.setProperty(_CUSTOM_SECTION_TAG, True)
+                cl.insertWidget(cl.count() - 1, row)
+                self._custom_section_widgets.append(row)
+                rows_meta.append((row, name_lbl, desc_lbl))
+
+            sep = QWidget()
+            sep.setFixedHeight(1)
+            sep.setProperty(_CUSTOM_SECTION_TAG, True)
+            cl.insertWidget(cl.count() - 1, sep)
+            self._custom_section_widgets.append(sep)
+            spacer_w = QWidget()
+            spacer_w.setFixedHeight(14)
+            cl.insertWidget(cl.count() - 1, spacer_w)
+            self._custom_section_widgets.append(spacer_w)
+
+            self._section_widgets[mode_key] = {
+                'hdr': sec_hdr, 'rows': rows_meta,
+                'sep': sep, 'reset_btn': reset_btn,
+            }
+
+        self.apply_theme(self.is_dark)
+
+    def refresh_custom_modes(self):
+        self._build_custom_sections()
 
     def _reset_mode(self, mode: str):
         try:
@@ -222,12 +336,18 @@ class KeyBindings(QWidget):
         except Exception:
             from logic.app_config import BINDINGS_DEFAULT
             self._bindings[mode] = dict(BINDINGS_DEFAULT.get(mode, {}))
-        for entry in _GESTURE_META.get(mode, []):
-            gesture = entry[0]
-            if (mode, gesture) in self._locked_keys:
-                continue
-            key_str = self._bindings[mode].get(gesture, '?')
-            self._key_btns[(mode, gesture)].setText(key_str.upper())
+        if mode.startswith('custom_'):
+            for (m, gesture), btn in list(self._key_btns.items()):
+                if m == mode:
+                    self._bindings.setdefault(mode, {}).pop(gesture, None)
+                    btn.setText('—')
+        else:
+            for entry in _GESTURE_META.get(mode, []):
+                gesture = entry[0]
+                if (mode, gesture) in self._locked_keys:
+                    continue
+                key_str = self._bindings[mode].get(gesture, '?')
+                self._key_btns[(mode, gesture)].setText(key_str.upper())
         self.apply_theme(self.is_dark)
 
     def _start_capture(self, mode: str, gesture: str):
@@ -365,6 +485,12 @@ class KeyBindings(QWidget):
                 desc_lbl.setStyleSheet(
                     f"font-size: 8px; color: {muted}; "
                     f"letter-spacing: 1px; background: transparent; border: none;")
+
+        for w in self._custom_section_widgets:
+            if isinstance(w, QLabel):
+                w.setStyleSheet(
+                    f"font-size: 8px; color: {sec_clr}; font-weight: bold; "
+                    f"letter-spacing: 1.2px; background: transparent; border: none;")
 
         for (mode, gesture), btn in self._key_btns.items():
             if (mode, gesture) in self._locked_keys:

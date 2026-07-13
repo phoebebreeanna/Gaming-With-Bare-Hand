@@ -42,6 +42,8 @@ from logic.modes.mouse_mode      import MouseModeMixin
 from logic.modes.subway_mode     import SubwayModeMixin
 from logic.modes.racing_mode     import RacingModeMixin
 from logic.modes.open_world_mode import OpenWorldModeMixin, OW_GESTURE_KEY_MAP
+from logic.modes.custom_mode     import CustomModeMixin
+from logic.modes.air_hockey_mode import AirHockeyModeMixin
 
 import sys as _sys
 LOGIC_DIR  = os.path.join(_sys._MEIPASS, 'logic') if getattr(_sys, 'frozen', False) else os.path.dirname(os.path.abspath(__file__))
@@ -174,7 +176,8 @@ class CameraPreviewThread(QThread):
         detector.close()
 
 class HandControllerThread(
-    MouseModeMixin, SubwayModeMixin, RacingModeMixin, OpenWorldModeMixin,
+    MouseModeMixin, SubwayModeMixin, RacingModeMixin, OpenWorldModeMixin, CustomModeMixin,
+    AirHockeyModeMixin,
     QThread
 ):
     frame_ready       = Signal(QImage)
@@ -236,7 +239,39 @@ class HandControllerThread(
             self.rc_key_map = {'accel': 'up', 'brake': 'down', 'steer_left': 'left', 'steer_right': 'right'}
             self.ow_key_map = {}
 
+        self.custom_mode_id = ''
+        self.custom_model    = None
+        self.custom_le       = None
+        self.custom_key_map  = {}
+        try:
+            from logic.app_config import get_selected_custom_mode_id
+            self._load_custom_model(get_selected_custom_mode_id())
+        except Exception:
+            pass
+
         self._init_state()
+
+    def _load_custom_model(self, mode_id: str):
+        self.custom_mode_id = mode_id or ''
+        self.custom_model   = None
+        self.custom_le      = None
+        self.custom_key_map = {}
+        if not mode_id:
+            return
+        try:
+            from logic.app_config import get_custom_mode_dir, get_key_bindings
+            mode_dir = get_custom_mode_dir(mode_id)
+            weights  = os.path.join(mode_dir, 'gesture_model_best.pt')
+            encoder  = os.path.join(mode_dir, 'label_encoder.pkl')
+            self.custom_model, self.custom_le = load_nn(weights, encoder, tag='CUSTOM')
+            self.custom_key_map = get_key_bindings(f'custom_{mode_id}')
+        except Exception:
+            pass
+
+    def set_custom_mode(self, mode_id: str):
+        self._load_custom_model(mode_id)
+        self.custom_prev_row = None
+        self._custom_release_all()
 
     def _init_state(self):
         self.app_state          = 'intro'
@@ -288,10 +323,17 @@ class HandControllerThread(
         self._confirm_close_from      = None
         self._confirm_close_hold_t    = None
 
+        self.custom_prev_row = None
+        self.custom_held_key = None
+
+        self._init_ah_state()
+
     def _full_reset(self):
         self._release_drag()
         self._rc_release_all()
         self._ow_release_all()
+        self._custom_release_all()
+        self._ah_release_all()
         self.active_game_mode    = None
         self.app_state           = 'distance_check'
         self.dist_ok_since       = None
@@ -321,6 +363,7 @@ class HandControllerThread(
         self._devilhorn_mouse      = False
         self.ow_rel_mouse_active   = False
         self.ow_rel_mouse_prev_pos = None
+        self.custom_prev_row       = None
 
     def _set_zone(self, zone_name):
         size = ZONE_PRESETS.get(zone_name, 0.55)
@@ -349,6 +392,8 @@ class HandControllerThread(
     def _activate_game_mode(self, opt):
         self._release_drag()
         self._rc_release_all()
+        self._custom_release_all()
+        self._ah_release_all()
         if opt == 1:
             self.active_game_mode = None
             self._right_half_mode = False
@@ -384,6 +429,24 @@ class HandControllerThread(
             self.scroll_entry_t     = None
             self.scroll_active      = False
             self.game_mode_changed.emit('open_world')
+        elif opt == 5:
+            self.active_game_mode  = 5
+            self._right_half_mode  = False
+            self._set_zone(self.chosen_zone)
+            self._devilhorn_mouse   = False
+            self.custom_prev_row    = None
+            self.mouse_prev_row     = None
+            self.left_click_entry_t = None
+            self._pending_left_click = False
+            self.right_click_armed  = True
+            self.scroll_entry_t     = None
+            self.scroll_active      = False
+            self.game_mode_changed.emit('custom')
+        elif opt == 6:
+            self.active_game_mode  = 6
+            self._right_half_mode  = False
+            self._init_ah_state()
+            self.game_mode_changed.emit('air_hockey')
 
     def switch_game_mode(self, mode: str):
         self._pending_mode = mode
@@ -427,6 +490,9 @@ class HandControllerThread(
             self._rc_release_all()
         elif mode == 'open_world':
             self.ow_key_map[gesture] = key
+        elif mode.startswith('custom_') and mode == f'custom_{self.custom_mode_id}':
+            self.custom_key_map[gesture] = key
+            self._custom_release_all()
 
     def set_mouse_in_game(self, enabled: bool):
         self._mouse_in_game_enabled = enabled
@@ -462,11 +528,12 @@ class HandControllerThread(
         _init_err = None
         ow_recognizer = None
         try:
+            num_hands = 4 if self.initial_game_mode == 'air_hockey' else 2
             base_options = mp_python.BaseOptions(model_asset_path=MODEL_PATH)
             options      = mp_vision.HandLandmarkerOptions(
                 base_options=base_options,
                 running_mode=mp_vision.RunningMode.VIDEO,
-                num_hands=2,
+                num_hands=num_hands,
             )
             detector = mp_vision.HandLandmarker.create_from_options(options)
 
@@ -567,7 +634,7 @@ class HandControllerThread(
             self._set_zone(self.chosen_zone)
             self.app_state = 'running'
             self.state_changed.emit('running')
-            _opt_map = {'mouse': 1, 'subway': 2, 'racing': 3, 'open_world': 4}
+            _opt_map = {'mouse': 1, 'subway': 2, 'racing': 3, 'open_world': 4, 'custom': 5, 'air_hockey': 6}
             _opt = _opt_map.get(self.initial_game_mode, 1)
             if _opt != 1:
                 self._activate_game_mode(_opt)
@@ -724,22 +791,25 @@ class HandControllerThread(
             elif self.app_state == 'running':
 
                 if self._pending_mode is not None:
-                    _opt_map = {'mouse': 1, 'subway': 2, 'racing': 3, 'open_world': 4}
+                    _opt_map = {'mouse': 1, 'subway': 2, 'racing': 3, 'open_world': 4, 'custom': 5, 'air_hockey': 6}
                     self._activate_game_mode(_opt_map.get(self._pending_mode, 1))
                     game_opt_hold_t = None; self.game_opt_number = None; game_opt_frac = 0.0
                     self._pending_mode = None
 
-                _any_devil = (lms and is_devil_horn(lms)) or (lms2 and is_devil_horn(lms2))
-                if _any_devil:
+                if self.active_game_mode == 6:
                     game_opt_hold_t = None; self.game_opt_number = None; game_opt_frac = 0.0
                 else:
-                    game_opt_hold_t, self.game_opt_number, game_opt_frac, triggered_opt = \
-                        tick_game_opt(lms, lms2, now, game_opt_hold_t, self.game_opt_number)
-                    if triggered_opt is not None:
-                        self._activate_game_mode(triggered_opt)
+                    _any_devil = (lms and is_devil_horn(lms)) or (lms2 and is_devil_horn(lms2))
+                    if _any_devil:
                         game_opt_hold_t = None; self.game_opt_number = None; game_opt_frac = 0.0
+                    else:
+                        game_opt_hold_t, self.game_opt_number, game_opt_frac, triggered_opt = \
+                            tick_game_opt(lms, lms2, now, game_opt_hold_t, self.game_opt_number)
+                        if triggered_opt is not None:
+                            self._activate_game_mode(triggered_opt)
+                            game_opt_hold_t = None; self.game_opt_number = None; game_opt_frac = 0.0
 
-                if self.range_min_x is not None:
+                if self.range_min_x is not None and self.active_game_mode != 6:
                     draw_zone_rect(display,
                                    self.range_min_x, self.range_max_x,
                                    self.range_min_y, self.range_max_y)
@@ -758,6 +828,12 @@ class HandControllerThread(
                 elif self.active_game_mode == 4:
                     with _owl: ow_result = _latest_ow_result[0]
                     self._tick_open_world_mode(lms, lms2, result, display, now, game_opt_frac, ow_result)
+
+                elif self.active_game_mode == 5:
+                    self._tick_custom_mode(lms, lms2, result, display, now, game_opt_frac)
+
+                elif self.active_game_mode == 6:
+                    self._tick_air_hockey_mode(lms, lms2, result, display, now, game_opt_frac)
 
                 if lms is not None and self._current_frame_t > 0:
                     self.nn_latency.emit((time.time() - self._current_frame_t) * 1000)
@@ -828,6 +904,7 @@ class HandControllerThread(
         self._release_drag()
         self._rc_release_all()
         self._ow_release_all()
+        self._ah_release_all()
         _stop[0] = True
         det.join(timeout=2.0)
         det_ow.join(timeout=2.0)

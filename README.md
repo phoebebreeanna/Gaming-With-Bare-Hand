@@ -19,6 +19,8 @@ No hardware required - powered by MediaPipe, OpenCV, PyTorch, and PySide6.
 - **Multi-camera support** - enumerate and switch cameras at runtime
 - **Zone calibration** - choose Small, Medium, or Large movement zone
 - **Dark / Light theme** - full theme toggle across all pages
+- **HandBot chatbot** - ask questions from the chat panel; static offline mode (instant, no setup) or real-time mode powered by a local Ollama LLM
+- **Air Hockey mode** - launch the bundled local 2-player air hockey game and drive a paddle with your left-hand wrist position; right hand fires powers by finger count
 
 ---
 
@@ -40,9 +42,24 @@ numpy >= 1.24.0
 torch >= 2.0.0
 joblib >= 1.3.0
 pynput >= 1.7.0
+llama-index >= 0.14.0
+llama-index-llms-ollama >= 0.10.0
+llama-index-embeddings-huggingface >= 0.7.0
+llama-index-vector-stores-chroma >= 0.5.0
+chromadb >= 1.5.0
+pygame >= 2.5.0
 ```
 
 > **macOS Apple Silicon**: All packages run natively. No extra steps needed.
+
+> **HandBot real-time chatbot mode** additionally requires [Ollama](https://ollama.com)
+> installed and running locally, with the `qwen2.5:3b` model pulled (see
+> Installation step 7). Static mode needs none of this - it works offline
+> right after `pip install -r requirements.txt`.
+
+> **Air Hockey mode** needs nothing beyond `pip install -r requirements.txt` -
+> `pygame` is installed automatically and the bundled game has no external
+> asset files to download.
 
 ---
 
@@ -107,6 +124,21 @@ logic/data/
 ```
 
 Custom-trained models are saved to `logic/data/custom/` via the Train Model page.
+
+### 7. (Optional) Enable real-time chatbot mode
+
+The HandBot chat panel works out of the box in **static** mode (instant, offline,
+keyword lookup over the in-app guide). For **real-time** mode, generated
+answers via a local LLM:
+
+```bash
+ollama pull qwen2.5:3b
+```
+
+Make sure the Ollama app/service is running before asking a question in
+real-time mode. The chatbot's local search index (`logic/chatbot/chroma_db/`)
+is built automatically the first time a real-time question is asked - no
+manual indexing step needed. Switch modes anytime from Settings → Chatbot.
 
 ---
 
@@ -280,6 +312,29 @@ Default key bindings - all rebindable via Key Bindings except the locked movemen
 | Three-three pose | Tab | Map / Tab |
 | Three-two pose | G | Extra 2 |
 
+### Air Hockey mode
+
+Air Hockey drives a bundled local pygame game (`hockey_game/`) instead of the
+keyboard/mouse directly - HandMouse launches it as its own window and then
+sends synthetic keypresses to it, the same way Subway Surfers and Racing mode
+work.
+
+1. Open the **07 - AIR HOCKEY** tab in the sidebar and click **LAUNCH AIR
+   HOCKEY**. This opens the game in its own window (the button disables
+   while it's running).
+2. Go to **Settings**, select the **AIR HOCKEY** card in Game Mode to make it
+   the active mode, then start tracking as usual. Make sure the air hockey
+   game window has focus so it receives the keypresses.
+
+| Gesture | Controls |
+|---|---|
+| Left hand wrist position | Moves the paddle in that direction (relative to a fixed reference point, with a deadzone) |
+| Right hand - number of fingers raised (1-5) | Fires a power: 1 Shield, 2 Freeze, 3 Double Puck, 4 Slow Puck, 5 Speed Puck |
+
+The game supports local 2-player play from one camera: hands detected on the
+left half of the camera frame control Player 1 (WASD / 1-5), hands on the
+right half control Player 2 (Arrow keys / 6-0).
+
 ---
 
 ## Custom model training
@@ -351,12 +406,20 @@ HandMouse/
 │   ├── gesture_net.py             # GestureNet architecture + load/run helpers
 │   ├── gesture_pipeline.py        # Data collection + model training pipeline
 │   ├── app_config.py              # Persistent JSON config (zone, mode, bindings…)
+│   ├── chatbot_worker.py          # QThread wrapper for chatbot queries
+│   ├── chatbot/
+│   │   ├── static_lookup.py       # Offline keyword lookup over data/*.md
+│   │   ├── rag_service.py         # Ollama + llama-index RAG pipeline
+│   │   ├── data/                  # Chatbot corpus (about.md, user_guide.md)
+│   │   └── chroma_db/             # Auto-built vector index (git-ignored)
+│   ├── air_hockey_launcher.py     # Launches hockey_game/ as a subprocess
 │   ├── hand_landmarker.task       # MediaPipe model (download separately)
 │   ├── modes/
 │   │   ├── mouse_mode.py          # MouseModeMixin
 │   │   ├── subway_mode.py         # SubwayModeMixin
 │   │   ├── racing_mode.py         # RacingModeMixin
-│   │   └── open_world_mode.py     # OpenWorldModeMixin
+│   │   ├── open_world_mode.py     # OpenWorldModeMixin
+│   │   └── air_hockey_mode.py     # AirHockeyModeMixin - wrist-tracked paddle + skill gestures
 │   ├── conf/
 │   │   ├── mouse_control.conf
 │   │   ├── subway_surfers.conf
@@ -379,7 +442,16 @@ HandMouse/
     ├── mainmenu_setup.py
     ├── mainmenu_calibration.py
     ├── mainmenu_zone.py
-    └── mainmenu_camera.py
+    ├── mainmenu_camera.py
+    ├── handbot.py                 # HandBot guide + chat panel
+    ├── air_hockey_status.py       # Live per-player gesture status panel
+    ├── air_hockey_loading.py      # "Switching to Air Hockey" transition overlay
+    └── air_hockey_launch_page.py  # Dedicated sidebar tab - just launches the game
+
+hockey_game/                       # Bundled local 2-player air hockey game (pygame, untouched)
+├── main.py                        # Run standalone with `cd hockey_game && python3 main.py`
+├── config.py / physics.py / render.py / powers.py / input_handler.py / audio.py
+└── README.md                      # Game architecture notes
 ```
 
 ---
@@ -395,6 +467,8 @@ HandMouse/
 | **pynput** | Low-level keyboard/mouse input (replaces pyautogui for key-hold) |
 | **PyAutoGUI** | Mouse movement and click |
 | **NumPy** | Vector math for gesture geometry |
+| **llama-index + Chroma + Ollama** | Local RAG pipeline for HandBot's real-time chatbot mode |
+| **pygame** | Powers the bundled Air Hockey game (launched as its own window) |
 
 ---
 
@@ -426,6 +500,12 @@ Stop tracking first with the Stop button, or use the Exit button in the app. Nev
 
 **Tracking drifts or lags**
 Ensure even lighting and a clear background. Retrain a Custom model if the default model does not fit your hand or environment well.
+
+**Real-time chatbot says it's unavailable**
+Make sure the Ollama app/service is running and `qwen2.5:3b` has been pulled (`ollama pull qwen2.5:3b`). Switch back to static mode in Settings → Chatbot if you don't need live answers.
+
+**Air Hockey gestures aren't registering**
+Synthetic keypresses go to whichever window has OS focus, same as Subway Surfers and Racing mode - click into the air hockey game window after launching it, then start tracking. If the LAUNCH button stays greyed out, an air hockey window is still open from a previous launch (or `hockey_game/` is missing from this checkout).
 
 ---
 

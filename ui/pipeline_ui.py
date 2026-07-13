@@ -6,8 +6,9 @@ import time
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QTextEdit, QSizePolicy, QStackedWidget, QScrollArea,
+    QLineEdit, QComboBox, QInputDialog,
 )
-from PySide6.QtCore import Qt, Signal, QThread
+from PySide6.QtCore import Qt, Signal, QThread, QTimer
 from PySide6.QtGui import QFont, QPixmap, QImage
 
 _LOGIC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logic")
@@ -66,10 +67,11 @@ class PipelineUI(QWidget):
     on_menu_toggle    = Signal()
     training_complete = Signal()
 
-    _PAGE_IDLE    = 0
-    _PAGE_COLLECT = 1
-    _PAGE_LOG     = 2
-    _PAGE_REVIEW  = 3
+    _PAGE_IDLE        = 0
+    _PAGE_COLLECT     = 1
+    _PAGE_LOG         = 2
+    _PAGE_REVIEW      = 3
+    _PAGE_CUSTOM_IDLE = 4
 
     def __init__(self, is_dark=False):
         super().__init__()
@@ -84,6 +86,9 @@ class PipelineUI(QWidget):
         self._raw_ready       = False
         self._processed_ready = False
         self._trained         = False
+        self._custom_mode_id       = ''
+        self._custom_delete_timer  = None
+        self._custom_delete_state  = False
 
         self._collect = {
             'worker': None, 'cfg': None, 'counts': {},
@@ -146,7 +151,7 @@ class PipelineUI(QWidget):
         title_row.addWidget(self.page_title)
         title_row.addStretch()
         self.mode_tabs = {}
-        for mode in ("Mouse", "Subway", "Racing"):
+        for mode in ("Mouse", "Subway", "Racing", "Custom"):
             btn = QPushButton(mode.upper())
             btn.setFixedHeight(26)
             btn.setCursor(Qt.PointingHandCursor)
@@ -161,6 +166,7 @@ class PipelineUI(QWidget):
         self._build_collect_page()
         self._build_log_page()
         self._build_review_page()
+        self._build_custom_idle_page()
 
         bottom_row = QHBoxLayout()
         bottom_row.setSpacing(12)
@@ -357,6 +363,311 @@ class PipelineUI(QWidget):
         ph.addWidget(self._review_ctrl)
         self.top_stack.addWidget(page)
 
+    def _build_custom_idle_page(self):
+        page = QWidget()
+        pl = QVBoxLayout(page)
+        pl.setContentsMargins(0, 0, 0, 0)
+        pl.setSpacing(6)
+
+        mgmt_row = QHBoxLayout()
+        mgmt_row.setSpacing(6)
+
+        self._custom_dropdown = QComboBox()
+        self._custom_dropdown.setMinimumWidth(100)
+        self._custom_dropdown.setFixedHeight(26)
+        self._custom_dropdown.currentIndexChanged.connect(self._on_custom_dropdown_changed)
+        mgmt_row.addWidget(self._custom_dropdown, stretch=1)
+
+        self._custom_new_btn = QPushButton("+ NEW")
+        self._custom_new_btn.setFixedHeight(26)
+        self._custom_new_btn.setCursor(Qt.PointingHandCursor)
+        self._custom_new_btn.clicked.connect(self._on_custom_new)
+        mgmt_row.addWidget(self._custom_new_btn)
+
+        self._custom_rename_btn = QPushButton("RENAME")
+        self._custom_rename_btn.setFixedHeight(26)
+        self._custom_rename_btn.setCursor(Qt.PointingHandCursor)
+        self._custom_rename_btn.clicked.connect(self._on_custom_rename)
+        mgmt_row.addWidget(self._custom_rename_btn)
+
+        self._custom_delete_btn = QPushButton("DELETE")
+        self._custom_delete_btn.setFixedHeight(26)
+        self._custom_delete_btn.setCursor(Qt.PointingHandCursor)
+        self._custom_delete_btn.clicked.connect(self._on_custom_delete)
+        mgmt_row.addWidget(self._custom_delete_btn)
+
+        pl.addLayout(mgmt_row)
+
+        self._custom_mgr_sep = QWidget()
+        self._custom_mgr_sep.setFixedHeight(1)
+        pl.addWidget(self._custom_mgr_sep)
+
+        gest_hdr_row = QHBoxLayout()
+        self._custom_gestures_hdr = QLabel("GESTURES")
+        gest_hdr_row.addWidget(self._custom_gestures_hdr)
+        gest_hdr_row.addStretch()
+        pl.addLayout(gest_hdr_row)
+
+        self._custom_gesture_container = QWidget()
+        self._custom_gesture_vlayout = QVBoxLayout(self._custom_gesture_container)
+        self._custom_gesture_vlayout.setContentsMargins(0, 0, 0, 0)
+        self._custom_gesture_vlayout.setSpacing(3)
+
+        self._custom_gesture_scroll = QScrollArea()
+        self._custom_gesture_scroll.setWidgetResizable(True)
+        self._custom_gesture_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._custom_gesture_scroll.setFrameShape(QScrollArea.NoFrame)
+        self._custom_gesture_scroll.setWidget(self._custom_gesture_container)
+        pl.addWidget(self._custom_gesture_scroll, stretch=1)
+
+        add_row = QHBoxLayout()
+        add_row.setSpacing(6)
+        self._custom_gesture_input = QLineEdit()
+        self._custom_gesture_input.setPlaceholderText("Gesture name (e.g. wave)…")
+        self._custom_gesture_input.setFixedHeight(28)
+        self._custom_gesture_input.returnPressed.connect(self._on_add_gesture)
+        add_row.addWidget(self._custom_gesture_input, stretch=1)
+        self._custom_add_btn = QPushButton("ADD")
+        self._custom_add_btn.setFixedHeight(28)
+        self._custom_add_btn.setMinimumWidth(46)
+        self._custom_add_btn.setCursor(Qt.PointingHandCursor)
+        self._custom_add_btn.clicked.connect(self._on_add_gesture)
+        add_row.addWidget(self._custom_add_btn)
+        pl.addLayout(add_row)
+
+        self._custom_status_lbl = QLabel("")
+        self._custom_status_lbl.setWordWrap(True)
+        pl.addWidget(self._custom_status_lbl)
+
+        self._custom_empty_lbl = QLabel(
+            "No custom modes yet.\nClick  + NEW  to create your first mode.")
+        self._custom_empty_lbl.setAlignment(Qt.AlignCenter)
+        self._custom_empty_lbl.setWordWrap(True)
+        pl.addWidget(self._custom_empty_lbl)
+
+        self.top_stack.addWidget(page)
+        self._populate_custom_dropdown()
+        self._refresh_custom_gesture_list()
+
+    def _get_current_custom_mode(self) -> dict:
+        if not self._custom_mode_id:
+            return None
+        try:
+            from logic.app_config import get_custom_modes
+            for m in get_custom_modes():
+                if m['id'] == self._custom_mode_id:
+                    return m
+        except Exception:
+            pass
+        return None
+
+    def _populate_custom_dropdown(self):
+        self._custom_dropdown.blockSignals(True)
+        self._custom_dropdown.clear()
+        try:
+            from logic.app_config import get_custom_modes
+            modes = get_custom_modes()
+        except Exception:
+            modes = []
+
+        for m in modes:
+            self._custom_dropdown.addItem(m['name'], m['id'])
+
+        has_modes = bool(modes)
+        self._custom_dropdown.setVisible(has_modes)
+        self._custom_rename_btn.setVisible(has_modes)
+        self._custom_delete_btn.setVisible(has_modes)
+        self._custom_gestures_hdr.setVisible(has_modes)
+        self._custom_gesture_scroll.setVisible(has_modes)
+        self._custom_gesture_input.setVisible(has_modes)
+        self._custom_add_btn.setVisible(has_modes)
+        self._custom_status_lbl.setVisible(has_modes)
+        self._custom_empty_lbl.setVisible(not has_modes)
+
+        if has_modes and self._custom_mode_id:
+            for i in range(self._custom_dropdown.count()):
+                if self._custom_dropdown.itemData(i) == self._custom_mode_id:
+                    self._custom_dropdown.setCurrentIndex(i)
+                    break
+        elif has_modes:
+            self._custom_mode_id = self._custom_dropdown.itemData(0)
+
+        self._custom_dropdown.blockSignals(False)
+
+    def _on_custom_dropdown_changed(self, idx: int):
+        mode_id = self._custom_dropdown.itemData(idx)
+        if mode_id and mode_id != self._custom_mode_id:
+            self._custom_mode_id = mode_id
+            try:
+                from logic.app_config import set_selected_custom_mode_id
+                set_selected_custom_mode_id(mode_id)
+            except Exception:
+                pass
+            self._custom_delete_state = False
+            self._custom_delete_btn.setText("DELETE")
+            if self._custom_delete_timer:
+                self._custom_delete_timer.stop()
+            self._refresh_custom_gesture_list()
+            self._load_conf()
+            if hasattr(self, '_theme_ready'):
+                self.apply_theme(self.is_dark)
+
+    def _on_custom_new(self):
+        name, ok = QInputDialog.getText(self, "New Custom Mode", "Mode name:")
+        if not ok or not name.strip():
+            return
+        try:
+            from logic.app_config import add_custom_mode, generate_custom_conf, set_selected_custom_mode_id
+            mode = add_custom_mode(name.strip(), [])
+            generate_custom_conf(mode)
+            self._custom_mode_id = mode['id']
+            set_selected_custom_mode_id(mode['id'])
+        except Exception as exc:
+            self._set_custom_status(f"Error: {exc}")
+            return
+        self._populate_custom_dropdown()
+        self._refresh_custom_gesture_list()
+        self._load_conf()
+        if hasattr(self, '_theme_ready'):
+            self.apply_theme(self.is_dark)
+
+    def _on_custom_rename(self):
+        mode = self._get_current_custom_mode()
+        if not mode:
+            return
+        new_name, ok = QInputDialog.getText(
+            self, "Rename Mode", "New name:", text=mode['name'])
+        if not ok or not new_name.strip():
+            return
+        try:
+            from logic.app_config import update_custom_mode, generate_custom_conf
+            update_custom_mode(mode['id'], name=new_name.strip())
+            mode['name'] = new_name.strip()
+            generate_custom_conf(mode)
+        except Exception as exc:
+            self._set_custom_status(f"Error: {exc}")
+            return
+        self._populate_custom_dropdown()
+        self._load_conf()
+
+    def _on_custom_delete(self):
+        mode = self._get_current_custom_mode()
+        if not mode:
+            return
+        if not self._custom_delete_state:
+            self._custom_delete_state = True
+            self._custom_delete_btn.setText("CONFIRM?")
+            self._custom_delete_timer = QTimer(self)
+            self._custom_delete_timer.setSingleShot(True)
+            self._custom_delete_timer.timeout.connect(self._reset_custom_delete_btn)
+            self._custom_delete_timer.start(3000)
+        else:
+            self._reset_custom_delete_btn()
+            try:
+                from logic.app_config import delete_custom_mode
+                delete_custom_mode(mode['id'])
+            except Exception as exc:
+                self._set_custom_status(f"Error: {exc}")
+                return
+            self._custom_mode_id = ''
+            self._populate_custom_dropdown()
+            self._refresh_custom_gesture_list()
+            self._load_conf()
+            if hasattr(self, '_theme_ready'):
+                self.apply_theme(self.is_dark)
+
+    def _reset_custom_delete_btn(self):
+        self._custom_delete_state = False
+        self._custom_delete_btn.setText("DELETE")
+        if self._custom_delete_timer:
+            self._custom_delete_timer.stop()
+
+    def _refresh_custom_gesture_list(self):
+        while self._custom_gesture_vlayout.count():
+            item = self._custom_gesture_vlayout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        self._custom_gesture_row_widgets = []
+
+        mode = self._get_current_custom_mode()
+        gestures = mode.get('gestures', []) if mode else []
+        for g in gestures:
+            row = QWidget()
+            row.setFixedHeight(28)
+            rl = QHBoxLayout(row)
+            rl.setContentsMargins(8, 0, 8, 0)
+            rl.setSpacing(6)
+            name_lbl = QLabel(g)
+            rl.addWidget(name_lbl, stretch=1)
+            rm_btn = QPushButton("×")
+            rm_btn.setFixedSize(22, 22)
+            rm_btn.setCursor(Qt.PointingHandCursor)
+            rm_btn.clicked.connect(lambda _, g=g: self._on_remove_gesture(g))
+            rl.addWidget(rm_btn)
+            self._custom_gesture_vlayout.addWidget(row)
+            self._custom_gesture_row_widgets.append((row, name_lbl, rm_btn))
+
+        if hasattr(self, '_theme_ready'):
+            self.apply_theme(self.is_dark)
+
+    def _on_add_gesture(self):
+        raw = self._custom_gesture_input.text().strip()
+        if not raw:
+            self._set_custom_status("Enter a gesture name first.")
+            return
+        safe = raw.lower().replace(' ', '_')
+        mode = self._get_current_custom_mode()
+        if not mode:
+            self._set_custom_status("Create a mode first.")
+            return
+        gestures = list(mode.get('gestures', []))
+        if safe in gestures:
+            self._set_custom_status(f"'{safe}' already exists.")
+            return
+        gestures.append(safe)
+        try:
+            from logic.app_config import update_custom_mode, generate_custom_conf, get_custom_modes
+            update_custom_mode(mode['id'], gestures=gestures)
+            modes = get_custom_modes()
+            for m in modes:
+                if m['id'] == mode['id']:
+                    generate_custom_conf(m)
+                    break
+        except Exception as exc:
+            self._set_custom_status(f"Error: {exc}")
+            return
+        self._custom_gesture_input.clear()
+        self._set_custom_status(f"Added '{safe}'.")
+        self._refresh_custom_gesture_list()
+        self._load_conf()
+
+    def _on_remove_gesture(self, gesture: str):
+        mode = self._get_current_custom_mode()
+        if not mode:
+            return
+        gestures = [g for g in mode.get('gestures', []) if g != gesture]
+        try:
+            from logic.app_config import update_custom_mode, generate_custom_conf, get_custom_modes
+            update_custom_mode(mode['id'], gestures=gestures)
+            modes = get_custom_modes()
+            for m in modes:
+                if m['id'] == mode['id']:
+                    generate_custom_conf(m)
+                    break
+        except Exception as exc:
+            self._set_custom_status(f"Error: {exc}")
+            return
+        self._set_custom_status(f"Removed '{gesture}'.")
+        self._refresh_custom_gesture_list()
+        self._load_conf()
+
+    def _set_custom_status(self, msg: str):
+        if hasattr(self, '_custom_status_lbl'):
+            self._custom_status_lbl.setText(msg)
+
+    def _idle_page_index(self) -> int:
+        return self._PAGE_CUSTOM_IDLE if self.current_mode == "Custom" else self._PAGE_IDLE
+
     def _build_counts_panel(self):
         self.counts_panel = QWidget()
         self.counts_panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
@@ -470,14 +781,27 @@ class PipelineUI(QWidget):
 
     def _load_conf(self):
         from logic.gesture_pipeline import load_conf
-        path = CONF_MAP[self.current_mode]
-        try:
-            self._cfg = load_conf(path)
-        except Exception as exc:
-            self._cfg = None
-            self._log(f"Error loading conf: {exc}")
         self._training_result = None
         self._trained = False
+        if self.current_mode == "Custom":
+            mode = self._get_current_custom_mode()
+            if mode and mode.get('gestures'):
+                try:
+                    from logic.app_config import generate_custom_conf
+                    conf_path = generate_custom_conf(mode)
+                    self._cfg = load_conf(conf_path)
+                except Exception as exc:
+                    self._cfg = None
+                    self._log(f"Error loading custom conf: {exc}")
+            else:
+                self._cfg = None
+        else:
+            path = CONF_MAP.get(self.current_mode, '')
+            try:
+                self._cfg = load_conf(path)
+            except Exception as exc:
+                self._cfg = None
+                self._log(f"Error loading conf: {exc}")
         self._refresh_counts()
 
     def _refresh_counts(self):
@@ -574,6 +898,17 @@ class PipelineUI(QWidget):
             self._finish_collect()
         self.current_mode = mode
         self._log(f"Switched to {mode} mode.")
+        if mode == "Custom":
+            try:
+                from logic.app_config import get_selected_custom_mode_id
+                self._custom_mode_id = get_selected_custom_mode_id()
+            except Exception:
+                pass
+            self._populate_custom_dropdown()
+            self._refresh_custom_gesture_list()
+            self.top_stack.setCurrentIndex(self._PAGE_CUSTOM_IDLE)
+        else:
+            self.top_stack.setCurrentIndex(self._PAGE_IDLE)
         self._load_conf()
         self.apply_theme(self.is_dark)
 
@@ -787,7 +1122,7 @@ class PipelineUI(QWidget):
             c['csv_file'].close()
         c['csv_file'] = None
         c['csv_writer'] = None
-        self.top_stack.setCurrentIndex(self._PAGE_IDLE)
+        self.top_stack.setCurrentIndex(self._idle_page_index())
         self._refresh_counts()
 
     def _toggle_mirror(self):
@@ -950,7 +1285,7 @@ class PipelineUI(QWidget):
         else:
             self._log("Review complete - no samples removed.")
         self._review_pixmap = None
-        self.top_stack.setCurrentIndex(self._PAGE_IDLE)
+        self.top_stack.setCurrentIndex(self._idle_page_index())
 
     def _step_done(self, msg: str):
         self._set_busy(False)
@@ -1310,3 +1645,93 @@ class PipelineUI(QWidget):
             f"color: {muted}; font-size: 8px; font-weight: 700; letter-spacing: 1.4px; background: transparent; border: none;")
         self.progress_bar_bg.setStyleSheet(f"background-color: {border}; border-radius: 2px; border: none;")
         self.progress_bar_fill.setStyleSheet(f"background-color: {bar_fill_col}; border-radius: 2px; border: none;")
+
+        if hasattr(self, '_custom_dropdown'):
+            self._custom_dropdown.setStyleSheet(f"""
+                QComboBox {{
+                    background: {panel}; color: {text};
+                    border: 1px solid {border}; border-radius: 2px;
+                    padding: 2px 6px; font-size: 8px; letter-spacing: 1px;
+                }}
+                QComboBox::drop-down {{ border: none; width: 16px; }}
+                QComboBox::down-arrow {{
+                    border-left: 3px solid transparent;
+                    border-right: 3px solid transparent;
+                    border-top: 4px solid {dim};
+                    width: 0; height: 0; margin-right: 4px;
+                }}
+                QComboBox QAbstractItemView {{
+                    background: {panel}; color: {text};
+                    border: 1px solid {border};
+                    selection-background-color: {hover};
+                    selection-color: {text}; outline: none;
+                }}
+            """)
+            new_btn_style = f"""
+                QPushButton {{
+                    background-color: {pri_bg}; color: {pri_txt};
+                    border: 1px solid {pri_bg}; border-radius: 2px;
+                    font-size: 8px; font-weight: 700; letter-spacing: 1px; padding: 0 8px;
+                }}
+                QPushButton:hover {{ opacity: 0.85; }}
+            """
+            dim_btn_style = f"""
+                QPushButton {{
+                    background-color: transparent; color: {dim};
+                    border: 1px solid {border}; border-radius: 2px;
+                    font-size: 8px; font-weight: 700; letter-spacing: 1px; padding: 0 8px;
+                }}
+                QPushButton:hover {{ background-color: {hover}; color: {text}; }}
+            """
+            del_btn_style = f"""
+                QPushButton {{
+                    background-color: transparent; color: {'#cc4444' if not self._custom_delete_state else '#cc4444'};
+                    border: 1px solid {'#cc4444' if self._custom_delete_state else border};
+                    border-radius: 2px;
+                    font-size: 8px; font-weight: 700; letter-spacing: 1px; padding: 0 8px;
+                }}
+                QPushButton:hover {{ background-color: {hover}; }}
+            """
+            self._custom_new_btn.setStyleSheet(new_btn_style)
+            self._custom_rename_btn.setStyleSheet(dim_btn_style)
+            self._custom_delete_btn.setStyleSheet(del_btn_style)
+            self._custom_mgr_sep.setStyleSheet(f"background-color: {border};")
+            self._custom_gestures_hdr.setStyleSheet(
+                f"color: {muted}; font-size: 8px; font-weight: 700; letter-spacing: 1.4px; background: transparent; border: none;")
+            self._custom_gesture_scroll.setStyleSheet(f"""
+                QScrollArea {{ background-color: {bg}; border: none; }}
+                QScrollBar:vertical {{
+                    width: 4px; background: transparent; border: none; margin: 0;
+                }}
+                QScrollBar::handle:vertical {{
+                    background: {muted}; border-radius: 2px; min-height: 20px;
+                }}
+                QScrollBar::handle:vertical:hover {{ background: {dim}; }}
+                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0px; }}
+                QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: none; }}
+            """)
+            self._custom_gesture_scroll.viewport().setStyleSheet(f"background-color: {bg}; border: none;")
+            for row, name_lbl, rm_btn in getattr(self, '_custom_gesture_row_widgets', []):
+                row.setStyleSheet(f"background-color: {panel}; border: 1px solid {border}; border-radius: 2px;")
+                name_lbl.setStyleSheet(
+                    f"color: {text}; font-size: 9px; font-weight: 700; letter-spacing: 1px; background: transparent; border: none;")
+                rm_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: transparent; color: {dim};
+                        border: 1px solid {border}; border-radius: 2px; font-size: 10px;
+                    }}
+                    QPushButton:hover {{ background-color: {hover}; color: {'#cc4444'}; }}
+                """)
+            self._custom_gesture_input.setStyleSheet(f"""
+                QLineEdit {{
+                    background: {panel}; color: {text};
+                    border: 1px solid {border}; border-radius: 2px;
+                    padding: 2px 6px; font-size: 8px;
+                }}
+                QLineEdit:focus {{ border-color: {text}; }}
+            """)
+            self._custom_add_btn.setStyleSheet(new_btn_style)
+            self._custom_status_lbl.setStyleSheet(
+                f"color: {dim}; font-size: 8px; letter-spacing: 1px; background: transparent; border: none;")
+            self._custom_empty_lbl.setStyleSheet(
+                f"color: {muted}; font-size: 11px; font-weight: 700; letter-spacing: 1.5px; background: transparent; border: none;")

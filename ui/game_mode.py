@@ -1,10 +1,10 @@
 import os
 
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout,
+    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QPushButton, QSizePolicy, QComboBox, QScrollArea,
 )
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QTimer
 
 _LOGIC_DIR  = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logic")
 _CUSTOM_DIR = os.path.join(_LOGIC_DIR, "data", "custom")
@@ -14,6 +14,11 @@ _CUSTOM_FILES = {
     'subway': ('subway_gesture_model_best.pt', 'subway_label_encoder.pkl'),
     'racing': ('racing_gesture_model_best.pt', 'racing_label_encoder.pkl'),
 }
+
+def _custom_game_mode_model_exists(mode_id: str) -> bool:
+    mode_dir = os.path.join(_CUSTOM_DIR, mode_id)
+    return (os.path.exists(os.path.join(mode_dir, 'gesture_model_best.pt')) and
+            os.path.exists(os.path.join(mode_dir, 'label_encoder.pkl')))
 
 class GameMode(QWidget):
     on_menu_toggle        = Signal()
@@ -25,6 +30,8 @@ class GameMode(QWidget):
     zone_changed          = Signal(str)
     mouse_side_changed    = Signal(str)
     perf_stats_changed    = Signal(bool)
+    custom_mode_selected  = Signal(str, str)
+    chatbot_enabled_changed = Signal(bool)
 
     def __init__(self):
         super().__init__()
@@ -43,6 +50,11 @@ class GameMode(QWidget):
         self._zone_btns      = {}
         self._side_btns      = {}
         self._show_perf_stats = True
+        self._chatbot_enabled = True
+        self._custom_mode_combo   = None
+        self._custom_src_btns     = {}
+        self._selected_custom_id  = ''
+        self._custom_src          = 'custom'
 
         self._load_state()
         self._init_ui()
@@ -50,14 +62,22 @@ class GameMode(QWidget):
 
     def _load_state(self):
         try:
-            from logic.app_config import get_game_mode, get_mouse_enabled, get_model_source, get_camera_index, get_cursor_point, get_saved_zone, get_mouse_side, get_show_perf_stats
-            self.selected_mode    = get_game_mode()
-            self.mouse_enabled    = get_mouse_enabled()
-            self._camera_index    = get_camera_index()
-            self._cursor_point    = get_cursor_point()
-            self._zone            = get_saved_zone()
-            self._mouse_side      = get_mouse_side()
-            self._show_perf_stats = get_show_perf_stats()
+            from logic.app_config import (
+                get_game_mode, get_mouse_enabled, get_model_source, get_camera_index,
+                get_cursor_point, get_saved_zone, get_mouse_side, get_show_perf_stats,
+                get_selected_custom_mode_id, get_selected_custom_mode_source,
+                get_chatbot_enabled,
+            )
+            self.selected_mode      = get_game_mode()
+            self.mouse_enabled      = get_mouse_enabled()
+            self._camera_index      = get_camera_index()
+            self._cursor_point      = get_cursor_point()
+            self._zone              = get_saved_zone()
+            self._mouse_side        = get_mouse_side()
+            self._show_perf_stats   = get_show_perf_stats()
+            self._chatbot_enabled   = get_chatbot_enabled()
+            self._selected_custom_id = get_selected_custom_mode_id()
+            self._custom_src         = get_selected_custom_mode_source()
             for m in ('mouse', 'subway', 'racing'):
                 self._mode_sources[m] = get_model_source(m)
         except Exception:
@@ -290,6 +310,36 @@ class GameMode(QWidget):
         pfp.addWidget(self.perf_toggle_btn)
         cl.addWidget(self.perf_panel)
 
+        self.div1f = QWidget()
+        self.div1f.setFixedHeight(1)
+        cl.addWidget(self.div1f)
+
+        self.chatbot_section_hdr = QLabel("CHATBOT")
+        cl.addWidget(self.chatbot_section_hdr)
+
+        self.chatbot_panel = QWidget()
+        self.chatbot_panel.setMinimumHeight(52)
+        cbp = QHBoxLayout(self.chatbot_panel)
+        cbp.setContentsMargins(16, 0, 16, 0)
+        cbp.setSpacing(0)
+
+        chatbot_text_col = QVBoxLayout()
+        chatbot_text_col.setSpacing(2)
+        self.chatbot_hdr_lbl = QLabel("ENABLE CHATBOT")
+        self.chatbot_sub_lbl = QLabel("Ask HandBot questions from the chat panel")
+        self.chatbot_sub_lbl.setWordWrap(True)
+        chatbot_text_col.addWidget(self.chatbot_hdr_lbl)
+        chatbot_text_col.addWidget(self.chatbot_sub_lbl)
+        cbp.addLayout(chatbot_text_col, stretch=1)
+
+        self.chatbot_toggle_btn = QPushButton("ON" if self._chatbot_enabled else "OFF")
+        self.chatbot_toggle_btn.setFixedHeight(26)
+        self.chatbot_toggle_btn.setMinimumWidth(46)
+        self.chatbot_toggle_btn.setCursor(Qt.PointingHandCursor)
+        self.chatbot_toggle_btn.clicked.connect(self._toggle_chatbot_enabled)
+        cbp.addWidget(self.chatbot_toggle_btn)
+        cl.addWidget(self.chatbot_panel)
+
         self.div2 = QWidget()
         self.div2.setFixedHeight(1)
         cl.addWidget(self.div2)
@@ -297,32 +347,32 @@ class GameMode(QWidget):
         self.mode_section_hdr = QLabel("GAME MODE")
         cl.addWidget(self.mode_section_hdr)
 
-        mode_scroll = QScrollArea()
-        mode_scroll.setWidgetResizable(True)
-        mode_scroll.setFrameShape(QScrollArea.NoFrame)
-        mode_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        mode_scroll.setFixedHeight(148)
+        MODE_GRID_COLS = 3
 
-        mode_scroll_inner = QWidget()
-        mode_row = QHBoxLayout(mode_scroll_inner)
-        mode_row.setSpacing(12)
-        mode_row.setContentsMargins(0, 0, 0, 0)
+        mode_grid_widget = QWidget()
+        mode_grid = QGridLayout(mode_grid_widget)
+        mode_grid.setHorizontalSpacing(12)
+        mode_grid.setVerticalSpacing(12)
+        mode_grid.setContentsMargins(0, 0, 0, 0)
+        for _c in range(MODE_GRID_COLS):
+            mode_grid.setColumnStretch(_c, 1)
 
         modes = [
             ("🖱", "MOUSE",      "mouse"),
             ("🚇", "SUBWAY",     "subway"),
             ("🏎", "RACING",     "racing"),
             ("🌍", "OPEN WORLD", "open_world"),
+            ("🏒", "AIR HOCKEY", "air_hockey"),
         ]
 
-        for icon, label, key in modes:
+        for idx, (icon, label, key) in enumerate(modes):
             card_col = QVBoxLayout()
             card_col.setSpacing(6)
 
             card = QPushButton()
             card.setMinimumSize(100, 80)
             card.setFixedHeight(96)
-            card.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+            card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             card.setCheckable(True)
             card.setCursor(Qt.PointingHandCursor)
             card.clicked.connect(lambda _, k=key: self.select_mode(k))
@@ -345,35 +395,114 @@ class GameMode(QWidget):
             self._mode_cards[key] = {'card': card, 'name': name_lbl}
             card_col.addWidget(card)
 
-            src_row = QHBoxLayout()
-            src_row.setSpacing(4)
-            src_row.setContentsMargins(0, 0, 0, 0)
+            if key != 'air_hockey':
+                src_row = QHBoxLayout()
+                src_row.setSpacing(4)
+                src_row.setContentsMargins(0, 0, 0, 0)
 
-            def_btn = QPushButton("DEFAULT")
-            def_btn.setFixedHeight(22)
-            def_btn.setMinimumWidth(56)
-            def_btn.setCursor(Qt.PointingHandCursor)
-            def_btn.clicked.connect(lambda _, k=key: self._set_model_source(k, 'default'))
+                def_btn = QPushButton("DEFAULT")
+                def_btn.setFixedHeight(22)
+                def_btn.setMinimumWidth(56)
+                def_btn.setCursor(Qt.PointingHandCursor)
+                def_btn.clicked.connect(lambda _, k=key: self._set_model_source(k, 'default'))
 
-            custom_btn = QPushButton("CUSTOM")
-            custom_btn.setFixedHeight(22)
-            custom_btn.setMinimumWidth(52)
-            custom_btn.setCursor(Qt.PointingHandCursor)
-            custom_btn.clicked.connect(lambda _, k=key: self._set_model_source(k, 'custom'))
-            custom_btn.setEnabled(self._custom_exists(key))
+                custom_btn = QPushButton("CUSTOM")
+                custom_btn.setFixedHeight(22)
+                custom_btn.setMinimumWidth(52)
+                custom_btn.setCursor(Qt.PointingHandCursor)
+                custom_btn.clicked.connect(lambda _, k=key: self._set_model_source(k, 'custom'))
+                custom_btn.setEnabled(self._custom_exists(key))
 
-            src_row.addWidget(def_btn)
-            src_row.addWidget(custom_btn)
+                src_row.addWidget(def_btn)
+                src_row.addWidget(custom_btn)
 
-            self._source_btns[key] = {'default': def_btn, 'custom': custom_btn}
+                self._source_btns[key] = {'default': def_btn, 'custom': custom_btn}
 
-            card_col.addLayout(src_row)
+                card_col.addLayout(src_row)
+            else:
+                ah_spacer = QWidget()
+                ah_spacer.setFixedHeight(22)
+                card_col.addWidget(ah_spacer)
 
-            mode_row.addLayout(card_col)
+            row, col = divmod(idx, MODE_GRID_COLS)
+            mode_grid.addLayout(card_col, row, col)
 
-        mode_row.addStretch()
-        mode_scroll.setWidget(mode_scroll_inner)
-        cl.addWidget(mode_scroll)
+        custom_card_col = QVBoxLayout()
+        custom_card_col.setSpacing(6)
+
+        custom_card = QPushButton()
+        custom_card.setMinimumSize(100, 80)
+        custom_card.setFixedHeight(96)
+        custom_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        custom_card.setCheckable(True)
+        custom_card.setCursor(Qt.PointingHandCursor)
+        custom_card.clicked.connect(lambda: self.select_mode('custom'))
+
+        cc_inner = QVBoxLayout(custom_card)
+        cc_inner.setAlignment(Qt.AlignCenter)
+        cc_inner.setSpacing(6)
+        cc_inner.setContentsMargins(8, 8, 8, 8)
+
+        cc_icon_lbl = QLabel("🎮")
+        cc_icon_lbl.setAlignment(Qt.AlignCenter)
+        cc_icon_lbl.setStyleSheet("font-size: 26px; background: transparent; border: none;")
+        cc_name_lbl = QLabel("CUSTOM")
+        cc_name_lbl.setAlignment(Qt.AlignCenter)
+        cc_inner.addWidget(cc_icon_lbl)
+        cc_inner.addWidget(cc_name_lbl)
+
+        self._mode_cards['custom'] = {'card': custom_card, 'name': cc_name_lbl}
+        custom_card_col.addWidget(custom_card)
+
+        cc_spacer = QWidget()
+        cc_spacer.setFixedHeight(22)
+        custom_card_col.addWidget(cc_spacer)
+
+        custom_row, custom_col = divmod(len(modes), MODE_GRID_COLS)
+        mode_grid.addLayout(custom_card_col, custom_row, custom_col)
+
+        cl.addWidget(mode_grid_widget)
+
+        self._custom_mode_panel = QWidget()
+        self._custom_mode_panel.setMinimumHeight(52)
+        cmp_l = QHBoxLayout(self._custom_mode_panel)
+        cmp_l.setContentsMargins(16, 0, 16, 0)
+        cmp_l.setSpacing(0)
+
+        cmp_text = QVBoxLayout()
+        cmp_text.setSpacing(2)
+        self._cmp_hdr_lbl = QLabel("CUSTOM GAME MODE")
+        self._cmp_sub_lbl = QLabel("Choose which custom mode and model to use")
+        self._cmp_sub_lbl.setWordWrap(True)
+        cmp_text.addWidget(self._cmp_hdr_lbl)
+        cmp_text.addWidget(self._cmp_sub_lbl)
+        cmp_l.addLayout(cmp_text, stretch=1)
+
+        cmp_right = QVBoxLayout()
+        cmp_right.setSpacing(4)
+
+        self._custom_mode_combo = QComboBox()
+        self._custom_mode_combo.setFixedHeight(26)
+        self._custom_mode_combo.setMinimumWidth(120)
+        self._custom_mode_combo.currentIndexChanged.connect(self._on_custom_mode_combo_changed)
+        cmp_right.addWidget(self._custom_mode_combo)
+
+        cmp_src_row = QHBoxLayout()
+        cmp_src_row.setSpacing(4)
+        for src_key, src_lbl in (('custom', 'TRAINED'),):
+            btn = QPushButton(src_lbl)
+            btn.setFixedHeight(22)
+            btn.setMinimumWidth(64)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.clicked.connect(lambda _, s=src_key: self._set_custom_game_src(s))
+            cmp_src_row.addWidget(btn)
+            self._custom_src_btns[src_key] = btn
+        cmp_right.addLayout(cmp_src_row)
+        cmp_l.addLayout(cmp_right)
+
+        cl.addWidget(self._custom_mode_panel)
+        self._custom_mode_panel.setVisible(self.selected_mode == 'custom')
+        self._populate_custom_mode_combo()
         cl.addStretch()
 
         self._settings_scroll = QScrollArea()
@@ -383,6 +512,57 @@ class GameMode(QWidget):
         self._settings_scroll.setWidget(content)
         root.addWidget(self._settings_scroll, stretch=1)
 
+    def _populate_custom_mode_combo(self):
+        if self._custom_mode_combo is None:
+            return
+        self._custom_mode_combo.blockSignals(True)
+        self._custom_mode_combo.clear()
+        try:
+            from logic.app_config import get_custom_modes
+            modes = get_custom_modes()
+        except Exception:
+            modes = []
+        if not modes:
+            self._custom_mode_combo.addItem("No custom modes yet", "")
+            self._custom_mode_combo.setEnabled(False)
+        else:
+            self._custom_mode_combo.setEnabled(True)
+            for m in modes:
+                self._custom_mode_combo.addItem(m['name'], m['id'])
+            for i in range(self._custom_mode_combo.count()):
+                if self._custom_mode_combo.itemData(i) == self._selected_custom_id:
+                    self._custom_mode_combo.setCurrentIndex(i)
+                    break
+        self._custom_mode_combo.blockSignals(False)
+
+    def _on_custom_mode_combo_changed(self, idx: int):
+        if self._custom_mode_combo is None:
+            return
+        mode_id = self._custom_mode_combo.itemData(idx)
+        if mode_id and mode_id != self._selected_custom_id:
+            self._selected_custom_id = mode_id
+            try:
+                from logic.app_config import set_selected_custom_mode_id
+                set_selected_custom_mode_id(mode_id)
+            except Exception:
+                pass
+            self.apply_theme(self.is_dark)
+            self.custom_mode_selected.emit(mode_id, self._custom_src)
+
+    def _set_custom_game_src(self, source: str):
+        self._custom_src = source
+        try:
+            from logic.app_config import set_selected_custom_mode_source
+            set_selected_custom_mode_source(source)
+        except Exception:
+            pass
+        self.apply_theme(self.is_dark)
+        self.custom_mode_selected.emit(self._selected_custom_id, source)
+
+    def refresh_custom_modes(self):
+        self._populate_custom_mode_combo()
+        self.apply_theme(self.is_dark)
+
     def select_mode(self, key: str):
         self.selected_mode = key
         try:
@@ -390,6 +570,8 @@ class GameMode(QWidget):
             set_game_mode(key)
         except Exception:
             pass
+        if hasattr(self, '_custom_mode_panel'):
+            self._custom_mode_panel.setVisible(key == 'custom')
         self.apply_theme(self.is_dark)
         self.game_mode_changed.emit(key)
 
@@ -402,6 +584,8 @@ class GameMode(QWidget):
             set_game_mode(key)
         except Exception:
             pass
+        if hasattr(self, '_custom_mode_panel'):
+            self._custom_mode_panel.setVisible(key == 'custom')
         self.apply_theme(self.is_dark)
 
     def refresh_custom_availability(self):
@@ -415,6 +599,7 @@ class GameMode(QWidget):
                     set_model_source(key, 'default')
                 except Exception:
                     pass
+        self._populate_custom_mode_combo()
         self.apply_theme(self.is_dark)
 
     def _toggle_mouse(self):
@@ -467,6 +652,18 @@ class GameMode(QWidget):
         except Exception:
             pass
         self.perf_stats_changed.emit(self._show_perf_stats)
+        self.apply_theme(self.is_dark)
+
+    def _toggle_chatbot_enabled(self):
+        self._chatbot_enabled = not self._chatbot_enabled
+        self.chatbot_toggle_btn.setText("ON" if self._chatbot_enabled else "OFF")
+        try:
+            from logic.app_config import set_chatbot_enabled
+            set_chatbot_enabled(self._chatbot_enabled)
+        except Exception:
+            pass
+
+        self.chatbot_enabled_changed.emit(self._chatbot_enabled)
         self.apply_theme(self.is_dark)
 
     def _set_model_source(self, mode: str, source: str):
@@ -726,6 +923,34 @@ class GameMode(QWidget):
                 QPushButton:hover {{ background-color: {hover}; }}
             """)
 
+        self.div1f.setStyleSheet(f"background-color: {border};")
+
+        self.chatbot_section_hdr.setStyleSheet(
+            f"color: {text}; font-size: 12px; font-weight: 800; letter-spacing: 1.5px; background: transparent; border: none;")
+
+        self.chatbot_panel.setStyleSheet(
+            f"background-color: {panel}; border: 1px solid {border};")
+        self.chatbot_hdr_lbl.setStyleSheet(
+            f"font-size: 9px; font-weight: 700; color: {text}; letter-spacing: 1.5px; background: transparent; border: none;")
+        self.chatbot_sub_lbl.setStyleSheet(
+            f"font-size: 8px; color: {muted}; letter-spacing: 1px; background: transparent; border: none;")
+        if self._chatbot_enabled:
+            self.chatbot_toggle_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {tog_on_bg}; color: {tog_on_txt};
+                    font-size: 8px; font-weight: 700; letter-spacing: 1px;
+                    border: 1px solid {tog_on_bg}; border-radius: 2px;
+                }}
+            """)
+        else:
+            self.chatbot_toggle_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {tog_off_bg}; color: {tog_off_txt};
+                    font-size: 8px; font-weight: 700; letter-spacing: 1px;
+                    border: 1px solid {border}; border-radius: 2px;
+                }}
+                QPushButton:hover {{ background-color: {hover}; }}
+            """)
         self.div2.setStyleSheet(f"background-color: {border};")
 
         self.camera_panel.setStyleSheet(
@@ -794,6 +1019,59 @@ class GameMode(QWidget):
             cur_src = self._mode_sources.get(key, 'default')
             for src, btn in btns.items():
                 is_active = (src == cur_src) and (src == 'default' or self._custom_exists(key))
+                if is_active:
+                    btn.setStyleSheet(f"""
+                        QPushButton {{
+                            background-color: {src_active_bg}; color: {src_active_txt};
+                            font-size: 7px; font-weight: 700; letter-spacing: 1px;
+                            border: 1px solid {src_active_bg}; border-radius: 2px;
+                        }}
+                    """)
+                else:
+                    btn.setStyleSheet(f"""
+                        QPushButton {{
+                            background-color: transparent; color: {dim};
+                            font-size: 7px; font-weight: 700; letter-spacing: 1px;
+                            border: 1px solid {border}; border-radius: 2px;
+                        }}
+                        QPushButton:hover {{ background-color: {hover}; color: {text}; }}
+                        QPushButton:disabled {{ color: {border}; border-color: {border}; }}
+                    """)
+
+        if hasattr(self, '_custom_mode_panel'):
+            self._custom_mode_panel.setStyleSheet(
+                f"background-color: {panel}; border: 1px solid {border};")
+            self._cmp_hdr_lbl.setStyleSheet(
+                f"font-size: 9px; font-weight: 700; color: {text}; letter-spacing: 1.5px; background: transparent; border: none;")
+            self._cmp_sub_lbl.setStyleSheet(
+                f"font-size: 8px; color: {muted}; letter-spacing: 1px; background: transparent; border: none;")
+            combo_style = f"""
+                QComboBox {{
+                    background: {panel}; color: {text};
+                    border: 1px solid {border}; border-radius: 2px;
+                    padding: 2px 6px; font-size: 8px; letter-spacing: 1px;
+                }}
+                QComboBox::drop-down {{ border: none; width: 16px; }}
+                QComboBox::down-arrow {{
+                    border-left: 3px solid transparent;
+                    border-right: 3px solid transparent;
+                    border-top: 4px solid {dim};
+                    width: 0; height: 0; margin-right: 4px;
+                }}
+                QComboBox QAbstractItemView {{
+                    background: {panel}; color: {text};
+                    border: 1px solid {border};
+                    selection-background-color: {hover};
+                    selection-color: {text}; outline: none;
+                }}
+                QComboBox:disabled {{ color: {muted}; }}
+            """
+            if self._custom_mode_combo:
+                self._custom_mode_combo.setStyleSheet(combo_style)
+            cur_id = self._selected_custom_id
+            model_exists = _custom_game_mode_model_exists(cur_id) if cur_id else False
+            for src_key, btn in self._custom_src_btns.items():
+                is_active = (src_key == self._custom_src) and model_exists
                 if is_active:
                     btn.setStyleSheet(f"""
                         QPushButton {{

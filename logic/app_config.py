@@ -114,6 +114,15 @@ def set_show_perf_stats(enabled: bool) -> None:
     config['show_perf_stats'] = enabled
     _write(config)
 
+def get_chatbot_enabled() -> bool:
+    return _read().get('chatbot_enabled', True)
+
+def set_chatbot_enabled(enabled: bool) -> None:
+    config = _read()
+    config['chatbot_enabled'] = enabled
+    _write(config)
+
+
 def get_key_bindings(mode: str) -> dict:
     defaults = BINDINGS_DEFAULT.get(mode, {})
     saved    = _read().get('key_bindings', {}).get(mode, {})
@@ -133,3 +142,106 @@ def reset_key_bindings(mode: str) -> None:
     if 'key_bindings' in config and mode in config['key_bindings']:
         del config['key_bindings'][mode]
         _write(config)
+
+def get_custom_modes() -> list:
+    return _read().get('custom_modes', [])
+
+def add_custom_mode(name: str, gestures: list) -> dict:
+    import time as _t
+    modes   = get_custom_modes()
+    mode_id = f"cm_{int(_t.time())}"
+    mode    = {'id': mode_id, 'name': name, 'gestures': list(gestures)}
+    config  = _read()
+    config.setdefault('custom_modes', []).append(mode)
+    _write(config)
+    return mode
+
+def update_custom_mode(mode_id: str, name: str = None, gestures: list = None) -> None:
+    config = _read()
+    for m in config.get('custom_modes', []):
+        if m['id'] == mode_id:
+            if name is not None:
+                m['name'] = name
+            if gestures is not None:
+                m['gestures'] = list(gestures)
+            break
+    _write(config)
+
+def delete_custom_mode(mode_id: str) -> None:
+    config = _read()
+    config['custom_modes'] = [m for m in config.get('custom_modes', []) if m['id'] != mode_id]
+    if config.get('selected_custom_mode_id') == mode_id:
+        remaining = config['custom_modes']
+        config['selected_custom_mode_id'] = remaining[0]['id'] if remaining else ''
+    if 'key_bindings' in config:
+        config['key_bindings'].pop(f'custom_{mode_id}', None)
+    _write(config)
+
+def get_selected_custom_mode_id() -> str:
+    config = _read()
+    modes  = config.get('custom_modes', [])
+    saved  = config.get('selected_custom_mode_id', '')
+    if saved and any(m['id'] == saved for m in modes):
+        return saved
+    return modes[0]['id'] if modes else ''
+
+def set_selected_custom_mode_id(mode_id: str) -> None:
+    config = _read()
+    config['selected_custom_mode_id'] = mode_id
+    _write(config)
+
+def get_selected_custom_mode_source() -> str:
+    return _read().get('selected_custom_mode_source', 'custom')
+
+def set_selected_custom_mode_source(source: str) -> None:
+    config = _read()
+    config['selected_custom_mode_source'] = source
+    _write(config)
+
+def get_custom_data_root() -> str:
+    logic_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(logic_dir, 'data', 'custom')
+
+def get_custom_mode_dir(mode_id: str) -> str:
+    return os.path.join(get_custom_data_root(), mode_id)
+
+def generate_custom_conf(mode: dict) -> str:
+    import configparser
+    mode_id  = mode['id']
+    mode_dir = get_custom_mode_dir(mode_id)
+    os.makedirs(mode_dir, exist_ok=True)
+    conf_path = os.path.join(mode_dir, 'custom.conf')
+    gestures  = mode.get('gestures') or ['idle']
+    cfg = configparser.ConfigParser()
+    cfg['project']       = {'name': mode.get('name', 'Custom')}
+    cfg['gestures']      = {'names': ', '.join(gestures)}
+    cfg['collection']    = {
+        'target_per_gesture': '50',
+        'min_record_dist':    '0.02',
+        'diversity_every':    '50',
+    }
+    cfg['preprocessing'] = {
+        'aug_per_sample': '4',
+        'noise_std':      '0.008',
+        'rot_max_deg':    '20.0',
+        'scale_jitter':   '0.12',
+    }
+    cfg['training'] = {
+        'epochs':                    '150',
+        'batch_size':                '64',
+        'learning_rate':             '0.001',
+        'focal_gamma':               '2.0',
+        'low_conf_threshold':        '0.70',
+        'weak_accuracy_threshold':   '0.80',
+    }
+    cfg['files'] = {
+        'data_dir':     '.',
+        'raw_csv':      'raw_gestures.csv',
+        'processed_csv':'gesture_data.csv',
+        'model_best':   'gesture_model_best.pt',
+        'model_out':    'gesture_model.pt',
+        'label_encoder':'label_encoder.pkl',
+    }
+    with open(conf_path, 'w') as f:
+        cfg.write(f)
+    return conf_path
