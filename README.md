@@ -83,8 +83,14 @@ venv\Scripts\activate      # Windows
 ### 3. Install dependencies
 
 ```bash
-pip install -r requirements.txt
+python install_dependencies.py
 ```
+
+This installs everything in `requirements.txt`. On Windows it first grabs a
+prebuilt CPU wheel for `llama-cpp-python` (`pip install llama-cpp-python
+--prefer-binary --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu`)
+so it doesn't try to compile it from source; on macOS/Linux it just runs
+`pip install -r requirements.txt` directly.
 
 ### 4. Download the MediaPipe hand landmark model
 
