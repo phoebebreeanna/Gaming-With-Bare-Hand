@@ -52,6 +52,9 @@ class MainMenu(QWidget):
         self._show_perf_stats = True
         self._current_running_mode = 'mouse'
 
+        from logic.app_config import get_mini_overlay_enabled
+        self._mini_overlay_enabled = get_mini_overlay_enabled()
+
         self._mini_overlay = MiniCameraOverlay(on_restore=self._restore_main_window)
         app = QApplication.instance()
         if app is not None:
@@ -128,6 +131,7 @@ class MainMenu(QWidget):
         self.game_mode_widget.perf_stats_changed.connect(self._on_perf_stats_changed)
         self.game_mode_widget.custom_mode_selected.connect(self._on_custom_mode_selected)
         self.game_mode_widget.chatbot_enabled_changed.connect(self.handbot_pages.set_chatbot_enabled)
+        self.game_mode_widget.mini_overlay_enabled_changed.connect(self._on_mini_overlay_enabled_changed)
         self.pages.addWidget(self.game_mode_widget)
 
         self.pipeline_ui = PipelineUI(is_dark=self.is_dark)
@@ -1298,6 +1302,7 @@ class MainMenu(QWidget):
         self.handbot_pages.apply_theme(self.is_dark)
         self.air_hockey_status.apply_theme(self.is_dark)
         self.air_hockey_loading.apply_theme(self.is_dark)
+        self._mini_overlay.apply_theme(self.is_dark)
         self.update()
         self.repaint()
 
@@ -1774,7 +1779,14 @@ class MainMenu(QWidget):
     def _on_app_state_changed(self, state):
         if state == Qt.ApplicationActive:
             self._mini_overlay.hide()
-        elif self._is_running:
+        elif self._is_running and self._mini_overlay_enabled:
+            self._mini_overlay.show()
+
+    def _on_mini_overlay_enabled_changed(self, enabled: bool):
+        self._mini_overlay_enabled = enabled
+        if not enabled:
+            self._mini_overlay.hide()
+        elif self._is_running and QApplication.instance().applicationState() != Qt.ApplicationActive:
             self._mini_overlay.show()
 
     def _sync_mini_overlay(self):

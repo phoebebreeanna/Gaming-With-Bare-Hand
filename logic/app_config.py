@@ -122,6 +122,14 @@ def set_chatbot_enabled(enabled: bool) -> None:
     config['chatbot_enabled'] = enabled
     _write(config)
 
+def get_mini_overlay_enabled() -> bool:
+    return _read().get('mini_overlay_enabled', True)
+
+def set_mini_overlay_enabled(enabled: bool) -> None:
+    config = _read()
+    config['mini_overlay_enabled'] = enabled
+    _write(config)
+
 
 def get_key_bindings(mode: str) -> dict:
     defaults = BINDINGS_DEFAULT.get(mode, {})
