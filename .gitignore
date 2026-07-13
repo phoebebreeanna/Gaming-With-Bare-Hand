@@ -17,4 +17,5 @@ chatbot_test/.venv
 chatbot_test/chroma_db
 chatbot_test/*
 
-hockey_game
+logic/chatbot/chroma_db/
+logic/chatbot/models/
