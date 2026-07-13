@@ -18,7 +18,7 @@ class ChatbotQueryThread(QThread):
             return
         except Exception:
             self.answer_failed.emit(
-                "Something went wrong answering that — please try again."
+                "Something went wrong answering that - please try again."
             )
             return
 

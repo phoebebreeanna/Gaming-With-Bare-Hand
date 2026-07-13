@@ -9,7 +9,7 @@ the code alone.
 AIR HOCKEY needs `num_hands=4` on the MediaPipe detector, which is fixed
 at detector-creation time. Crossing that boundary (either entering or
 leaving AIR HOCKEY mode) requires a full hand-tracking controller restart
-rather than the usual instant `switch_game_mode()` call — hence the
+rather than the usual instant `switch_game_mode()` call - hence the
 `AirHockeyLoadingOverlay` loading screen shown during the transition.
 
 ## `ui/air_hockey_status.py`

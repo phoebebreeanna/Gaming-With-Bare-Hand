@@ -76,11 +76,40 @@ def physics_step(state: GameState, input_source, power_manager: PowerManager, dt
     state.game_time += dt
 
 
+def _initial_window_size():
+    try:
+        avail_w, avail_h = pygame.display.get_desktop_sizes()[0]
+    except Exception:
+        avail_w, avail_h = cfg.WINDOW_WIDTH, cfg.WINDOW_HEIGHT
+    margin_w, margin_h = 80, 120
+    max_w = max(avail_w - margin_w, 480)
+    max_h = max(avail_h - margin_h, 480)
+    scale = min(1.0, max_w / cfg.WINDOW_WIDTH, max_h / cfg.WINDOW_HEIGHT)
+    return int(cfg.WINDOW_WIDTH * scale), int(cfg.WINDOW_HEIGHT * scale)
+
+
+def _blit_scaled_to_fit(display_surface, virtual_surface):
+    dw, dh = display_surface.get_size()
+    sw, sh = virtual_surface.get_size()
+    scale = min(dw / sw, dh / sh)
+    new_w, new_h = max(1, round(sw * scale)), max(1, round(sh * scale))
+    display_surface.fill(cfg.COLOR_BG)
+    if (new_w, new_h) == (sw, sh):
+        scaled = virtual_surface
+    else:
+        scaled = pygame.transform.smoothscale(virtual_surface, (new_w, new_h))
+    display_surface.blit(scaled, ((dw - new_w) // 2, (dh - new_h) // 2))
+
+
 def main():
     pygame.init()
     audio.init()
     pygame.display.set_caption("Dual-POV Air Hockey")
-    screen = pygame.display.set_mode((cfg.WINDOW_WIDTH, cfg.WINDOW_HEIGHT), pygame.DOUBLEBUF, vsync=1)
+    window_w, window_h = _initial_window_size()
+    screen = pygame.display.set_mode(
+        (window_w, window_h), pygame.RESIZABLE | pygame.DOUBLEBUF, vsync=1
+    )
+    virtual = pygame.Surface((cfg.WINDOW_WIDTH, cfg.WINDOW_HEIGHT)).convert()
     clock = pygame.time.Clock()
 
     def half_rects(offset_x):
@@ -89,8 +118,8 @@ def main():
         bottom = pygame.Rect(offset_x, cfg.TABLE_Y_OFFSET + cfg.TABLE_HEIGHT, cfg.TABLE_WIDTH, cfg.HUD_BOTTOM_HEIGHT)
         return top, ice, bottom
 
-    p1_top, p1_ice, p1_bottom = (screen.subsurface(r) for r in half_rects(cfg.P1_VIEW_OFFSET_X))
-    p2_top, p2_ice, p2_bottom = (screen.subsurface(r) for r in half_rects(cfg.P2_VIEW_OFFSET_X))
+    p1_top, p1_ice, p1_bottom = (virtual.subsurface(r) for r in half_rects(cfg.P1_VIEW_OFFSET_X))
+    p2_top, p2_ice, p2_bottom = (virtual.subsurface(r) for r in half_rects(cfg.P2_VIEW_OFFSET_X))
 
     state = GameState()
     input_source = KeyboardInput()
@@ -112,6 +141,10 @@ def main():
         for event in events:
             if event.type == pygame.QUIT:
                 running = False
+            elif event.type == pygame.VIDEORESIZE:
+                screen = pygame.display.set_mode(
+                    (event.w, event.h), pygame.RESIZABLE | pygame.DOUBLEBUF, vsync=1
+                )
             elif event.type == pygame.KEYDOWN:
                 if event.key == cfg.QUIT_KEY:
                     running = False
@@ -125,7 +158,8 @@ def main():
         input_source.update(events)
 
         if showing_intro:
-            draw_intro_screen(screen)
+            draw_intro_screen(virtual)
+            _blit_scaled_to_fit(screen, virtual)
             pygame.display.flip()
             continue
 
@@ -148,9 +182,10 @@ def main():
         draw_power_dock(p1_bottom, state, viewer_player=1)
         draw_power_dock(p2_bottom, state, viewer_player=2)
 
-        screen.fill(cfg.COLOR_DIVIDER, pygame.Rect(cfg.TABLE_WIDTH, 0, cfg.DIVIDER_THICKNESS, cfg.WINDOW_HEIGHT))
+        virtual.fill(cfg.COLOR_DIVIDER, pygame.Rect(cfg.TABLE_WIDTH, 0, cfg.DIVIDER_THICKNESS, cfg.WINDOW_HEIGHT))
         seam_x = cfg.TABLE_WIDTH + cfg.DIVIDER_THICKNESS // 2
-        pygame.draw.line(screen, cfg.COLOR_DIVIDER_BEVEL, (seam_x, 0), (seam_x, cfg.WINDOW_HEIGHT), 2)
+        pygame.draw.line(virtual, cfg.COLOR_DIVIDER_BEVEL, (seam_x, 0), (seam_x, cfg.WINDOW_HEIGHT), 2)
+        _blit_scaled_to_fit(screen, virtual)
         pygame.display.flip()
 
     pygame.quit()

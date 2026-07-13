@@ -6,19 +6,19 @@ this directory, or `python3 main.py` directly. Tests: `make test` or
 
 ## Architecture
 
-- `config.py` — constants: table geometry, physics tuning, keybinds.
-- `physics.py` — the ONE shared simulation: entities, movement,
+- `config.py` - constants: table geometry, physics tuning, keybinds.
+- `physics.py` - the ONE shared simulation: entities, movement,
   circle-circle collision, walls, goal detection.
-- `input_handler.py` — abstract input interface (`InputSource`) + keyboard
+- `input_handler.py` - abstract input interface (`InputSource`) + keyboard
   impl, and the explicit Player-2 view->shared coordinate transform.
-- `powers.py` — the 5 special powers: cooldowns, trigger rules, timed
+- `powers.py` - the 5 special powers: cooldowns, trigger rules, timed
   effects.
-- `render.py` — `render_table(surface, state, rotation)` draws the ice
+- `render.py` - `render_table(surface, state, rotation)` draws the ice
   table; called TWICE per frame with different rotations/surfaces.
   `draw_score_panel`/`draw_power_dock` draw the HUD into separate strips
   outside the ice (never overlaid on top of it). ALL rendering lives here;
   ZERO game logic does.
-- `main.py` — fixed-timestep game loop wiring everything together.
+- `main.py` - fixed-timestep game loop wiring everything together.
 
 Physics runs on a fixed timestep (`config.PHYSICS_DT`) via an accumulator,
 so simulation behavior is identical regardless of display frame rate.
@@ -49,7 +49,7 @@ movement desyncs from what the player sees. If a future feature reads raw
 keys anywhere else, this correctness guarantee breaks.
 
 Input is view-relative by design: ONE paddle per player, moved by ONE hand.
-This mirrors how real hand-tracking input would work — a tracked hand
+This mirrors how real hand-tracking input would work - a tracked hand
 position drives the paddle, and a gesture made with that same hand (fist,
 palm, ...) triggers a power. Swapping keyboard controls for gesture/hand
 tracking later is just a matter of writing a new `InputSource` subclass;
@@ -65,7 +65,7 @@ change.
   rectangle (inset by `WALL_THICKNESS`) stays fully tucked under the rail's
   rounded corner.
 - Each half is the ice table plus dedicated HUD strips above (score) and
-  below (power cooldowns) — HUD is intentionally never overlaid on the ice,
+  below (power cooldowns) - HUD is intentionally never overlaid on the ice,
   or it would visually cover the goal mouths. An early version alpha-blended
   the scoreboard over the rink and it buried the goal mouth; splitting into
   top-HUD / ice / bottom-HUD strips fixed that for good.
@@ -81,18 +81,18 @@ change.
 
 `test_goal_detection.py` pins down two "goals aren't counted" bugs:
 
-1. **Stalled goal** — detection used to require the puck's full circle past
+1. **Stalled goal** - detection used to require the puck's full circle past
    the outer table edge (29px beyond the drawn goal line); combined with
    friction, a slow shot could die inside the mouth uncounted, soft-locking
    the match.
-2. **Robbed angled goal** — the old wall resolver re-tested the goal gap
+2. **Robbed angled goal** - the old wall resolver re-tested the goal gap
    every tick while the puck was behind the wall plane, so a diagonal shot
    that drifted sideways inside the mouth got clamped back onto the ice
    un-scored.
 
 Fix: a goal now counts the moment the puck's CENTER crosses the goal line
 (inner face of the wall band). Once behind the wall plane, only the
-channel's side posts contain the puck — it is never clamped back onto the
+channel's side posts contain the puck - it is never clamped back onto the
 ice. The solid (non-mouth) wall still recovers a puck shoved behind the
 wall plane outside the mouth (e.g. by a paddle's positional correction), so
 nothing can score "through" the solid rail.
@@ -102,17 +102,17 @@ nothing can score "through" the solid rail.
 - Hit-stop is an ACCENT, not a rhythm: it must fire rarely (only truly big
   smashes, never twice in quick succession) or the game reads as stuttery.
   First tuning pass (45ms at 420 px/s, no cooldown) froze the puck for ~13%
-  of an aggressive rally — measurably not smooth. Current values:
+  of an aggressive rally - measurably not smooth. Current values:
   `HITSTOP_DURATION = 0.03s`, `HITSTOP_MIN_IMPACT = 520 px/s`,
   `HITSTOP_COOLDOWN = 0.8s`.
 - `clock.tick()`'s integer-millisecond return value is too coarse for the
   physics accumulator (16 vs 17 ms truncation makes the step count
-  oscillate, causing visible judder) — `main.py` measures real dt with
+  oscillate, causing visible judder) - `main.py` measures real dt with
   `time.perf_counter()` instead, clamped to 0.25s so a stall can't cause a
   catch-up burst.
 - Colors follow a "bright ice in a dark cabinet" theme, like a real arcade
   air-hockey table: pale ice framed by near-black cabinet rails. This is a
-  readability decision, not just style — the dark puck needs maximum
+  readability decision, not just style - the dark puck needs maximum
   contrast against the ice, and both mallet colors must pop without glow
   tricks. Rink markings are classic hockey blue with a red faceoff dot,
   since white lines would vanish on white ice.
@@ -123,18 +123,18 @@ nothing can score "through" the solid rail.
 ## Events / audio / fx pattern
 
 `GameState.events` is a semantic gameplay event log (hits, bounces, goals,
-power triggers) — data only, no rendering logic. Each event carries a
+power triggers) - data only, no rendering logic. Each event carries a
 monotonically increasing `seq` so one-shot consumers (audio) can track what
 they've already played; age-based consumers (render particle fx) just read
 event time. Pruned by age (`EVENT_MAX_AGE`) on append.
 
 `render._draw_event_fx` renders impact fx as a pure function of an event's
-`seq` (seeding a tiny PRNG) and its age — no particle state is stored
+`seq` (seeding a tiny PRNG) and its age - no particle state is stored
 anywhere, which keeps both rotated views in perfect sync for free.
 
 `audio.play_new_events()` is the only runtime entry point into `audio.py`:
 it walks events past the caller's last-seen seq and voices each one exactly
-once. Everything is guarded — if the mixer can't initialize (no audio
+once. Everything is guarded - if the mixer can't initialize (no audio
 device, headless CI), the module silently degrades to a no-op and the game
 runs exactly as before.
 
@@ -146,5 +146,5 @@ runs exactly as before.
   a single cooldown gate is also sufficient to prevent re-trigger stacking.
 - Invalid triggers (freezing an already-frozen opponent, double-puck while
   one is already active) are dropped WITHOUT starting a cooldown, since
-  nothing actually happened — the placeholder key press stands in for a
+  nothing actually happened - the placeholder key press stands in for a
   gesture the player may not even realize failed.

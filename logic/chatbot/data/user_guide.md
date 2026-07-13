@@ -8,17 +8,17 @@ Two supported run methods:
 
 | Method | Best for |
 |---|---|
-| Packaged App | Most users — no Python required |
+| Packaged App | Most users - no Python required |
 | Run from Source | Developers / advanced users |
 
-### Method A — Packaged App
+### Method A - Packaged App
 - **Windows**: download the HANDMOUSE folder from releases → open `dist/main/`
   → double-click `main.exe`.
 - **macOS**: download `main.app` from releases → move to Applications → if
   blocked on first launch, System Preferences → Privacy & Security → "Open
   Anyway" → grant Camera and Accessibility permissions when prompted.
 
-### Method B — Run from Source
+### Method B - Run from Source
 
 **System requirements:**
 
@@ -87,7 +87,7 @@ loads → if first launch, Setup Flow starts automatically.
 ## First-Time Setup Flow
 
 On first launch, the app checks whether you've completed setup before. If not,
-you're automatically taken into the mandatory Setup Flow — a 4-step guided
+you're automatically taken into the mandatory Setup Flow - a 4-step guided
 process with a progress indicator. It usually only takes a few minutes:
 
 | Step | Action | Advance |
@@ -101,13 +101,13 @@ process with a progress indicator. It usually only takes a few minutes:
 Hold until Distance Bar is fully green; hold 3s to auto-advance, or click
 CONTINUE immediately.
 
-**Step 04 detail — Zone Selection:**
+**Step 04 detail - Zone Selection:**
 
 | Zone | Coverage | Sensitivity | Recommended For |
 |---|---|---|---|
-| SMALL | 10% of frame | High — small movement = large cursor travel | Limited arm/desk space |
-| MEDIUM | 20% of frame | Medium — balanced | First-time/general use |
-| LARGE | 30% of frame | Low — precise, more arm movement | Ample space / high-res monitors |
+| SMALL | 10% of frame | High - small movement = large cursor travel | Limited arm/desk space |
+| MEDIUM | 20% of frame | Medium - balanced | First-time/general use |
+| LARGE | 30% of frame | Low - precise, more arm movement | Ample space / high-res monitors |
 
 Select via showing 1/2/3 fingers to the camera, or click directly. LARGE is
 the recommended default. Click "FINISH" or wait 3s to complete and land on Home.
@@ -123,7 +123,7 @@ the recommended default. Click "FINISH" or wait 3s to complete and land on Home.
 - **Setup section**: 04 SETTING, 05 TRAIN MODEL, 06 KEY BINDINGS
 
 ### Theme Switching
-Light/Dark mode toggle. **Theme selection does NOT persist — resets to Light
+Light/Dark mode toggle. **Theme selection does NOT persist - resets to Light
 Mode on every app restart** (known limitation, see below).
 
 ### Global Key Blocking
@@ -139,7 +139,7 @@ mode settings.
 
 ## Feature Guides (per page)
 
-### 01 — Home Dashboard
+### 01 - Home Dashboard
 Shows: app name, real-time clock, uptime counter; status cards (current mode,
 camera, zone, last recognised gesture); gesture output area (name, action,
 confidence %); live telemetry (~30 FPS); START/STOP button.
@@ -149,17 +149,17 @@ via Settings if needed) → position in front of camera → click START.
 **Stop**: click STOP, or perform two-peace-sign gesture.
 **Exit**: click EXIT, or perform two-fist gesture.
 
-### 02 — User Guide
+### 02 - User Guide
 Read-only reference: what HANDMOUSE is, how detection works, per-mode usage,
 performance tips, troubleshooting quick reference. "NEXT" to page through.
 
-### 03 — Gesture Guide
+### 03 - Gesture Guide
 Visual catalogue of all gestures, tabbed by mode: General, Mouse, Subway
 Surfers, Open World (racing gestures also covered in the full gesture
-reference — see below). Each card: illustration, number, name, description,
+reference - see below). Each card: illustration, number, name, description,
 mode tag.
 
-### 04 — Game Mode & Settings
+### 04 - Game Mode & Settings
 
 **Game modes:**
 
@@ -170,13 +170,13 @@ mode tag.
 | RACING | Held accelerate/brake with wrist-angle steering |
 | OPEN WORLD | Action-game gesture set |
 
-Click a mode card to switch — saved immediately.
+Click a mode card to switch - saved immediately.
 
 **Mouse Control Settings** (Mouse Mode):
-- Mouse In Game toggle — enables Devil Horn gesture overlay across all modes.
-- Mouse Side — LEFT/RIGHT hand for cursor control; LEFT places detection zone
+- Mouse In Game toggle - enables Devil Horn gesture overlay across all modes.
+- Mouse Side - LEFT/RIGHT hand for cursor control; LEFT places detection zone
   on the left.
-- Cursor Point — TIP (fingertip) or KNUCKLE (default, more stable).
+- Cursor Point - TIP (fingertip) or KNUCKLE (default, more stable).
 
 **Camera Selection**: dropdown of devices; takes effect next session start.
 
@@ -187,24 +187,24 @@ custom model has been trained for that mode).
 
 **Performance Display**: real-time FPS and gesture detection latency.
 
-### 05 — Train Model (Custom Gestures)
+### 05 - Train Model (Custom Gestures)
 Steps:
-1. Select mode to train (Mouse, Subway, or Racing — **not** Open World).
+1. Select mode to train (Mouse, Subway, or Racing - **not** Open World).
 2. "Collect Data" → record (or delete) 50 samples per gesture class.
 3. Preprocess collected data to generate additional samples; optional mirror
    option for left-hand support.
-4. Train — progress bar until complete.
+4. Train - progress bar until complete.
 5. App flags gestures it's uncertain about → review, remove or keep.
 6. Model retrains on changes, or finalises if none.
-7. Your custom model is saved separately — it does **not** overwrite the
-   built-in defaults — and becomes selectable in Settings.
+7. Your custom model is saved separately - it does **not** overwrite the
+   built-in defaults - and becomes selectable in Settings.
 
-### 06 — Key Bindings
+### 06 - Key Bindings
 Remap keys for Subway Surfers, Racing, and Open World modes. Select mode tab
 → click binding → press desired key → saved automatically. "RESET TO DEFAULT"
 reverts a mode's bindings.
 
-**Default Bindings — Subway Surfers**
+**Default Bindings - Subway Surfers**
 
 | Gesture | Default Key |
 |---|---|
@@ -214,7 +214,7 @@ reverts a mode's bindings.
 | Right | Right arrow |
 | Space | Space |
 
-**Default Bindings — Racing**
+**Default Bindings - Racing**
 
 | Gesture | Default Key |
 |---|---|
@@ -225,7 +225,7 @@ reverts a mode's bindings.
 | Horn | H |
 | Camera | C |
 
-**Default Bindings — Open World**
+**Default Bindings - Open World**
 
 | Gesture | Default Key | Gesture | Default Key |
 |---|---|---|---|
@@ -241,7 +241,7 @@ reverts a mode's bindings.
 
 ## Gesture Reference
 
-### General Gestures (active in any mode — app/session control)
+### General Gestures (active in any mode - app/session control)
 
 | Gesture | Hand Shape | Action |
 |---|---|---|
@@ -281,7 +281,7 @@ Below 75% confidence → treated as idle. 0.3s cooldown between key presses
 
 ### Racing Gestures
 Below 60% confidence → ignored. Keys held continuously while gesture is
-maintained. Steering uses both hands: angle between left/right wrists —
+maintained. Steering uses both hands: angle between left/right wrists -
 within ±5° = straight (dead zone); beyond −5° = left held; beyond +5° = right
 held.
 
@@ -291,7 +291,7 @@ held.
 | Left thumb up | Down arrow held (Brake) |
 | Tilt both hands left | Left arrow held |
 | Tilt both hands right | Right arrow held |
-| Level hands | — (straight) |
+| Level hands | - (straight) |
 | Both thumbs up | Up + Down held simultaneously |
 | Left hand index+middle forward | C, tap, 0.4s cooldown (Camera) |
 | Right hand index+middle forward | H held (Horn) |
@@ -336,9 +336,9 @@ bindings set (if non-default), target app/game open and in foreground.
 **Start**: Home dashboard → click START → camera captures at 30 FPS, session
 starts.
 
-**Pause/exit — 4 ways**:
+**Pause/exit - 4 ways**:
 1. GUI "PAUSE" button.
-2. Pause gesture — both palms open; resume via both-peace-signs.
+2. Pause gesture - both palms open; resume via both-peace-signs.
 3. Both-fists gesture, held 3 seconds → exits application.
 4. Window close button → clean shutdown, waits up to 3s for controller to stop.
 
@@ -359,12 +359,12 @@ mode is active.
 ## Resetting Your Settings
 
 All your preferences (camera, zone, mode, key bindings, etc.) are saved
-automatically as you change them — there's nothing to manually save. If you
+automatically as you change them - there's nothing to manually save. If you
 want to reset:
 
 1. **Key bindings for one mode**: Key Bindings page (sidebar 06) → "RESET TO
    DEFAULT".
-2. **Everything**: delete the app's settings file — the setup flow runs again
+2. **Everything**: delete the app's settings file - the setup flow runs again
    on next launch and every default is restored
    (camera, zone, mode, all of it).
 
@@ -398,7 +398,7 @@ Symptom: blank preview or "Failed to open camera".
 ### Cursor Seems Frozen / Not Moving
 This is expected, not a bug: if your hand leaves the detection zone, or the
 app briefly loses track of your hand, the cursor simply stays wherever it
-last was — it won't jump or reset. Move your hand back into the detection
+last was - it won't jump or reset. Move your hand back into the detection
 zone and it'll pick up tracking again.
 
 ### Application Will Not Launch
@@ -414,7 +414,7 @@ zone and it'll pick up tracking again.
 |---|---|
 | Target app not in foreground | Click the game window to focus it before gesturing |
 | Wrong key binding | Verify mapping in Key Bindings (sidebar 06) |
-| Anti-cheat blocking (Windows) | Kernel-level anti-cheat can block synthetic input — game-side restriction, cannot be bypassed |
+| Anti-cheat blocking (Windows) | Kernel-level anti-cheat can block synthetic input - game-side restriction, cannot be bypassed |
 | macOS Accessibility permission | System Preferences → Privacy & Security → Accessibility → enable Python/Terminal |
 
 ## Known Limitations
@@ -425,5 +425,5 @@ zone and it'll pick up tracking again.
   custom-trained model for Open World mode yet (custom models work for Mouse,
   Subway Surfers, and Racing).
 - **Gesture feedback stays inside the app window.** There's no overlay drawn
-  directly on top of your game — you'll see the detected gesture, confidence,
+  directly on top of your game - you'll see the detected gesture, confidence,
   and status in HANDMOUSE's own window, not layered over the game itself.

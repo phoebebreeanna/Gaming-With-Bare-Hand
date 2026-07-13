@@ -171,11 +171,13 @@ class ModelDownloadDialog(_CardDialog):
             QPushButton:hover {{ background: {p['input_bg']}; }}
         """)
 
+        self._cancelling = False
         self._cancel_event = threading.Event()
         self._thread = ModelDownloadThread(self._cancel_event, self)
         self._thread.progress.connect(self._on_progress)
         self._thread.finished_ok.connect(self.accept)
         self._thread.failed.connect(self._on_failed)
+        self._thread.finished.connect(self._on_thread_finished)
         self._thread.start()
 
     def _on_progress(self, downloaded: int, total: int):
@@ -192,8 +194,12 @@ class ModelDownloadDialog(_CardDialog):
             self.pct_lbl.setText(f"{mb_done:.0f} MB downloaded")
 
     def _on_cancel(self):
+        if self._cancelling:
+            return
+        self._cancelling = True
         self._cancel_event.set()
-        self.reject()
+        self.cancel_btn.setEnabled(False)
+        self.status_lbl.setText("Cancelling…")
 
     def _on_failed(self, message: str):
         self.status_lbl.setText(message)
@@ -202,8 +208,18 @@ class ModelDownloadDialog(_CardDialog):
         self.pct_lbl.setText("")
         self.cancel_btn.setText("Close")
 
+    def _on_thread_finished(self):
+        if self._cancelling:
+            QDialog.reject(self)
+
     def closeEvent(self, event):
-        self._cancel_event.set()
+        if self._thread.isRunning():
+            self._cancelling = True
+            self._cancel_event.set()
+            self.cancel_btn.setEnabled(False)
+            self.status_lbl.setText("Cancelling…")
+            event.ignore()
+            return
         super().closeEvent(event)
 
 
@@ -511,18 +527,30 @@ class HandBotChatPanel(QFrame):
     ### The floating chat panel that appears when the HandBot icon is clicked on the Home dashboard.
     closed = Signal()
 
+    MIN_WIDTH = 300
+    MAX_WIDTH = 420
+    MIN_HEIGHT = 315
+    MAX_HEIGHT = 620
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.is_dark = False
         self.setObjectName("handbotChatPanel")
-        self.setFixedWidth(300)
-        self.setFixedHeight(315)
+        self.setFixedWidth(self.MIN_WIDTH)
+        self.setFixedHeight(self.MIN_HEIGHT)
         self._build()
         self.apply_theme(self.is_dark)
 
         self.opacity_effect = QGraphicsOpacityEffect(self)
         self.setGraphicsEffect(self.opacity_effect)
         self.opacity_effect.setOpacity(1.0)
+
+    def resize_to_fit(self, available_width: int, available_height: int):
+        target_w = int(available_width * 0.34)
+        target_h = int(available_height * 0.62)
+        width = max(self.MIN_WIDTH, min(target_w, self.MAX_WIDTH, available_width - 24))
+        height = max(self.MIN_HEIGHT, min(target_h, self.MAX_HEIGHT, available_height - 24))
+        self.setFixedSize(width, height)
 
     def _build(self):
         layout = QVBoxLayout(self)
@@ -557,6 +585,12 @@ class HandBotChatPanel(QFrame):
         self.transcript = QTextEdit()
         self.transcript.setReadOnly(True)
         self.transcript.setPlaceholderText("Ask me anything about gestures, setup, or HandMouse.")
+        self.transcript.document().setDefaultStyleSheet(
+            "p, ul, ol { margin: 0; padding: 0; }"
+            "li { margin: 0 0 2px 18px; }"
+            ".sender { margin: 0 0 2px 0; }"
+            ".spacer { margin: 0; line-height: 14px; }"
+        )
         self.content_layout.addWidget(self.transcript, stretch=1)
 
         self.typing_lbl = QLabel("")
@@ -584,10 +618,24 @@ class HandBotChatPanel(QFrame):
         self.content_layout.addLayout(input_row)
 
         self._query_thread = None
+        self._messages = []
 
     def _append_line(self, sender: str, text: str, is_markdown: bool = False):
         body = _markdown_to_html(text) if is_markdown else html.escape(text)
-        self.transcript.append(f"<b>{sender}:</b> {body}")
+        self._messages.append((sender, body))
+        self._render_transcript()
+
+    def _render_transcript(self):
+        blocks = []
+        for sender, body in self._messages:
+            blocks.append(
+                f'<p class="sender"><b>{sender}:</b></p>'
+                f'{body}'
+                f'<p class="spacer">&nbsp;</p>'
+            )
+        self.transcript.setHtml("".join(blocks))
+        scrollbar = self.transcript.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
 
     def _on_send(self):
         question = self.input_box.text().strip()
@@ -598,7 +646,7 @@ class HandBotChatPanel(QFrame):
         self.input_box.clear()
 
         if not app_config.get_chatbot_enabled():
-            self._append_line("HandBot", "Chatbot is disabled — enable it in Settings.")
+            self._append_line("HandBot", "Chatbot is disabled - enable it in Settings.")
             return
 
         self.input_box.setEnabled(False)
@@ -1009,6 +1057,7 @@ class HandBotOverlay(QWidget):
 
     def _position_chat(self):
         gap = 12
+        self.chat_panel.resize_to_fit(self.width(), self.height())
         x = self.icon.x() - self.chat_panel.width() - gap
         if x < gap:
             x = self.icon.x() + self.icon.width() + gap
@@ -1136,6 +1185,7 @@ class HandBotPagesOverlay(QWidget):
 
     def _position_chat(self):
         gap = 12
+        self.chat_panel.resize_to_fit(self.width(), self.height())
         x = self.icon.x() - self.chat_panel.width() - gap
         if x < gap:
             x = self.icon.x() + self.icon.width() + gap

@@ -295,7 +295,7 @@ class KeyBindings(QWidget):
                 text_col.addWidget(name_lbl)
                 text_col.addWidget(desc_lbl)
                 rl.addLayout(text_col, stretch=1)
-                key_btn = QPushButton(key_str.upper() if key_str != '?' else '—')
+                key_btn = QPushButton(key_str.upper() if key_str != '?' else '-')
                 key_btn.setFixedHeight(26)
                 key_btn.setMinimumWidth(56)
                 key_btn.setCursor(Qt.PointingHandCursor)
@@ -340,7 +340,7 @@ class KeyBindings(QWidget):
             for (m, gesture), btn in list(self._key_btns.items()):
                 if m == mode:
                     self._bindings.setdefault(mode, {}).pop(gesture, None)
-                    btn.setText('—')
+                    btn.setText('-')
         else:
             for entry in _GESTURE_META.get(mode, []):
                 gesture = entry[0]

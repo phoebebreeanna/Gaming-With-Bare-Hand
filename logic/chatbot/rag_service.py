@@ -17,7 +17,7 @@ PRIMARY_MODEL_URL = (
     "qwen2.5-3b-instruct-q4_k_m.gguf"
 )
 
-NOT_FOUND_MESSAGE = "I'm not sure about that — it isn't covered in the guide."
+NOT_FOUND_MESSAGE = "I'm not sure about that - it isn't covered in the guide."
 
 
 class ChatbotUnavailableError(Exception):
@@ -72,20 +72,20 @@ def _build_prompt():
 
     return PromptTemplate(
         "You are a friendly in-app assistant for HANDMOUSE, helping the user set "
-        "up and use the app. Information you can use is below — it may be empty.\n"
+        "up and use the app. Information you can use is below - it may be empty.\n"
         "---------------------\n"
         "{context_str}\n"
         "---------------------\n"
         "Using ONLY the information above, answer the question in plain, natural "
-        "language — like a helpful guide talking to the user. Never mention "
+        "language - like a helpful guide talking to the user. Never mention "
         "documents, files, sources, or where the information came from. This is a "
         "strict rule: even if you happen to know the answer from general "
-        "knowledge, do NOT use it — if the information above is empty or doesn't "
+        "knowledge, do NOT use it - if the information above is empty or doesn't "
         "answer the question, respond exactly with: "
         f"\"{NOT_FOUND_MESSAGE}\"\n"
         "Formatting rules: write in Markdown. If the answer has multiple steps, "
         "put each step on its own line as a numbered list item (\"1. ...\", "
-        "\"2. ...\"). Keep paragraphs short — a blank line between them. Do not "
+        "\"2. ...\"). Keep paragraphs short - a blank line between them. Do not "
         "run steps together in a single paragraph.\n"
         "Question: {query_str}\n"
         "Answer: "
@@ -192,14 +192,14 @@ def ask_realtime(question: str) -> str:
         engine = _get_engine()
     except ImportError as e:
         raise ChatbotUnavailableError(
-            "Chatbot dependencies aren't installed — run "
+            "Chatbot dependencies aren't installed - run "
             "`pip install -r requirements.txt`."
         ) from e
     except ChatbotUnavailableError:
         raise
     except Exception as e:
         raise ChatbotUnavailableError(
-            "Couldn't load the local chatbot model — please try again."
+            "Couldn't load the local chatbot model - please try again."
         ) from e
 
     try:
@@ -207,5 +207,5 @@ def ask_realtime(question: str) -> str:
         return str(response)
     except Exception as e:
         raise ChatbotUnavailableError(
-            "The chatbot couldn't answer that — please try again."
+            "The chatbot couldn't answer that - please try again."
         ) from e
