@@ -287,6 +287,7 @@ class HandControllerThread(
         self._current_frame_t         = 0.0
         self._confirm_close_from      = None
         self._confirm_close_hold_t    = None
+        self._ow_rebuild_eff_map()
 
     def _full_reset(self):
         self._release_drag()
@@ -427,6 +428,7 @@ class HandControllerThread(
             self._rc_release_all()
         elif mode == 'open_world':
             self.ow_key_map[gesture] = key
+            self._ow_rebuild_eff_map()
 
     def set_mouse_in_game(self, enabled: bool):
         self._mouse_in_game_enabled = enabled
@@ -541,9 +543,14 @@ class HandControllerThread(
 
         def _detect_gestures():
             last_ts = -1
+            was_active = False
             while not _stop[0]:
-                if ow_recognizer is None:
-                    time.sleep(0.05); continue
+                if ow_recognizer is None or self.active_game_mode != 4:
+                    if was_active:
+                        with _owl: _latest_ow_result[0] = None
+                        was_active = False
+                    time.sleep(0.03); continue
+                was_active = True
                 with _rgl:
                     rgb = _latest_rgb[0]
                     ts  = _latest_rgb_ts[0]

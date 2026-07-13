@@ -1,4 +1,5 @@
 venv/
+.venv/
 __pycache__/
 *.pyc
 *.pyo
@@ -11,3 +12,5 @@ research/dataset
 build
 dist
 main.spec
+.python-version
+install-pyenv-win.ps1
