@@ -264,7 +264,7 @@ class MainMenu(QWidget):
             ("05      -     SETTING", 3),
             ("06      -     TRAIN MODEL", 4),
             ("07      -     KEY BINDINGS", 5),
-            ("08      -     AIR HOCKEY", 6),
+            ("08      -     AIR HOCKEY", 7),
         ]:
             btn = QPushButton(label)
             btn.setProperty("target_index", index)
