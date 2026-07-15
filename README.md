@@ -19,7 +19,9 @@ No hardware required - powered by MediaPipe, OpenCV, PyTorch, and PySide6.
 - **Multi-camera support** - enumerate and switch cameras at runtime
 - **Zone calibration** - choose Small, Medium, or Large movement zone
 - **Dark / Light theme** - full theme toggle across all pages
-- **HandBot chatbot** - ask questions from the chat panel; static offline mode (instant, no setup) or real-time mode powered by a local Ollama LLM
+- **Custom gesture modes** - define and train an entirely new gesture set (not just Mouse/Subway/Racing) from the Train Model page, then select and run it from Settings
+- **HandBot chatbot** - ask questions from the chat panel; runs fully offline on a bundled local model (auto-downloaded on first use, no setup), or switch to ChatGPT in Settings by adding your own OpenAI API key - no `.env` file needed, the key is stored on-device
+- **Status overlay** - optional small status panel that stays visible when you switch to another app/game window
 - **Air Hockey mode** - launch the bundled local 2-player air hockey game and drive a paddle with your left-hand wrist position; right hand fires powers by finger count
 
 ---
@@ -42,8 +44,11 @@ numpy >= 1.24.0
 torch >= 2.0.0
 joblib >= 1.3.0
 pynput >= 1.7.0
+pandas >= 1.5.0
+scikit-learn >= 1.0.0
 llama-index >= 0.14.0
-llama-index-llms-ollama >= 0.10.0
+llama-index-llms-llama-cpp >= 0.6.0
+llama-index-llms-openai >= 0.6.0
 llama-index-embeddings-huggingface >= 0.7.0
 llama-index-vector-stores-chroma >= 0.5.0
 chromadb >= 1.5.0
@@ -52,10 +57,11 @@ pygame >= 2.5.0
 
 > **macOS Apple Silicon**: All packages run natively. No extra steps needed.
 
-> **HandBot real-time chatbot mode** additionally requires [Ollama](https://ollama.com)
-> installed and running locally, with the `qwen2.5:3b` model pulled (see
-> Installation step 7). Static mode needs none of this - it works offline
-> right after `pip install -r requirements.txt`.
+> **HandBot chatbot** works fully offline right after `pip install -r
+> requirements.txt` - the local model (Qwen2.5-3B, GGUF format) is downloaded
+> automatically the first time you ask a question. To use ChatGPT instead,
+> open Settings → AI Backend, select **CHATGPT**, and paste in your own
+> OpenAI API key - it's saved on-device, no `.env` file required.
 
 > **Air Hockey mode** needs nothing beyond `pip install -r requirements.txt` -
 > `pygame` is installed automatically and the bundled game has no external
@@ -131,20 +137,17 @@ logic/data/
 
 Custom-trained models are saved to `logic/data/custom/` via the Train Model page.
 
-### 7. (Optional) Enable real-time chatbot mode
+### 7. (Optional) Use ChatGPT instead of the local chatbot model
 
-The HandBot chat panel works out of the box in **static** mode (instant, offline,
-keyword lookup over the in-app guide). For **real-time** mode, generated
-answers via a local LLM:
+HandBot works out of the box in **Local** mode - the first question you ask
+triggers a one-time download of the bundled Qwen2.5-3B GGUF model, then
+answers are generated fully offline via `llama.cpp`. The local search index
+(`logic/chatbot/chroma_db/`) is also built automatically on first use.
 
-```bash
-ollama pull qwen2.5:3b
-```
-
-Make sure the Ollama app/service is running before asking a question in
-real-time mode. The chatbot's local search index (`logic/chatbot/chroma_db/`)
-is built automatically the first time a real-time question is asked - no
-manual indexing step needed. Switch modes anytime from Settings → Chatbot.
+To use **ChatGPT** instead, open Settings → AI Backend, select **CHATGPT**,
+and paste your own OpenAI API key into the field below - it's saved to
+`logic/app_config.json` on your machine, no `.env` file needed. Switch
+between Local and ChatGPT anytime from the same Settings section.
 
 ---
 
@@ -171,20 +174,22 @@ A `Makefile` is included for all common tasks.
 | Command | Description |
 |---|---|
 | `make run` | Run the app directly with Python |
-| `make build-mac` | Build a standalone `.app` bundle for macOS (arm64) |
+| `make build-mac-app` | Build a standalone `.app` bundle for macOS (arm64) |
+| `make build-mac-dmg` | Build the `.app` and wrap it in a distributable `.dmg` (requires `brew install create-dmg`) |
 | `make build-win` | Build a standalone `.exe` for Windows |
 | `make icon-mac` | Generate `hand_gesture_icon.icns` from the source PNG |
 | `make icon-win` | Generate `hand_gesture_icon.ico` from the source PNG |
 | `make eval` | Run the gesture evaluation suite against `research/dataset/` |
-| `make clean` | Remove `build/`, `dist/`, and `.spec` files |
+| `make clean` | Remove `build/` and `dist/` |
 
 ### macOS app bundle
 
 ```bash
-make build-mac
+make build-mac-dmg
 ```
 
-Produces `dist/main.app`. Double-click to open, or distribute the `.app` folder.
+Produces `dist/HandMouse.app` and `dist/HandMouse.dmg`. Open the `.dmg` and drag
+`HandMouse.app` into Applications, or distribute the `.app` folder directly.
 macOS will prompt for camera permission on first launch.
 
 ### Windows executable
@@ -414,9 +419,9 @@ HandMouse/
 │   ├── app_config.py              # Persistent JSON config (zone, mode, bindings…)
 │   ├── chatbot_worker.py          # QThread wrapper for chatbot queries
 │   ├── chatbot/
-│   │   ├── static_lookup.py       # Offline keyword lookup over data/*.md
-│   │   ├── rag_service.py         # Ollama + llama-index RAG pipeline
+│   │   ├── rag_service.py         # Local (llama.cpp) + ChatGPT (OpenAI) RAG pipeline
 │   │   ├── data/                  # Chatbot corpus (about.md, user_guide.md)
+│   │   ├── models/                # Auto-downloaded local GGUF model (git-ignored)
 │   │   └── chroma_db/             # Auto-built vector index (git-ignored)
 │   ├── air_hockey_launcher.py     # Launches hockey_game/ as a subprocess
 │   ├── hand_landmarker.task       # MediaPipe model (download separately)
@@ -425,7 +430,8 @@ HandMouse/
 │   │   ├── subway_mode.py         # SubwayModeMixin
 │   │   ├── racing_mode.py         # RacingModeMixin
 │   │   ├── open_world_mode.py     # OpenWorldModeMixin
-│   │   └── air_hockey_mode.py     # AirHockeyModeMixin - wrist-tracked paddle + skill gestures
+│   │   ├── air_hockey_mode.py     # AirHockeyModeMixin - wrist-tracked paddle + skill gestures
+│   │   └── custom_mode.py         # CustomModeMixin - runs user-trained custom gesture sets
 │   ├── conf/
 │   │   ├── mouse_control.conf
 │   │   ├── subway_surfers.conf
@@ -452,7 +458,8 @@ HandMouse/
     ├── handbot.py                 # HandBot guide + chat panel
     ├── air_hockey_status.py       # Live per-player gesture status panel
     ├── air_hockey_loading.py      # "Switching to Air Hockey" transition overlay
-    └── air_hockey_launch_page.py  # Dedicated sidebar tab - just launches the game
+    ├── air_hockey_launch_page.py  # Dedicated sidebar tab - just launches the game
+    └── mini_camera_overlay.py     # Optional status overlay shown over other apps/windows
 
 hockey_game/                       # Bundled local 2-player air hockey game (pygame, untouched)
 ├── main.py                        # Run standalone with `cd hockey_game && python3 main.py`
@@ -473,7 +480,8 @@ hockey_game/                       # Bundled local 2-player air hockey game (pyg
 | **pynput** | Low-level keyboard/mouse input (replaces pyautogui for key-hold) |
 | **PyAutoGUI** | Mouse movement and click |
 | **NumPy** | Vector math for gesture geometry |
-| **llama-index + Chroma + Ollama** | Local RAG pipeline for HandBot's real-time chatbot mode |
+| **llama-index + Chroma + llama.cpp** | Local RAG pipeline for HandBot (bundled Qwen2.5-3B GGUF model) |
+| **OpenAI API** | Optional ChatGPT backend for HandBot - user-supplied key, stored on-device |
 | **pygame** | Powers the bundled Air Hockey game (launched as its own window) |
 
 ---
@@ -507,8 +515,8 @@ Stop tracking first with the Stop button, or use the Exit button in the app. Nev
 **Tracking drifts or lags**
 Ensure even lighting and a clear background. Retrain a Custom model if the default model does not fit your hand or environment well.
 
-**Real-time chatbot says it's unavailable**
-Make sure the Ollama app/service is running and `qwen2.5:3b` has been pulled (`ollama pull qwen2.5:3b`). Switch back to static mode in Settings → Chatbot if you don't need live answers.
+**Chatbot says it's unavailable**
+In **Local** mode, make sure the model download finished (Settings shows a progress dialog on first use). In **ChatGPT** mode, make sure a valid OpenAI API key is saved under Settings → AI Backend - switch back to Local if you don't have one.
 
 **Air Hockey gestures aren't registering**
 Synthetic keypresses go to whichever window has OS focus, same as Subway Surfers and Racing mode - click into the air hockey game window after launching it, then start tracking. If the LAUNCH button stays greyed out, an air hockey window is still open from a previous launch (or `hockey_game/` is missing from this checkout).

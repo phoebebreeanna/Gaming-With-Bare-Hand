@@ -111,6 +111,12 @@ def count_vertical_fingers(lms):
             count += 1
     return count
 
+def count_vertical_fingers_5(lms):
+    n = count_vertical_fingers(lms)
+    if n == 4 and is_thumb_extended(lms):
+        return 5
+    return n
+
 def is_thumbs_up(lms):
     f = fingers_extended(lms)
     return (lms[4].y < lms[3].y < lms[2].y and
@@ -157,8 +163,8 @@ def get_game_option(lms, lms2):
         return None
     for fist_hand, finger_hand in [(lms, lms2), (lms2, lms)]:
         if is_fist(fist_hand):
-            n = count_vertical_fingers(finger_hand)
-            if 1 <= n <= 4:
+            n = count_vertical_fingers_5(finger_hand)
+            if 1 <= n <= 5:
                 return n
     return None
 

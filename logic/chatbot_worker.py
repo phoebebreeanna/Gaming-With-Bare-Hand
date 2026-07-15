@@ -5,14 +5,15 @@ class ChatbotQueryThread(QThread):
     answer_ready = Signal(str)
     answer_failed = Signal(str)
 
-    def __init__(self, question: str, parent=None):
+    def __init__(self, question: str, backend: str = "local", parent=None):
         super().__init__(parent)
         self.question = question
+        self.backend = backend
 
     def run(self):
         from logic.chatbot.rag_service import ask_realtime, ChatbotUnavailableError
         try:
-            answer = ask_realtime(self.question)
+            answer = ask_realtime(self.question, backend=self.backend)
         except ChatbotUnavailableError as e:
             self.answer_failed.emit(str(e))
             return
@@ -23,6 +24,28 @@ class ChatbotQueryThread(QThread):
             return
 
         self.answer_ready.emit(answer)
+
+
+class ChatbotWarmupThread(QThread):
+    ready = Signal()
+    failed = Signal(str)
+
+    def __init__(self, backend: str = "local", parent=None):
+        super().__init__(parent)
+        self.backend = backend
+
+    def run(self):
+        from logic.chatbot.rag_service import warm_up_engine, ChatbotUnavailableError
+        try:
+            warm_up_engine(backend=self.backend)
+        except ChatbotUnavailableError as e:
+            self.failed.emit(str(e))
+            return
+        except Exception:
+            self.failed.emit("Couldn't warm up the local chatbot model.")
+            return
+
+        self.ready.emit()
 
 
 class ModelDownloadThread(QThread):

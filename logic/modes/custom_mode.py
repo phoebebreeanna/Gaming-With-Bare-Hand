@@ -26,7 +26,7 @@ class CustomModeMixin:
             devil_hand_lms = user_left
             mouse_hand_lms = user_right
 
-        devil_horn = (self._mouse_in_game_enabled and
+        devil_horn = (self._mouse_in_game_enabled and self._custom_meta_gestures_enabled and
                       devil_hand_lms is not None and is_devil_horn(devil_hand_lms))
         if devil_horn != self._devilhorn_mouse:
             self.mouse_prev_row     = None

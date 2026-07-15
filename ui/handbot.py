@@ -1,4 +1,6 @@
 import html
+import os
+import sys
 import threading
 
 from PySide6.QtWidgets import (QWidget, QLabel, QVBoxLayout, QHBoxLayout, QPushButton, QFrame,
@@ -8,7 +10,7 @@ from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve, QPoint,
 from PySide6.QtGui import QColor, QPen, QPixmap, QPainter, QPainterPath
 
 from logic import app_config
-from logic.chatbot_worker import ChatbotQueryThread, ModelDownloadThread
+from logic.chatbot_worker import ChatbotQueryThread, ChatbotWarmupThread, ModelDownloadThread
 
 
 def _markdown_to_html(text: str) -> str:
@@ -20,7 +22,6 @@ def _markdown_to_html(text: str) -> str:
 
 
 class _CardDialog(QDialog):
-    """Frameless, rounded-corner dialog card matching the app's flat style."""
 
     def __init__(self, parent=None, is_dark=False, width=340):
         super().__init__(parent)
@@ -65,7 +66,6 @@ class _CardDialog(QDialog):
 
 
 class ModelDownloadPromptDialog(_CardDialog):
-    """Asks the user to confirm the one-time chatbot model download."""
 
     def __init__(self, parent=None, is_dark=False):
         super().__init__(parent, is_dark)
@@ -117,7 +117,6 @@ class ModelDownloadPromptDialog(_CardDialog):
 
 
 class ModelDownloadDialog(_CardDialog):
-    """Progress card shown while the chatbot's GGUF model downloads."""
 
     def __init__(self, parent=None, is_dark=False):
         super().__init__(parent, is_dark)
@@ -224,9 +223,10 @@ class ModelDownloadDialog(_CardDialog):
 
 
 def ensure_model_ready(parent: QWidget, is_dark: bool = False) -> bool:
-    """Returns True if the chatbot model is ready to use, prompting the user
-    to download it first if it isn't."""
     from logic.chatbot import rag_service
+
+    if app_config.get_chatbot_backend() != "local":
+        return True
 
     if rag_service.is_primary_model_ready():
         return True
@@ -239,15 +239,13 @@ def ensure_model_ready(parent: QWidget, is_dark: bool = False) -> bool:
     return dialog.exec() == QDialog.Accepted
 
 
-# --- HandBot image assets ---
-HANDBOT_EXPLAINING = "assets/handbot/handbot_explaining.png"
-HANDBOT_NEUTRAL = "assets/handbot/handbot_neutral_icon.png"
-HANDBOT_CELEBRATING = "assets/handbot/handbot_celebrating.png"  
+_BASE = sys._MEIPASS if getattr(sys, 'frozen', False) else os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
+HANDBOT_EXPLAINING = os.path.join(_BASE, "assets/handbot/handbot_explaining.png")
+HANDBOT_NEUTRAL = os.path.join(_BASE, "assets/handbot/handbot_neutral_icon.png")
+HANDBOT_CELEBRATING = os.path.join(_BASE, "assets/handbot/handbot_celebrating.png")
 
 
 def make_circular_pixmap(source_pixmap: QPixmap, diameter: int, bg_color: str, border_color: str, padding_ratio: float = 0.78) -> QPixmap:
-    """Returns a circularly-clipped pixmap with a solid background circle
-    (so it matches the app's light/dark theme) and padding around the character."""
     result = QPixmap(diameter, diameter)
     result.fill(Qt.transparent)
 
@@ -332,7 +330,6 @@ card_width_for_content = {"guide_intro": 340, "guide_overview": 340, "camera": 3
 
 
 class HandBotCard(QFrame):
-    """The white popup card with HandBot's message and buttons."""
     action = Signal(str)
     action_signal = Signal(str)
 
@@ -344,7 +341,6 @@ class HandBotCard(QFrame):
         self._build()
         self.apply_theme(self.is_dark)
 
-        # --- Pop-in animation setup ---
         self.opacity_effect = QGraphicsOpacityEffect(self)
         self.setGraphicsEffect(self.opacity_effect)
         self.opacity_effect.setOpacity(1.0)
@@ -357,7 +353,6 @@ class HandBotCard(QFrame):
         head = QHBoxLayout()
         head.setSpacing(10)
 
-        # --- CHANGED: real HandBot image instead of emoji ---
         icon_lbl = QLabel()
         icon_lbl.setStyleSheet("background:transparent; border:none;")
         pixmap = QPixmap(HANDBOT_EXPLAINING)
@@ -416,8 +411,6 @@ class HandBotCard(QFrame):
         self.adjustSize()
 
     def play_pop_in(self):
-        """Scale + fade entrance animation. Call this right after the
-        card is positioned and shown."""
         final_geometry = self.geometry()
         start_geometry = QRect(
             final_geometry.center().x() - int(final_geometry.width() * 0.4),
@@ -524,7 +517,6 @@ class HandBotCard(QFrame):
             """)
 
 class HandBotChatPanel(QFrame):
-    ### The floating chat panel that appears when the HandBot icon is clicked on the Home dashboard.
     closed = Signal()
 
     MIN_WIDTH = 300
@@ -619,6 +611,7 @@ class HandBotChatPanel(QFrame):
 
         self._query_thread = None
         self._messages = []
+        self._warmup_thread = None
 
     def _append_line(self, sender: str, text: str, is_markdown: bool = False):
         body = _markdown_to_html(text) if is_markdown else html.escape(text)
@@ -639,7 +632,7 @@ class HandBotChatPanel(QFrame):
 
     def _on_send(self):
         question = self.input_box.text().strip()
-        if not question or self._query_thread is not None:
+        if not question or self._query_thread is not None or self._warmup_thread is not None:
             return
 
         self._append_line("You", question)
@@ -651,23 +644,65 @@ class HandBotChatPanel(QFrame):
 
         self.input_box.setEnabled(False)
         self.send_btn.setEnabled(False)
-        self._show_typing()
+        self._show_typing("HandBot is thinking")
 
-        self._query_thread = ChatbotQueryThread(question, self)
+        backend = app_config.get_chatbot_backend()
+        self._query_thread = ChatbotQueryThread(question, backend, self)
         self._query_thread.answer_ready.connect(self._on_answer_ready)
         self._query_thread.answer_failed.connect(self._on_answer_failed)
         self._query_thread.finished.connect(self._on_query_finished)
         self._query_thread.start()
 
-    def _show_typing(self):
+    def start_warmup(self):
+        from logic.chatbot import rag_service
+
+        if self._warmup_thread is not None or self._query_thread is not None:
+            return
+        if app_config.get_chatbot_backend() != "local":
+            return
+        if rag_service.is_engine_ready("local"):
+            return
+        if not app_config.get_chatbot_enabled() or not rag_service.is_primary_model_ready():
+            return
+
+        self.input_box.setEnabled(False)
+        self.send_btn.setEnabled(False)
+        self._show_typing("Initializing HandBot")
+
+        self._warmup_thread = ChatbotWarmupThread("local", self)
+        self._warmup_thread.ready.connect(self._on_warmup_finished)
+        self._warmup_thread.failed.connect(self._on_warmup_finished)
+        self._warmup_thread.finished.connect(self._on_warmup_thread_finished)
+        self._warmup_thread.start()
+
+    def _on_warmup_finished(self, *_args):
+        self._hide_typing()
+        self.input_box.setEnabled(True)
+        self.send_btn.setEnabled(True)
+
+    def _on_warmup_thread_finished(self):
+        self._warmup_thread = None
+
+    def shutdown(self):
+        for thread in (self._query_thread, self._warmup_thread):
+            if thread is not None:
+                try:
+                    thread.disconnect()
+                except Exception:
+                    pass
+        self._query_thread = None
+        self._warmup_thread = None
+
+    def _show_typing(self, label: str):
+        self._typing_label = label
         self._typing_frame = 0
-        self.typing_lbl.setText("HandBot is thinking")
+        self.typing_lbl.setText(label)
         self.typing_lbl.show()
         self._typing_timer.start()
 
     def _tick_typing(self):
         self._typing_frame = (self._typing_frame + 1) % 4
-        self.typing_lbl.setText("HandBot is thinking" + "." * self._typing_frame)
+        self.typing_lbl.setText(self._typing_label + "." * self._typing_frame)
 
     def _hide_typing(self):
         self._typing_timer.stop()
@@ -783,9 +818,7 @@ class HandBotChatPanel(QFrame):
         self.scale_anim.start()
         self.fade_anim.start()
 
-#draggable icon 
 class HandBotIcon(QLabel):
-    """Floating HandBot icon that can be dragged around the screen."""
     clicked = Signal()
     position_reset = Signal()
 
@@ -965,7 +998,7 @@ class HandBotOverlay(QWidget):
 
     def _reposition(self):
         self.setGeometry(0, 0, self.stack.width(), self.stack.height())
-        self.dim_bg.setGeometry(0, 0, self.stack.width(), self.stack.height())  # NEW
+        self.dim_bg.setGeometry(0, 0, self.stack.width(), self.stack.height())
         if not self.icon._dragging and not self.icon._moved:
             self.icon._anim.stop()
             self.icon.move(self.width() - self.icon.width() - 1, 110)
@@ -980,7 +1013,7 @@ class HandBotOverlay(QWidget):
             y = (self.height() - self.card.height()) // 2
             self.card.move(x, y)
 
-    def _on_step_changed(self, index): #icon appears on the home dashboard 
+    def _on_step_changed(self, index):
         self.raise_()
         if index == 0:
             self.dim_bg.hide()
@@ -995,7 +1028,7 @@ class HandBotOverlay(QWidget):
             self._intro_shown = True
             self.dim_bg.show()
             self.dim_bg.raise_()
-            self.icon.hide()  # icon stays hidden until Skip/Yes dismisses the intro
+            self.icon.hide()
             self._show_card('guide_intro')
             return
 
@@ -1023,7 +1056,7 @@ class HandBotOverlay(QWidget):
         self.card.show()
         self.card.raise_()
         self._center_card()
-        self.card.play_pop_in()  # --- CHANGED: animate every card appearance ---
+        self.card.play_pop_in()
 
     def _hide_card(self):
         self.card.hide()
@@ -1079,7 +1112,7 @@ class HandBotOverlay(QWidget):
     def _on_action(self, action_id):
         if action_id == 'guide_yes':
             self.guide_enabled = True
-            self.dim_bg.hide()  # NEW: dim goes away once intro is dismissed
+            self.dim_bg.hide()
             self.icon.show()
             self.icon.raise_()
             self.icon.start_idle_bounce()
@@ -1097,7 +1130,6 @@ class HandBotOverlay(QWidget):
         )
         start_rect = self.card.geometry()
 
-        # NEW: fade the dim out at the same time as the shrink
         self.dim_fade = QPropertyAnimation(self.dim_bg, b"windowOpacity")
         self.dim_opacity_effect = QGraphicsOpacityEffect(self.dim_bg)
         self.dim_bg.setGraphicsEffect(self.dim_opacity_effect)
@@ -1109,7 +1141,7 @@ class HandBotOverlay(QWidget):
         self.dim_fade.finished.connect(self.dim_bg.hide)
         self.dim_fade.start()
 
-        self.icon.show()  # NEW: reveal the icon just as the card starts flying toward it
+        self.icon.show()
         self.icon.raise_()
 
         self.fly_anim = QPropertyAnimation(self.card, b"geometry")
@@ -1122,7 +1154,6 @@ class HandBotOverlay(QWidget):
 
     def _on_skip_fly_finished(self):
         self._hide_card()
-        # Restore card to its normal size for next time it's shown
         self.card.setGeometry(self.card.x(), self.card.y(), default_card_width, self.card.minimumHeight())
         self.icon.start_idle_bounce()
         
@@ -1131,7 +1162,7 @@ class HandBotOverlay(QWidget):
         center_x = self.stack.width() // 2
         center_y = self.stack.height() // 2
         self.celebrate_toast.play(center_x, center_y, hold_ms=900, on_finished=on_finished)
-        self.icon.play_celebrate()  # keep the icon animation too, as a bonus
+        self.icon.play_celebrate()
 
 
 class HandBotPagesOverlay(QWidget):
@@ -1152,6 +1183,8 @@ class HandBotPagesOverlay(QWidget):
         self.chat_panel = HandBotChatPanel(self.pages_stack)
         self.chat_panel.hide()
         self.chat_panel.closed.connect(self._hide_chat)
+        if self._chatbot_enabled:
+            self.chat_panel.start_warmup()
 
         self.pages_stack.installEventFilter(self)
         self.pages_stack.currentChanged.connect(self._on_page_changed)
@@ -1214,6 +1247,8 @@ class HandBotPagesOverlay(QWidget):
     def set_chatbot_enabled(self, enabled: bool):
         self._chatbot_enabled = enabled
         self._on_page_changed(self.pages_stack.currentIndex())
+        if enabled:
+            self.chat_panel.start_warmup()
 
     def _on_icon_clicked(self):
         if not self._chatbot_enabled:
@@ -1221,6 +1256,7 @@ class HandBotPagesOverlay(QWidget):
         if self.chat_panel.isVisible():
             self._hide_chat()
         elif ensure_model_ready(self, self.is_dark):
+            self.chat_panel.start_warmup()
             self._show_chat()
 
     def _show_chat(self):
@@ -1241,7 +1277,7 @@ class HandBotCelebrateToast(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("celebrateToast")
-        self.setFixedSize(300, 240)  # bigger, was 240x180
+        self.setFixedSize(300, 240)
         self._build()
         self.apply_theme(False)
 
@@ -1259,12 +1295,12 @@ class HandBotCelebrateToast(QFrame):
         self.avatar_label.setAlignment(Qt.AlignCenter)
         self.avatar_label.setStyleSheet("background:transparent; border:none;")
         pixmap = QPixmap(HANDBOT_CELEBRATING)
-        self.avatar_label.setPixmap(pixmap.scaled(120, 120, Qt.KeepAspectRatio, Qt.SmoothTransformation))  # bigger, was 80x80
+        self.avatar_label.setPixmap(pixmap.scaled(120, 120, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         layout.addWidget(self.avatar_label)
 
         self.message_label = QLabel("Optimal! Great job!")
         self.message_label.setAlignment(Qt.AlignCenter)
-        self.message_label.setStyleSheet("font-size:16px; font-weight:700; background:transparent; border:none;")  # bigger, was 14px
+        self.message_label.setStyleSheet("font-size:16px; font-weight:700; background:transparent; border:none;")
         layout.addWidget(self.message_label)
 
     def apply_theme(self, is_dark):
@@ -1281,7 +1317,6 @@ class HandBotCelebrateToast(QFrame):
         self.message_label.setStyleSheet(f"font-size:16px; font-weight:700; color:{text}; background:transparent; border:none;")
 
     def play(self, center_x, center_y, hold_ms=1600, on_finished=None):
-        """Pop in with a bounce, jump twice, hold, then fade out."""
         final_rect = QRect(
             center_x - self.width() // 2, center_y - self.height() // 2,
             self.width(), self.height()
@@ -1298,20 +1333,19 @@ class HandBotCelebrateToast(QFrame):
         self.raise_()
 
         self.pop_scale = QPropertyAnimation(self, b"geometry")
-        self.pop_scale.setDuration(450)  # slower pop-in, was 250
+        self.pop_scale.setDuration(450)
         self.pop_scale.setStartValue(start_rect)
         self.pop_scale.setEndValue(final_rect)
         self.pop_scale.setEasingCurve(QEasingCurve.OutBack)
 
         self.pop_fade_in = QPropertyAnimation(self.opacity_effect, b"opacity")
-        self.pop_fade_in.setDuration(300)  # was 200
+        self.pop_fade_in.setDuration(300)
         self.pop_fade_in.setStartValue(0.0)
         self.pop_fade_in.setEndValue(1.0)
 
         self.pop_scale.start()
         self.pop_fade_in.start()
 
-        # Jump animation once settled - two noticeable hops
         def _start_jump():
             self.jump_anim = QPropertyAnimation(self, b"geometry")
             self.jump_anim.setDuration(700)
@@ -1324,11 +1358,11 @@ class HandBotCelebrateToast(QFrame):
             self.jump_anim.setEasingCurve(QEasingCurve.OutQuad)
             self.jump_anim.start()
 
-        QTimer.singleShot(450, _start_jump)  # starts right as pop-in finishes
+        QTimer.singleShot(450, _start_jump)
 
         def _start_fade_out():
             self.fade_out = QPropertyAnimation(self.opacity_effect, b"opacity")
-            self.fade_out.setDuration(400)  # was 300
+            self.fade_out.setDuration(400)
             self.fade_out.setStartValue(1.0)
             self.fade_out.setEndValue(0.0)
             self.fade_out.finished.connect(self.hide)

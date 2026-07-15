@@ -14,9 +14,10 @@ Two supported run methods:
 ### Method A - Packaged App
 - **Windows**: download the HANDMOUSE folder from releases → open `dist/main/`
   → double-click `main.exe`.
-- **macOS**: download `main.app` from releases → move to Applications → if
-  blocked on first launch, System Preferences → Privacy & Security → "Open
-  Anyway" → grant Camera and Accessibility permissions when prompted.
+- **macOS**: download the `.dmg` from releases → open it → drag `HandMouse.app`
+  into Applications → if blocked on first launch, right-click the app → Open
+  (or System Preferences → Privacy & Security → "Open Anyway") → grant Camera
+  and Accessibility permissions when prompted.
 
 ### Method B - Run from Source
 
@@ -120,7 +121,7 @@ the recommended default. Click "FINISH" or wait 3s to complete and land on Home.
 
 ### Sidebar Navigation
 - **Menu section**: 01 HOME, 02 USER GUIDE, 03 GESTURE GUIDE
-- **Setup section**: 04 SETTING, 05 TRAIN MODEL, 06 KEY BINDINGS
+- **Setup section**: 04 SETTING, 05 TRAIN MODEL, 06 KEY BINDINGS, 07 AIR HOCKEY
 
 ### Theme Switching
 Light/Dark mode toggle. **Theme selection does NOT persist - resets to Light
@@ -136,6 +137,35 @@ All your preferences are saved automatically to a local settings file on your
 computer, created the first time you launch the app: setup completion status,
 camera choice, calibrated distance, detection zone, key bindings, and game
 mode settings.
+
+### Status Overlay
+A small, draggable, always-on-top mini window that keeps you informed while
+you're actually playing a game (not just while looking at the HandMouse
+window). It automatically appears once gesture tracking is running **and**
+you switch focus away from the main HandMouse window (e.g. you clicked into
+your game), and it hides again when HandMouse is back in the foreground.
+
+Shows: a live mini camera feed, current MODE, STATUS, last recognised
+GESTURE, the ACTION it triggered, and a progress bar while a held gesture is
+building up (e.g. mode-switch or exit holds). Double-click it to bring the
+main HandMouse window back to the front.
+
+Controlled by the **STATUS OVERLAY** toggle on the Settings page (04),
+enabled by default. On macOS, staying on top of full-screen games relies on
+the `pyobjc` package - if it isn't installed, the overlay still works but may
+not stay above a full-screen game window.
+
+### HandBot Chatbot
+A floating chat icon available on every page (drag it anywhere on screen;
+click to open the chat panel). Ask it about setup, modes, gestures, key
+bindings, or troubleshooting and it answers using this user guide as its
+only source of truth - if your question isn't covered here, it will tell you
+so rather than guessing. The first question you ask triggers a one-time
+download (~2 GB) of its local answering model, so the first reply can take a
+while.
+
+Controlled by the **ENABLE CHATBOT** toggle on the Settings page (04),
+enabled by default.
 
 ## Feature Guides (per page)
 
@@ -169,6 +199,7 @@ mode tag.
 | SUBWAY SURFERS | Jump, roll, left, right, space key presses |
 | RACING | Held accelerate/brake with wrist-angle steering |
 | OPEN WORLD | Action-game gesture set |
+| AIR HOCKEY | Two-player mode driving the built-in Air Hockey game (see below) |
 
 Click a mode card to switch - saved immediately.
 
@@ -187,9 +218,23 @@ custom model has been trained for that mode).
 
 **Performance Display**: real-time FPS and gesture detection latency.
 
+**Allow Meta Gestures In Custom Mode** toggle - ON by default. Controls
+whether Custom Mode responds to the two system-wide "meta" gestures: the
+Devil Horn mouse overlay and Game Option 1-5 mode switching. Turn it OFF if
+your own custom-trained gestures happen to look similar to devil horn or a
+fist-plus-fingers pose and you don't want them misfiring as mode switches or
+accidentally opening the mouse overlay while you're using your custom
+gesture set. This toggle only affects Custom Mode - every other mode keeps
+using these gestures normally. With it OFF, you can still switch modes or
+close the app via the GUI buttons on the Home page or the Settings mode
+cards.
+
 ### 05 - Train Model (Custom Gestures)
-Steps:
-1. Select mode to train (Mouse, Subway, or Racing - **not** Open World).
+Four tabs: Mouse, Subway, Racing, and **Custom**.
+
+**Retraining an existing mode** (Mouse, Subway, or Racing tab - **not** Open
+World):
+1. Select mode to train.
 2. "Collect Data" → record (or delete) 50 samples per gesture class.
 3. Preprocess collected data to generate additional samples; optional mirror
    option for left-hand support.
@@ -199,8 +244,21 @@ Steps:
 7. Your custom model is saved separately - it does **not** overwrite the
    built-in defaults - and becomes selectable in Settings.
 
+**Custom Mode & Keybind** (Custom tab): build an entirely new control scheme
+from scratch for a game or app that has no built-in mode of its own.
+1. Click **+ NEW** and name your mode - this creates a new custom mode entry.
+2. Add as many gesture labels as you like, one at a time, via the text box
+   and **ADD** button (no fixed limit on gestures or modes).
+3. Collect samples and train the same way as above (50 samples/gesture,
+   mirror option available).
+4. Once trained, open **06 KEY BINDINGS** - your custom mode gets its own
+   section there, listing every gesture you added, ready to bind to a key.
+5. Rename or delete a custom mode from the Custom tab at any time (delete
+   requires a confirmation click within 3 seconds).
+
 ### 06 - Key Bindings
-Remap keys for Subway Surfers, Racing, and Open World modes. Select mode tab
+Remap keys for Subway Surfers, Racing, Open World modes, and any Custom mode
+you've created (each gets its own auto-generated section). Select mode tab
 → click binding → press desired key → saved automatically. "RESET TO DEFAULT"
 reverts a mode's bindings.
 
@@ -239,6 +297,27 @@ reverts a mode's bindings.
 | Grip | Alt | Little Finger | Right click |
 | | | Grabbing | E |
 
+### 07 - Air Hockey
+Launches the built-in Air Hockey game (a separate window) and lets you
+control it with gestures - including a two-player mode where both players
+share a single webcam.
+
+**Launching**: sidebar → 07 AIR HOCKEY → the game window opens
+automatically. Keep it focused/visible while playing with gestures.
+
+**Multiplayer**: both players stand in front of the same camera. The app
+splits the camera frame down the middle - hands on the left half control
+Player 1, hands on the right half control Player 2. For each player:
+- **Right hand** moves your paddle (its position relative to your side's
+  detection zone drives movement).
+- **Left hand** triggers a power-up - hold up 1 to 5 fingers to select
+  Shield, Freeze, Double Puck, Slow Puck, or Speed Puck.
+
+First player to score 7 goals wins. Gestures are converted into the same
+keyboard input the standalone game uses (P1: WASD + 1-5, P2: Arrow keys +
+6-0), so you can also just play with a keyboard if you prefer, or have one
+player use gestures and the other a keyboard/controller.
+
 ## Gesture Reference
 
 ### General Gestures (active in any mode - app/session control)
@@ -250,7 +329,7 @@ reverts a mode's bindings.
 | Three Fingers | Three fingers | Navigate / select zone item 3 |
 | Pause | Both palms open facing camera | Pause session |
 | Continue | Peace sign, both hands | Resume session |
-| Game Option 1–4 | Fist + 1/2/3/4 fingers, hold 5s | Switch to Mouse/Subway/Racing/Open World |
+| Game Option 1–5 | Fist + 1/2/3/4/5 fingers, hold 5s | Switch to Mouse/Subway/Racing/Open World/Air Hockey |
 | Mouse in Game | Devil horn + index | Open mouse overlay in game mode |
 | Exit / Close | Both hands closed to fists (hold) | Close application |
 
@@ -350,11 +429,16 @@ starts.
 | Subway Mode | Fist + 2 fingers |
 | Racing Mode | Fist + 3 fingers |
 | Open World | Fist + 4 fingers |
+| Air Hockey | Fist + 5 fingers |
 
-Countdown shown on camera feed during hold; releasing early cancels.
+Countdown shown on camera feed during hold; releasing early cancels. In Air
+Hockey this works for either player - whoever holds the gesture switches the
+whole session out of Air Hockey.
 
 **Devil Horn overlay**: available any time in Running state while a non-Mouse
-mode is active.
+mode is active, including Air Hockey - holding it pauses both players'
+paddles and switches the whole screen to normal Mouse Mode control until you
+release it.
 
 ## Resetting Your Settings
 
@@ -424,6 +508,10 @@ zone and it'll pick up tracking again.
 - **Open World mode only supports the built-in gesture set.** You can't use a
   custom-trained model for Open World mode yet (custom models work for Mouse,
   Subway Surfers, and Racing).
-- **Gesture feedback stays inside the app window.** There's no overlay drawn
-  directly on top of your game - you'll see the detected gesture, confidence,
-  and status in HANDMOUSE's own window, not layered over the game itself.
+- **The Status Overlay is a separate floating window, not drawn on the game
+  itself.** It sits on top of your game rather than being layered directly
+  onto the game's own canvas, and on macOS it needs the `pyobjc` package to
+  reliably stay above full-screen games.
+- **Air Hockey multiplayer needs one shared camera.** Both players must fit
+  in the same frame, split left/right - there's no support yet for two
+  separate cameras or two networked players.

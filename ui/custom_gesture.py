@@ -18,10 +18,14 @@ class _PipelineRunner(QThread):
         self.conf_path = conf_path
 
     def run(self):
-        pipeline = os.path.join(os.path.dirname(os.path.dirname(__file__)),
-                                'logic', 'gesture_pipeline.py')
+        if getattr(sys, 'frozen', False):
+            cmd = [sys.executable, '--run-pipeline', self.conf_path]
+        else:
+            pipeline = os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                                    'logic', 'gesture_pipeline.py')
+            cmd = [sys.executable, pipeline, self.conf_path]
         proc = subprocess.Popen(
-            [sys.executable, pipeline, self.conf_path],
+            cmd,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, bufsize=1,
         )

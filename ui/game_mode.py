@@ -2,7 +2,7 @@ import os
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
-    QLabel, QPushButton, QSizePolicy, QComboBox, QScrollArea,
+    QLabel, QPushButton, QSizePolicy, QComboBox, QScrollArea, QLineEdit,
 )
 from PySide6.QtCore import Qt, Signal, QTimer
 
@@ -32,7 +32,9 @@ class GameMode(QWidget):
     perf_stats_changed    = Signal(bool)
     custom_mode_selected  = Signal(str, str)
     chatbot_enabled_changed = Signal(bool)
+    chatbot_backend_changed = Signal(str)
     mini_overlay_enabled_changed = Signal(bool)
+    custom_meta_gestures_changed = Signal(bool)
 
     def __init__(self):
         super().__init__()
@@ -50,13 +52,15 @@ class GameMode(QWidget):
         self._cursor_btns    = {}
         self._zone_btns      = {}
         self._side_btns      = {}
+        self._backend_btns   = {}
+        self._openai_api_key = ''
         self._show_perf_stats = True
         self._chatbot_enabled = True
+        self._chatbot_backend = 'local'
         self._mini_overlay_enabled = True
+        self._custom_meta_gestures_enabled = True
         self._custom_mode_combo   = None
-        self._custom_src_btns     = {}
         self._selected_custom_id  = ''
-        self._custom_src          = 'custom'
 
         self._load_state()
         self._init_ui()
@@ -67,8 +71,9 @@ class GameMode(QWidget):
             from logic.app_config import (
                 get_game_mode, get_mouse_enabled, get_model_source, get_camera_index,
                 get_cursor_point, get_saved_zone, get_mouse_side, get_show_perf_stats,
-                get_selected_custom_mode_id, get_selected_custom_mode_source,
-                get_chatbot_enabled, get_mini_overlay_enabled,
+                get_selected_custom_mode_id,
+                get_chatbot_enabled, get_mini_overlay_enabled, get_chatbot_backend,
+                get_custom_meta_gestures_enabled, get_openai_api_key,
             )
             self.selected_mode      = get_game_mode()
             self.mouse_enabled      = get_mouse_enabled()
@@ -78,9 +83,11 @@ class GameMode(QWidget):
             self._mouse_side        = get_mouse_side()
             self._show_perf_stats   = get_show_perf_stats()
             self._chatbot_enabled   = get_chatbot_enabled()
+            self._chatbot_backend   = get_chatbot_backend()
+            self._openai_api_key    = get_openai_api_key()
             self._mini_overlay_enabled = get_mini_overlay_enabled()
+            self._custom_meta_gestures_enabled = get_custom_meta_gestures_enabled()
             self._selected_custom_id = get_selected_custom_mode_id()
-            self._custom_src         = get_selected_custom_mode_source()
             for m in ('mouse', 'subway', 'racing'):
                 self._mode_sources[m] = get_model_source(m)
         except Exception:
@@ -347,6 +354,91 @@ class GameMode(QWidget):
         self.div1g.setFixedHeight(1)
         cl.addWidget(self.div1g)
 
+        self.backend_panel = QWidget()
+        self.backend_panel.setMinimumHeight(52)
+        bkp = QHBoxLayout(self.backend_panel)
+        bkp.setContentsMargins(16, 0, 16, 0)
+        bkp.setSpacing(0)
+
+        backend_text_col = QVBoxLayout()
+        backend_text_col.setSpacing(2)
+        self.backend_hdr_lbl = QLabel("AI BACKEND")
+        self.backend_sub_lbl = QLabel(
+            "LOCAL runs fully offline. CHATGPT uses the OpenAI API - add your "
+            "API key below."
+        )
+        self.backend_sub_lbl.setWordWrap(True)
+        backend_text_col.addWidget(self.backend_hdr_lbl)
+        backend_text_col.addWidget(self.backend_sub_lbl)
+        bkp.addLayout(backend_text_col, stretch=1)
+
+        backend_row = QHBoxLayout()
+        backend_row.setSpacing(4)
+        self._backend_btns = {}
+        for b, label in (("local", "LOCAL"), ("openai", "CHATGPT")):
+            btn = QPushButton(label)
+            btn.setFixedHeight(26)
+            btn.setMinimumWidth(64)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.clicked.connect(lambda _, b=b: self._set_chatbot_backend(b))
+            backend_row.addWidget(btn)
+            self._backend_btns[b] = btn
+        bkp.addLayout(backend_row)
+        cl.addWidget(self.backend_panel)
+
+        self.apikey_panel = QWidget()
+        self.apikey_panel.setMinimumHeight(76)
+        akp = QVBoxLayout(self.apikey_panel)
+        akp.setContentsMargins(16, 10, 16, 10)
+        akp.setSpacing(6)
+
+        self.apikey_hdr_lbl = QLabel("OPENAI API KEY")
+        akp.addWidget(self.apikey_hdr_lbl)
+
+        self.apikey_sub_lbl = QLabel(
+            "Stored locally on this device - no .env file needed"
+        )
+        self.apikey_sub_lbl.setWordWrap(True)
+        akp.addWidget(self.apikey_sub_lbl)
+
+        apikey_row = QHBoxLayout()
+        apikey_row.setSpacing(6)
+
+        self.apikey_input = QLineEdit()
+        self.apikey_input.setEchoMode(QLineEdit.Password)
+        self.apikey_input.setPlaceholderText("sk-...")
+        self.apikey_input.setText(self._openai_api_key)
+        self.apikey_input.setFixedHeight(28)
+        self.apikey_input.textEdited.connect(self._on_apikey_edited)
+        apikey_row.addWidget(self.apikey_input, stretch=1)
+
+        self.apikey_show_btn = QPushButton("SHOW")
+        self.apikey_show_btn.setFixedHeight(28)
+        self.apikey_show_btn.setMinimumWidth(56)
+        self.apikey_show_btn.setCursor(Qt.PointingHandCursor)
+        self.apikey_show_btn.setCheckable(True)
+        self.apikey_show_btn.clicked.connect(self._toggle_apikey_visibility)
+        apikey_row.addWidget(self.apikey_show_btn)
+
+        self.apikey_save_btn = QPushButton("SAVE")
+        self.apikey_save_btn.setFixedHeight(28)
+        self.apikey_save_btn.setMinimumWidth(64)
+        self.apikey_save_btn.setCursor(Qt.PointingHandCursor)
+        self.apikey_save_btn.clicked.connect(self._save_openai_api_key)
+        apikey_row.addWidget(self.apikey_save_btn)
+
+        akp.addLayout(apikey_row)
+
+        self.apikey_status_lbl = QLabel("")
+        self.apikey_status_lbl.setVisible(False)
+        akp.addWidget(self.apikey_status_lbl)
+
+        cl.addWidget(self.apikey_panel)
+
+        self.div1h = QWidget()
+        self.div1h.setFixedHeight(1)
+        cl.addWidget(self.div1h)
+
         self.overlay_panel = QWidget()
         self.overlay_panel.setMinimumHeight(52)
         ovp = QHBoxLayout(self.overlay_panel)
@@ -493,6 +585,10 @@ class GameMode(QWidget):
 
         cl.addWidget(mode_grid_widget)
 
+        self.div1i = QWidget()
+        self.div1i.setFixedHeight(1)
+        cl.addWidget(self.div1i)
+
         self._custom_mode_panel = QWidget()
         self._custom_mode_panel.setMinimumHeight(52)
         cmp_l = QHBoxLayout(self._custom_mode_panel)
@@ -502,37 +598,50 @@ class GameMode(QWidget):
         cmp_text = QVBoxLayout()
         cmp_text.setSpacing(2)
         self._cmp_hdr_lbl = QLabel("CUSTOM GAME MODE")
-        self._cmp_sub_lbl = QLabel("Choose which custom mode and model to use")
+        self._cmp_sub_lbl = QLabel("Choose which trained custom mode to use")
         self._cmp_sub_lbl.setWordWrap(True)
         cmp_text.addWidget(self._cmp_hdr_lbl)
         cmp_text.addWidget(self._cmp_sub_lbl)
         cmp_l.addLayout(cmp_text, stretch=1)
 
-        cmp_right = QVBoxLayout()
-        cmp_right.setSpacing(4)
-
         self._custom_mode_combo = QComboBox()
         self._custom_mode_combo.setFixedHeight(26)
         self._custom_mode_combo.setMinimumWidth(120)
         self._custom_mode_combo.currentIndexChanged.connect(self._on_custom_mode_combo_changed)
-        cmp_right.addWidget(self._custom_mode_combo)
-
-        cmp_src_row = QHBoxLayout()
-        cmp_src_row.setSpacing(4)
-        for src_key, src_lbl in (('custom', 'TRAINED'),):
-            btn = QPushButton(src_lbl)
-            btn.setFixedHeight(22)
-            btn.setMinimumWidth(64)
-            btn.setCursor(Qt.PointingHandCursor)
-            btn.clicked.connect(lambda _, s=src_key: self._set_custom_game_src(s))
-            cmp_src_row.addWidget(btn)
-            self._custom_src_btns[src_key] = btn
-        cmp_right.addLayout(cmp_src_row)
-        cmp_l.addLayout(cmp_right)
+        cmp_l.addWidget(self._custom_mode_combo)
 
         cl.addWidget(self._custom_mode_panel)
-        self._custom_mode_panel.setVisible(self.selected_mode == 'custom')
         self._populate_custom_mode_combo()
+
+        self.div1j = QWidget()
+        self.div1j.setFixedHeight(1)
+        cl.addWidget(self.div1j)
+
+        self.meta_gestures_panel = QWidget()
+        self.meta_gestures_panel.setMinimumHeight(52)
+        mgp = QHBoxLayout(self.meta_gestures_panel)
+        mgp.setContentsMargins(16, 0, 16, 0)
+        mgp.setSpacing(0)
+
+        meta_gestures_text_col = QVBoxLayout()
+        meta_gestures_text_col.setSpacing(2)
+        self.meta_gestures_hdr_lbl = QLabel("ALLOW META GESTURES IN CUSTOM MODE")
+        self.meta_gestures_sub_lbl = QLabel(
+            "Devil horn mouse overlay and game-option mode switching while in Custom Mode")
+        self.meta_gestures_sub_lbl.setWordWrap(True)
+        meta_gestures_text_col.addWidget(self.meta_gestures_hdr_lbl)
+        meta_gestures_text_col.addWidget(self.meta_gestures_sub_lbl)
+        mgp.addLayout(meta_gestures_text_col, stretch=1)
+
+        self.meta_gestures_toggle_btn = QPushButton(
+            "ON" if self._custom_meta_gestures_enabled else "OFF")
+        self.meta_gestures_toggle_btn.setFixedHeight(26)
+        self.meta_gestures_toggle_btn.setMinimumWidth(46)
+        self.meta_gestures_toggle_btn.setCursor(Qt.PointingHandCursor)
+        self.meta_gestures_toggle_btn.clicked.connect(self._toggle_custom_meta_gestures_enabled)
+        mgp.addWidget(self.meta_gestures_toggle_btn)
+        cl.addWidget(self.meta_gestures_panel)
+
         cl.addStretch()
 
         self._settings_scroll = QScrollArea()
@@ -549,11 +658,11 @@ class GameMode(QWidget):
         self._custom_mode_combo.clear()
         try:
             from logic.app_config import get_custom_modes
-            modes = get_custom_modes()
+            modes = [m for m in get_custom_modes() if _custom_game_mode_model_exists(m['id'])]
         except Exception:
             modes = []
         if not modes:
-            self._custom_mode_combo.addItem("No custom modes yet", "")
+            self._custom_mode_combo.addItem("No trained custom modes yet", "")
             self._custom_mode_combo.setEnabled(False)
         else:
             self._custom_mode_combo.setEnabled(True)
@@ -563,6 +672,8 @@ class GameMode(QWidget):
                 if self._custom_mode_combo.itemData(i) == self._selected_custom_id:
                     self._custom_mode_combo.setCurrentIndex(i)
                     break
+        if hasattr(self, '_custom_mode_panel'):
+            self._custom_mode_panel.setEnabled(bool(modes))
         self._custom_mode_combo.blockSignals(False)
 
     def _on_custom_mode_combo_changed(self, idx: int):
@@ -577,17 +688,7 @@ class GameMode(QWidget):
             except Exception:
                 pass
             self.apply_theme(self.is_dark)
-            self.custom_mode_selected.emit(mode_id, self._custom_src)
-
-    def _set_custom_game_src(self, source: str):
-        self._custom_src = source
-        try:
-            from logic.app_config import set_selected_custom_mode_source
-            set_selected_custom_mode_source(source)
-        except Exception:
-            pass
-        self.apply_theme(self.is_dark)
-        self.custom_mode_selected.emit(self._selected_custom_id, source)
+            self.custom_mode_selected.emit(mode_id, 'custom')
 
     def refresh_custom_modes(self):
         self._populate_custom_mode_combo()
@@ -600,8 +701,6 @@ class GameMode(QWidget):
             set_game_mode(key)
         except Exception:
             pass
-        if hasattr(self, '_custom_mode_panel'):
-            self._custom_mode_panel.setVisible(key == 'custom')
         self.apply_theme(self.is_dark)
         self.game_mode_changed.emit(key)
 
@@ -614,8 +713,6 @@ class GameMode(QWidget):
             set_game_mode(key)
         except Exception:
             pass
-        if hasattr(self, '_custom_mode_panel'):
-            self._custom_mode_panel.setVisible(key == 'custom')
         self.apply_theme(self.is_dark)
 
     def refresh_custom_availability(self):
@@ -696,6 +793,68 @@ class GameMode(QWidget):
         self.chatbot_enabled_changed.emit(self._chatbot_enabled)
         self.apply_theme(self.is_dark)
 
+    def _set_chatbot_backend(self, backend: str):
+        if backend == self._chatbot_backend:
+            return
+        self._chatbot_backend = backend
+        try:
+            from logic.app_config import set_chatbot_backend
+            set_chatbot_backend(self._chatbot_backend)
+        except Exception:
+            pass
+
+        self.chatbot_backend_changed.emit(self._chatbot_backend)
+        self.apply_theme(self.is_dark)
+
+    def _toggle_apikey_visibility(self):
+        if self.apikey_show_btn.isChecked():
+            self.apikey_input.setEchoMode(QLineEdit.Normal)
+            self.apikey_show_btn.setText("HIDE")
+        else:
+            self.apikey_input.setEchoMode(QLineEdit.Password)
+            self.apikey_show_btn.setText("SHOW")
+
+    def _save_openai_api_key(self):
+        key = self.apikey_input.text().strip()
+        self._openai_api_key = key
+        try:
+            from logic.app_config import set_openai_api_key
+            set_openai_api_key(key)
+        except Exception:
+            pass
+        try:
+            from logic.chatbot.rag_service import reset_engine
+            reset_engine("openai")
+        except Exception:
+            pass
+
+        self.apikey_status_lbl.setText(
+            "Key saved - cleared" if not key else "Key saved"
+        )
+        self.apikey_status_lbl.setVisible(True)
+        self._flash_apikey_saved()
+        QTimer.singleShot(2200, lambda: self.apikey_status_lbl.setVisible(False))
+
+    def _on_apikey_edited(self, _text):
+        self.apikey_status_lbl.setVisible(False)
+
+    def _flash_apikey_saved(self):
+        saved_bg = "#2E7D32"
+        original = self.apikey_save_btn.styleSheet()
+        self.apikey_save_btn.setText("SAVED ✓")
+        self.apikey_save_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {saved_bg}; color: #FFFFFF;
+                font-size: 8px; font-weight: 700; letter-spacing: 1px;
+                border: 1px solid {saved_bg}; border-radius: 2px;
+            }}
+        """)
+        QTimer.singleShot(1200, lambda: self._restore_apikey_save_btn(original))
+
+    def _restore_apikey_save_btn(self, original_style: str):
+        self.apikey_save_btn.setText("SAVE")
+        self.apikey_save_btn.setStyleSheet(original_style)
+
     def _toggle_mini_overlay_enabled(self):
         self._mini_overlay_enabled = not self._mini_overlay_enabled
         self.overlay_toggle_btn.setText("ON" if self._mini_overlay_enabled else "OFF")
@@ -706,6 +865,18 @@ class GameMode(QWidget):
             pass
 
         self.mini_overlay_enabled_changed.emit(self._mini_overlay_enabled)
+        self.apply_theme(self.is_dark)
+
+    def _toggle_custom_meta_gestures_enabled(self):
+        self._custom_meta_gestures_enabled = not self._custom_meta_gestures_enabled
+        self.meta_gestures_toggle_btn.setText("ON" if self._custom_meta_gestures_enabled else "OFF")
+        try:
+            from logic.app_config import set_custom_meta_gestures_enabled
+            set_custom_meta_gestures_enabled(self._custom_meta_gestures_enabled)
+        except Exception:
+            pass
+
+        self.custom_meta_gestures_changed.emit(self._custom_meta_gestures_enabled)
         self.apply_theme(self.is_dark)
 
     def _set_model_source(self, mode: str, source: str):
@@ -994,6 +1165,59 @@ class GameMode(QWidget):
                 QPushButton:hover {{ background-color: {hover}; }}
             """)
 
+        self.backend_panel.setStyleSheet(
+            f"background-color: {panel}; border: 1px solid {border};")
+        self.backend_hdr_lbl.setStyleSheet(
+            f"font-size: 9px; font-weight: 700; color: {text}; letter-spacing: 1.5px; background: transparent; border: none;")
+        self.backend_sub_lbl.setStyleSheet(
+            f"font-size: 8px; color: {muted}; letter-spacing: 1px; background: transparent; border: none;")
+        for b, btn in self._backend_btns.items():
+            if b == self._chatbot_backend:
+                btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {tog_on_bg}; color: {tog_on_txt};
+                        font-size: 8px; font-weight: 700; letter-spacing: 1px;
+                        border: 1px solid {tog_on_bg}; border-radius: 2px;
+                    }}
+                """)
+            else:
+                btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {tog_off_bg}; color: {tog_off_txt};
+                        font-size: 8px; font-weight: 700; letter-spacing: 1px;
+                        border: 1px solid {border}; border-radius: 2px;
+                    }}
+                    QPushButton:hover {{ background-color: {hover}; color: {text}; }}
+                """)
+
+        self.apikey_panel.setStyleSheet(
+            f"background-color: {panel}; border: 1px solid {border};")
+        self.apikey_hdr_lbl.setStyleSheet(
+            f"font-size: 9px; font-weight: 700; color: {text}; letter-spacing: 1.5px; background: transparent; border: none;")
+        self.apikey_sub_lbl.setStyleSheet(
+            f"font-size: 8px; color: {muted}; letter-spacing: 1px; background: transparent; border: none;")
+        self.apikey_input.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: {bg}; color: {text};
+                border: 1px solid {border}; border-radius: 2px;
+                padding: 0 6px; font-size: 10px;
+            }}
+            QLineEdit:focus {{ border-color: {tog_on_bg}; }}
+        """)
+        for btn in (self.apikey_show_btn, self.apikey_save_btn):
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {tog_off_bg}; color: {tog_off_txt};
+                    font-size: 8px; font-weight: 700; letter-spacing: 1px;
+                    border: 1px solid {border}; border-radius: 2px;
+                }}
+                QPushButton:hover {{ background-color: {hover}; color: {text}; }}
+            """)
+        self.apikey_status_lbl.setStyleSheet(
+            "font-size: 8px; font-weight: 700; color: #2E7D32; letter-spacing: 1px; background: transparent; border: none;")
+
+        self.div1h.setStyleSheet(f"background-color: {border};")
+
         self.div1g.setStyleSheet(f"background-color: {border};")
 
         self.overlay_panel.setStyleSheet(
@@ -1136,25 +1360,33 @@ class GameMode(QWidget):
             """
             if self._custom_mode_combo:
                 self._custom_mode_combo.setStyleSheet(combo_style)
-            cur_id = self._selected_custom_id
-            model_exists = _custom_game_mode_model_exists(cur_id) if cur_id else False
-            for src_key, btn in self._custom_src_btns.items():
-                is_active = (src_key == self._custom_src) and model_exists
-                if is_active:
-                    btn.setStyleSheet(f"""
-                        QPushButton {{
-                            background-color: {src_active_bg}; color: {src_active_txt};
-                            font-size: 7px; font-weight: 700; letter-spacing: 1px;
-                            border: 1px solid {src_active_bg}; border-radius: 2px;
-                        }}
-                    """)
-                else:
-                    btn.setStyleSheet(f"""
-                        QPushButton {{
-                            background-color: transparent; color: {dim};
-                            font-size: 7px; font-weight: 700; letter-spacing: 1px;
-                            border: 1px solid {border}; border-radius: 2px;
-                        }}
-                        QPushButton:hover {{ background-color: {hover}; color: {text}; }}
-                        QPushButton:disabled {{ color: {border}; border-color: {border}; }}
-                    """)
+
+        if hasattr(self, 'div1i'):
+            self.div1i.setStyleSheet(f"background-color: {border};")
+
+        if hasattr(self, 'meta_gestures_panel'):
+            self.meta_gestures_panel.setStyleSheet(
+                f"background-color: {panel}; border: 1px solid {border};")
+            self.meta_gestures_hdr_lbl.setStyleSheet(
+                f"font-size: 9px; font-weight: 700; color: {text}; letter-spacing: 1.5px; background: transparent; border: none;")
+            self.meta_gestures_sub_lbl.setStyleSheet(
+                f"font-size: 8px; color: {muted}; letter-spacing: 1px; background: transparent; border: none;")
+            if self._custom_meta_gestures_enabled:
+                self.meta_gestures_toggle_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {tog_on_bg}; color: {tog_on_txt};
+                        font-size: 8px; font-weight: 700; letter-spacing: 1px;
+                        border: 1px solid {tog_on_bg}; border-radius: 2px;
+                    }}
+                """)
+            else:
+                self.meta_gestures_toggle_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {tog_off_bg}; color: {tog_off_txt};
+                        font-size: 8px; font-weight: 700; letter-spacing: 1px;
+                        border: 1px solid {border}; border-radius: 2px;
+                    }}
+                    QPushButton:hover {{ background-color: {hover}; }}
+                """)
+        if hasattr(self, 'div1j'):
+            self.div1j.setStyleSheet(f"background-color: {border};")

@@ -33,8 +33,9 @@ class GestureGuide(QWidget):
                         {"img": "assets/gestures/general/game_option_two.png",   "n": "07", "name": "Game Option 2 - Subway Mode",      "desc": "One hand fist + other hand 2 fingers raised, hold for 5 s to switch to Subway mode",        "tag": "GAME OPTION"},
                         {"img": "assets/gestures/general/game_option_three.png", "n": "08", "name": "Game Option 3 - Racing Mode",      "desc": "One hand fist + other hand 3 fingers raised, hold for 5 s to switch to Racing mode",        "tag": "GAME OPTION"},
                         {"img": "assets/gestures/general/game_option_four.png",  "n": "09", "name": "Game Option 4 - Open World",      "desc": "One hand fist + other hand 4 fingers raised, hold for 5 s to switch to Open World mode",    "tag": "GAME OPTION"},
-                        {"img": "assets/gestures/general/mouse_in_game.png",     "n": "10", "name": "Mouse in Game",                    "desc": "One hand devil horn + other hand index finger raised to navigate with mouse in game",       "tag": "SYSTEM"},
-                        {"img": "assets/gestures/general/exit.png",              "n": "11", "name": "Exit / Close",                     "desc": "Close both hands into fists simultaneously to exit the application",                        "tag": "SYSTEM"},
+                        {"img": "assets/gestures/general/game_option_five.png",  "n": "10", "name": "Game Option 5 - Air Hockey",      "desc": "One hand fist + other hand 5 fingers raised, hold for 5 s to switch to Air Hockey mode",    "tag": "GAME OPTION"},
+                        {"img": "assets/gestures/general/mouse_in_game.png",     "n": "11", "name": "Mouse in Game",                    "desc": "One hand devil horn + other hand index finger raised to navigate with mouse in game",       "tag": "SYSTEM"},
+                        {"img": "assets/gestures/general/exit.png",              "n": "12", "name": "Exit / Close",                     "desc": "Close both hands into fists simultaneously to exit the application",                        "tag": "SYSTEM"},
                     ],
                 },
             ],
@@ -102,6 +103,22 @@ class GestureGuide(QWidget):
                         {"img": "assets/gestures/racing/brake_accelerate.png","n": "06", "name": "Brake + Accelerate",             "desc": "Both thumbs up simultaneously",                                                           "tag": "COMBO"},
                         {"img": "assets/gestures/racing/camera.png",          "n": "07", "name": "Camera - Change Angle",          "desc": "Left hand index and middle fingers pointing forward to change the in-game camera angle",  "tag": "RACING"},
                         {"img": "assets/gestures/racing/horn.png",            "n": "08", "name": "Horn",                           "desc": "Right hand index and middle fingers pointing forward to sound the horn",                  "tag": "RACING"},
+                    ],
+                },
+            ],
+            "Air Hockey": [
+                {
+                    "label": "05  ·  AIR HOCKEY",
+                    "gestures": [
+                        {"img": "assets/gestures/airhockey/split.png",    "n": "01", "name": "Player Zones - Split Screen",      "desc": "Left half of the camera frame controls Player 1, right half controls Player 2 - each player uses two hands",         "tag": "SYSTEM"},
+                        {"img": "assets/gestures/airhockey/paddle.png",   "n": "02", "name": "Right Hand - Move Paddle (P1/P2)",  "desc": "Move your right hand within your zone box to steer your paddle up/down/left/right",                                 "tag": "MOVEMENT"},
+                        {"img": "assets/gestures/airhockey/one_up.png",   "n": "03", "name": "One Finger - Shield (P1/P2)",       "desc": "Raise 1 finger on your left hand to activate Shield - blocks the next shot at your goal for 2s",                     "tag": "SKILL"},
+                        {"img": "assets/gestures/airhockey/two_up.png",   "n": "04", "name": "Two Fingers - Freeze (P1/P2)",      "desc": "Raise 2 fingers on your left hand to activate Freeze - locks your opponent's paddle for 1s",                         "tag": "SKILL"},
+                        {"img": "assets/gestures/airhockey/three_up.png", "n": "05", "name": "Three Fingers - Double Puck (P1/P2)","desc": "Raise 3 fingers on your left hand to activate Double Puck - adds a 2nd puck in play for 6s, either can score",        "tag": "SKILL"},
+                        {"img": "assets/gestures/airhockey/four_up.png",  "n": "06", "name": "Four Fingers - Slow Puck (P1/P2)",  "desc": "Raise 4 fingers on your left hand to activate Slow Puck - slows the puck 40% on your half while held, up to 3s",     "tag": "SKILL"},
+                        {"img": "assets/gestures/airhockey/five_up.png",  "n": "07", "name": "Five Fingers - Speed Puck (P1/P2)", "desc": "Raise 5 fingers on your left hand to activate Speed Puck - your next puck hit gets +50% speed for a 2s window",      "tag": "SKILL"},
+                        {"img": "assets/gestures/general/mouse_in_game.png", "n": "08", "name": "Mouse in Game",              "desc": "Devil horn + other hand raised pauses the split-screen paddles and switches the whole screen to normal Mouse Mode control, same as other modes - release devil horn to return to Air Hockey",  "tag": "SYSTEM"},
+                        {"img": "assets/gestures/general/game_option_one.png",   "n": "09", "name": "Game Option 1-4 - Switch Mode", "desc": "One hand fist + other hand 1-4 fingers raised, hold for 5 s to leave Air Hockey for Mouse/Subway/Racing/Open World - works for either player",  "tag": "GAME OPTION"},
                     ],
                 },
             ],
@@ -229,7 +246,7 @@ class GestureGuide(QWidget):
         if img_path:
             pix = QPixmap(os.path.join(_BASE, img_path))
             if not pix.isNull():
-                img.setPixmap(pix.scaled(130, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                img.setPixmap(pix.scaled(110, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation))
             else:
                 img.setText("NO IMAGE")
         else:

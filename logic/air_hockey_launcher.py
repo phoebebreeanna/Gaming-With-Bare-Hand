@@ -6,10 +6,14 @@ HOCKEY_GAME_DIR = Path(__file__).resolve().parent.parent / "hockey_game"
 
 
 def is_available() -> bool:
+    if getattr(sys, 'frozen', False):
+        return True
     return (HOCKEY_GAME_DIR / "main.py").exists()
 
 
 def launch() -> subprocess.Popen:
+    if getattr(sys, 'frozen', False):
+        return subprocess.Popen([sys.executable, "--run-hockey"])
     if not is_available():
         raise FileNotFoundError(f"hockey_game/main.py not found at {HOCKEY_GAME_DIR}")
     return subprocess.Popen(

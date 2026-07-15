@@ -71,7 +71,7 @@ _DIM       = "#666666"
 
 def load_conf(path):
     cfg = configparser.ConfigParser()
-    cfg.read(path)
+    cfg.read(path, encoding='utf-8')
     base         = os.path.dirname(os.path.abspath(path))
     data_dir     = cfg['files'].get('data_dir', 'data')
     full_data_dir = os.path.join(base, data_dir)
@@ -122,7 +122,7 @@ def diversity_hint(count, diversity_every):
 def count_existing(csv_path, gestures):
     counts = {g: 0 for g in gestures}
     if os.path.exists(csv_path) and os.path.getsize(csv_path) > 0:
-        with open(csv_path, 'r') as f:
+        with open(csv_path, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row in reader:
                 if row['label'] in counts:
@@ -134,7 +134,8 @@ def delete_label_from_csv(csv_path, label):
         return 0
     removed = 0
     tmp = csv_path + '.tmp'
-    with open(csv_path, 'r', newline='') as fin, open(tmp, 'w', newline='') as fout:
+    with open(csv_path, 'r', newline='', encoding='utf-8') as fin, \
+            open(tmp, 'w', newline='', encoding='utf-8') as fout:
         reader = csv.DictReader(fin)
         writer = csv.DictWriter(fout, fieldnames=reader.fieldnames)
         writer.writeheader()
@@ -167,7 +168,7 @@ def _open_csv(csv_path, gestures):
     header = header_coords + ['label']
     os.makedirs(os.path.dirname(os.path.abspath(csv_path)), exist_ok=True)
     exists = os.path.exists(csv_path) and os.path.getsize(csv_path) > 0
-    fh = open(csv_path, 'a', newline='')
+    fh = open(csv_path, 'a', newline='', encoding='utf-8')
     cw = csv.writer(fh)
     if not exists:
         cw.writerow(header)
@@ -527,7 +528,7 @@ def run_preprocess(cfg, mirror=False):
                 out_rows.append(aug + compute_delta(aug, aug_prev) + [label])
                 aug_prev = aug
 
-    with open(out_path, 'w', newline='') as f:
+    with open(out_path, 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
         writer.writerow(HEADER)
         writer.writerows(out_rows)

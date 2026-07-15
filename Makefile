@@ -21,25 +21,33 @@ icon-mac: $(ICON_PNG)
 	iconutil -c icns "$(ICONSET_DIR)" -o "$(ICON_MAC)"
 	rm -rf "$(ICONSET_DIR)"
 
+DMG_NAME = HandMouse.dmg
+APP_NAME = HandMouse
+
 run:
 	python main.py
 
-build-mac:
-	pyinstaller main.py --noconsole --onedir --windowed --noconfirm \
-		--icon="$(ICON_MAC)" \
-		--add-data="assets:assets" \
-		--add-data="logic/data:logic/data" \
-		--add-data="logic/conf:logic/conf" \
-		--collect-all numpy \
-		--collect-all cv2 \
-		--collect-all mediapipe \
-		--collect-all scipy \
-		--collect-all sklearn \
-		--exclude-module libiconv
+# Builds dist/HandMouse.app from main.spec (the single source of truth for
+# what gets bundled - see collect_all/datas at the top of main.spec).
+build-mac-app:
+	pyinstaller main.spec --noconfirm
 	/usr/libexec/PlistBuddy -c \
 		"Add :NSCameraUsageDescription string 'HandMouse uses the camera to detect hand gestures for mouse control.'" \
-		dist/main.app/Contents/Info.plist
-	codesign --force --deep --sign - dist/main.app
+		dist/HandMouse.app/Contents/Info.plist
+	codesign --force --deep --sign - dist/HandMouse.app
+
+# Wraps dist/HandMouse.app in a distributable .dmg with a drag-to-Applications
+# layout. Requires `brew install create-dmg`.
+build-mac-dmg: build-mac-app
+	rm -f "dist/$(DMG_NAME)"
+	create-dmg \
+		--volname "$(APP_NAME)" \
+		--window-size 500 320 \
+		--icon-size 100 \
+		--icon "HandMouse.app" 130 120 \
+		--app-drop-link 370 120 \
+		"dist/$(DMG_NAME)" \
+		"dist/HandMouse.app"
 
 build-win:
 	pyinstaller main.py --noconsole --onedir \
@@ -57,4 +65,4 @@ eval:
 	cd research && python evaluate.py dataset
 
 clean:
-	rm -rf build dist *.spec
+	rm -rf build dist

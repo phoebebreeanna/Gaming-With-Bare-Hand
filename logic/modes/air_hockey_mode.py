@@ -1,7 +1,11 @@
 import cv2
 import pyautogui
 
-from logic.hand_utils import draw_hand, draw_zone_rect, draw_wrist_marker, count_fingers_up_5
+from logic.hand_utils import (
+    draw_hand, draw_zone_rect, draw_wrist_marker, draw_finger_dot, count_fingers_up_5,
+    is_devil_horn, split_hands_by_handedness, MOUSE_CONF_THRESH,
+)
+from logic.gesture_net import run_nn
 
 AH_KEYS = {
     1: {
@@ -26,6 +30,7 @@ AH_SKILL_DEBOUNCE = 0.18
 AH_COLOR_MOVER = (80, 200, 255)
 AH_COLOR_SKILL = (255, 170, 60)
 AH_COLOR_DIVIDER = (120, 120, 120)
+AH_COLOR_DEVILHORN = (255, 100, 0)
 
 
 class AirHockeyModeMixin:
@@ -39,13 +44,17 @@ class AirHockeyModeMixin:
     def _ah_set_held_keys(self, player, desired):
         held = self.ah_held_keys[player]
         for k in list(held - desired):
-            try: pyautogui.keyUp(k)
-            except Exception: pass
-            held.discard(k)
+            try:
+                pyautogui.keyUp(k)
+                held.discard(k)
+            except Exception:
+                pass
         for k in list(desired - held):
-            try: pyautogui.keyDown(k)
-            except Exception: pass
-            held.add(k)
+            try:
+                pyautogui.keyDown(k)
+                held.add(k)
+            except Exception:
+                pass
 
     def _ah_release_all(self):
         if not hasattr(self, 'ah_held_keys'):
@@ -71,9 +80,9 @@ class AirHockeyModeMixin:
         roles = {1: {'mover': None, 'skill': None}, 2: {'mover': None, 'skill': None}}
         for half, hands in buckets.items():
             for hand, handed in hands:
-                if handed == 'Left' and roles[half]['mover'] is None:
+                if handed == 'Right' and roles[half]['mover'] is None:
                     roles[half]['mover'] = hand
-                elif handed == 'Right' and roles[half]['skill'] is None:
+                elif handed == 'Left' and roles[half]['skill'] is None:
                     roles[half]['skill'] = hand
             for hand, handed in hands:
                 if hand is roles[half]['mover'] or hand is roles[half]['skill']:
@@ -122,7 +131,8 @@ class AirHockeyModeMixin:
         if held_for >= AH_SKILL_DEBOUNCE:
             if raw_n == 0:
                 self.ah_last_fired[player] = 0
-            elif 1 <= raw_n <= 5 and raw_n != self.ah_last_fired[player]:
+            elif (1 <= raw_n <= 5 and raw_n != self.ah_last_fired[player]
+                    and mover_lms is not None):
                 try: pyautogui.press(keys['skills'][raw_n])
                 except Exception: pass
                 self.ah_last_fired[player] = raw_n
@@ -143,6 +153,52 @@ class AirHockeyModeMixin:
         }
 
     def _tick_air_hockey_mode(self, lms, lms2, result, display, now, game_opt_frac):
+        user_left, user_right = split_hands_by_handedness(result)
+        if self._mouse_side == 'right':
+            devil_hand_lms = user_right
+            mouse_hand_lms = user_left
+        else:
+            devil_hand_lms = user_left
+            mouse_hand_lms = user_right
+
+        devil_horn = (self._mouse_in_game_enabled and
+                      devil_hand_lms is not None and is_devil_horn(devil_hand_lms))
+        if devil_horn != self._devilhorn_mouse:
+            self.mouse_prev_row     = None
+            self.left_click_entry_t = None
+            self.right_click_armed  = True
+            self.scroll_entry_t     = None
+            self.scroll_active      = False
+            if not devil_horn:
+                self._release_drag()
+            self._ah_release_all()
+            self.ah_skill_raw         = {1: 0, 2: 0}
+            self.ah_skill_count_since = {1: None, 2: None}
+            self.ah_last_fired        = {1: 0, 2: 0}
+            self._set_zone(self.chosen_zone)
+        self._devilhorn_mouse = devil_horn
+
+        if devil_horn:
+            gesture_m = 'idle'
+            if mouse_hand_lms:
+                gesture_m, _, self.mouse_prev_row = run_nn(
+                    mouse_hand_lms, self.mouse_prev_row,
+                    self.mouse_model, self.mouse_le, MOUSE_CONF_THRESH)
+                self._run_mouse_gesture(gesture_m, mouse_hand_lms, now)
+                draw_hand(display, mouse_hand_lms)
+                draw_finger_dot(display, mouse_hand_lms, gesture_m, self.tm_drag_active, self._cursor_lm)
+            draw_hand(display, devil_hand_lms, AH_COLOR_DEVILHORN)
+            self.gesture_changed.emit(
+                f'MOUSE: {gesture_m.upper().replace("_", " ")}', 'Devil horn mouse mode')
+            self.running_data.emit({
+                'mode': 'air_hockey', 'devilhorn': True,
+                'gesture': gesture_m,
+                'game_opt_num': self.game_opt_number or 0,
+                'game_opt_frac': game_opt_frac,
+                'meta': {'game_opt': game_opt_frac},
+            })
+            return
+
         self._ah_draw_overlay(display)
         roles = self._ah_classify(result)
         p1 = self._ah_tick_player(1, roles[1]['mover'], roles[1]['skill'], now, display)

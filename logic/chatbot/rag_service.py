@@ -1,10 +1,30 @@
+import os
+import shutil
+import sys
 import threading
 import urllib.request
 from pathlib import Path
 
-DATA_DIR = Path(__file__).parent / "data"
-PERSIST_DIR = Path(__file__).parent / "chroma_db"
-MODELS_DIR = Path(__file__).parent / "models"
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+_BUNDLE_DIR = Path(__file__).parent
+DATA_DIR = _BUNDLE_DIR / "data"
+
+if getattr(sys, 'frozen', False):
+    _WRITABLE_DIR = Path.home() / "Library" / "Application Support" / "HandMouse" / "chatbot"
+    PERSIST_DIR = _WRITABLE_DIR / "chroma_db"
+    MODELS_DIR = _WRITABLE_DIR / "models"
+    _bundled_chroma_db = _BUNDLE_DIR / "chroma_db"
+    if not PERSIST_DIR.exists() and _bundled_chroma_db.exists():
+        PERSIST_DIR.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(_bundled_chroma_db, PERSIST_DIR)
+else:
+    PERSIST_DIR = _BUNDLE_DIR / "chroma_db"
+    MODELS_DIR = _BUNDLE_DIR / "models"
 COLLECTION_NAME = "handmouse_docs"
 EMBED_MODEL_NAME = "BAAI/bge-small-en-v1.5"
 QUERY_INSTRUCTION = "Represent this sentence for searching relevant passages: "
@@ -17,7 +37,12 @@ PRIMARY_MODEL_URL = (
     "qwen2.5-3b-instruct-q4_k_m.gguf"
 )
 
+OPENAI_MODEL_NAME = "gpt-4o-mini"
+
 NOT_FOUND_MESSAGE = "I'm not sure about that - it isn't covered in the guide."
+SWITCH_TO_LOCAL_MESSAGE = (
+    "Error: couldn't reach the ChatGPT API - please switch to Local in Settings."
+)
 
 
 class ChatbotUnavailableError(Exception):
@@ -128,35 +153,14 @@ def _qwen_completion_to_prompt(completion: str) -> str:
     return f"<|im_start|>user\n{completion}<|im_end|>\n<|im_start|>assistant\n"
 
 
-def _load_engine():
+def _base_query_engine():
     import chromadb
-    from llama_index.core import Settings, VectorStoreIndex
+    from llama_index.core import VectorStoreIndex
     from llama_index.core.postprocessor import SimilarityPostprocessor
-    from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-    from llama_index.llms.llama_cpp import LlamaCPP
     from llama_index.vector_stores.chroma import ChromaVectorStore
-
-    if not is_primary_model_ready():
-        raise ChatbotUnavailableError(
-            "The chatbot model hasn't been downloaded yet."
-        )
 
     if not PERSIST_DIR.exists():
         _build_index()
-
-    Settings.embed_model = HuggingFaceEmbedding(
-        model_name=EMBED_MODEL_NAME, query_instruction=QUERY_INSTRUCTION
-    )
-    Settings.llm = LlamaCPP(
-        model_path=str(_primary_model_path()),
-        temperature=0.2,
-        max_new_tokens=512,
-        context_window=12000,
-        model_kwargs={"n_gpu_layers": -1},
-        generate_kwargs={"stop": ["<|im_end|>", "<|im_start|>", "\nQuestion:", "Question:"]},
-        completion_to_prompt=_qwen_completion_to_prompt,
-        verbose=False,
-    )
 
     chroma_client = chromadb.PersistentClient(path=str(PERSIST_DIR))
     chroma_collection = chroma_client.get_or_create_collection(
@@ -174,22 +178,92 @@ def _load_engine():
     return query_engine
 
 
-_engine = None
+def _load_local_engine():
+    from llama_index.core import Settings
+    from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+    from llama_index.llms.llama_cpp import LlamaCPP
+
+    if not is_primary_model_ready():
+        raise ChatbotUnavailableError(
+            "The chatbot model hasn't been downloaded yet."
+        )
+
+    Settings.embed_model = HuggingFaceEmbedding(
+        model_name=EMBED_MODEL_NAME, query_instruction=QUERY_INSTRUCTION
+    )
+    Settings.llm = LlamaCPP(
+        model_path=str(_primary_model_path()),
+        temperature=0.2,
+        max_new_tokens=512,
+        context_window=12000,
+        model_kwargs={"n_gpu_layers": -1},
+        generate_kwargs={"stop": ["<|im_end|>", "<|im_start|>", "\nQuestion:", "Question:"]},
+        completion_to_prompt=_qwen_completion_to_prompt,
+        verbose=False,
+    )
+    return _base_query_engine()
+
+
+def _load_openai_engine():
+    from llama_index.core import Settings
+    from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+    from llama_index.llms.openai import OpenAI
+
+    from logic.app_config import get_openai_api_key
+
+    api_key = get_openai_api_key() or os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        raise ChatbotUnavailableError(
+            "No ChatGPT API key found - add one in Settings under AI Backend."
+        )
+
+    Settings.embed_model = HuggingFaceEmbedding(
+        model_name=EMBED_MODEL_NAME, query_instruction=QUERY_INSTRUCTION
+    )
+    Settings.llm = OpenAI(
+        api_key=api_key,
+        model=OPENAI_MODEL_NAME,
+        temperature=0.2,
+        max_tokens=512,
+    )
+    return _base_query_engine()
+
+
+_ENGINE_LOADERS = {
+    "local": _load_local_engine,
+    "openai": _load_openai_engine,
+}
+
+_engines = {}
 _engine_lock = threading.Lock()
 
 
-def _get_engine():
-    global _engine
-    if _engine is None:
+def _get_engine(backend: str):
+    if backend not in _ENGINE_LOADERS:
+        backend = "local"
+    if backend not in _engines:
         with _engine_lock:
-            if _engine is None:
-                _engine = _load_engine()
-    return _engine
+            if backend not in _engines:
+                _engines[backend] = _ENGINE_LOADERS[backend]()
+    return _engines[backend]
 
 
-def ask_realtime(question: str) -> str:
+def is_engine_ready(backend: str = "local") -> bool:
+    return backend in _engines
+
+
+def reset_engine(backend: str = "openai") -> None:
+    with _engine_lock:
+        _engines.pop(backend, None)
+
+
+def warm_up_engine(backend: str = "local") -> None:
+    _get_engine(backend)
+
+
+def ask_realtime(question: str, backend: str = "local") -> str:
     try:
-        engine = _get_engine()
+        engine = _get_engine(backend)
     except ImportError as e:
         raise ChatbotUnavailableError(
             "Chatbot dependencies aren't installed - run "
@@ -198,14 +272,18 @@ def ask_realtime(question: str) -> str:
     except ChatbotUnavailableError:
         raise
     except Exception as e:
-        raise ChatbotUnavailableError(
-            "Couldn't load the local chatbot model - please try again."
-        ) from e
+        message = (
+            SWITCH_TO_LOCAL_MESSAGE if backend == "openai"
+            else "Couldn't load the local chatbot model - please try again."
+        )
+        raise ChatbotUnavailableError(message) from e
 
     try:
         response = engine.query(question)
         return str(response)
     except Exception as e:
-        raise ChatbotUnavailableError(
-            "The chatbot couldn't answer that - please try again."
-        ) from e
+        message = (
+            SWITCH_TO_LOCAL_MESSAGE if backend == "openai"
+            else "The chatbot couldn't answer that - please try again."
+        )
+        raise ChatbotUnavailableError(message) from e

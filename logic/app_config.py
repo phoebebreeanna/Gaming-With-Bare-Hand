@@ -27,15 +27,15 @@ else:
 
 def _read() -> dict:
     try:
-        with open(_CONFIG_FILE) as f:
+        with open(_CONFIG_FILE, encoding='utf-8') as f:
             return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
+    except (FileNotFoundError, json.JSONDecodeError, UnicodeDecodeError):
         return {}
 
 def _write(config: dict) -> None:
     try:
-        with open(_CONFIG_FILE, 'w') as f:
-            json.dump(config, f, indent=2)
+        with open(_CONFIG_FILE, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=2, ensure_ascii=False)
     except OSError:
         pass
 
@@ -130,6 +130,30 @@ def set_mini_overlay_enabled(enabled: bool) -> None:
     config['mini_overlay_enabled'] = enabled
     _write(config)
 
+def get_custom_meta_gestures_enabled() -> bool:
+    return _read().get('custom_meta_gestures_enabled', True)
+
+def set_custom_meta_gestures_enabled(enabled: bool) -> None:
+    config = _read()
+    config['custom_meta_gestures_enabled'] = enabled
+    _write(config)
+
+def get_chatbot_backend() -> str:
+    return _read().get('chatbot_backend', 'local')
+
+def set_chatbot_backend(backend: str) -> None:
+    config = _read()
+    config['chatbot_backend'] = backend
+    _write(config)
+
+def get_openai_api_key() -> str:
+    return _read().get('openai_api_key', '')
+
+def set_openai_api_key(key: str) -> None:
+    config = _read()
+    config['openai_api_key'] = key
+    _write(config)
+
 
 def get_key_bindings(mode: str) -> dict:
     defaults = BINDINGS_DEFAULT.get(mode, {})
@@ -185,6 +209,14 @@ def delete_custom_mode(mode_id: str) -> None:
         config['key_bindings'].pop(f'custom_{mode_id}', None)
     _write(config)
 
+    import shutil
+    mode_dir = get_custom_mode_dir(mode_id)
+    if os.path.isdir(mode_dir):
+        try:
+            shutil.rmtree(mode_dir)
+        except OSError as e:
+            print(f"[CustomMode] Couldn't remove {mode_dir}: {e}")
+
 def get_selected_custom_mode_id() -> str:
     config = _read()
     modes  = config.get('custom_modes', [])
@@ -196,14 +228,6 @@ def get_selected_custom_mode_id() -> str:
 def set_selected_custom_mode_id(mode_id: str) -> None:
     config = _read()
     config['selected_custom_mode_id'] = mode_id
-    _write(config)
-
-def get_selected_custom_mode_source() -> str:
-    return _read().get('selected_custom_mode_source', 'custom')
-
-def set_selected_custom_mode_source(source: str) -> None:
-    config = _read()
-    config['selected_custom_mode_source'] = source
     _write(config)
 
 def get_custom_data_root() -> str:
@@ -250,6 +274,6 @@ def generate_custom_conf(mode: dict) -> str:
         'model_out':    'gesture_model.pt',
         'label_encoder':'label_encoder.pkl',
     }
-    with open(conf_path, 'w') as f:
+    with open(conf_path, 'w', encoding='utf-8') as f:
         cfg.write(f)
     return conf_path

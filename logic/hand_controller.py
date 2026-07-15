@@ -119,6 +119,7 @@ class CameraPreviewThread(QThread):
 
         cap = _open_camera(self.camera_index)
         if not cap.isOpened():
+            cap.release()
             detector.close()
             return
         cap.set(cv2.CAP_PROP_FRAME_WIDTH,  640)
@@ -126,54 +127,63 @@ class CameraPreviewThread(QThread):
         cap.set(cv2.CAP_PROP_FPS,          30)
         cap.set(cv2.CAP_PROP_BUFFERSIZE,   1)
 
-        while self._running and cap.isOpened():
-            ret, frame = cap.read()
-            if not ret:
-                break
-            frame  = cv2.flip(frame, 1)
-            ts_ms  = int(time.time() * 1000)
-            rgb    = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        try:
+            while self._running and cap.isOpened():
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                frame  = cv2.flip(frame, 1)
+                ts_ms  = int(time.time() * 1000)
+                rgb    = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                try:
+                    result = detector.detect_for_video(
+                        mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb), ts_ms)
+                except Exception:
+                    result = None
+
+                display  = rgb.copy()
+                has_hand = bool(result and result.hand_landmarks)
+                lms      = result.hand_landmarks[0] if has_hand else None
+
+                if lms:
+                    draw_hand(display, lms)
+                    self.distance_ready.emit(hand_size(lms), True)
+                    self.fingers_ready.emit(count_fingers_up(lms), True)
+                else:
+                    self.distance_ready.emit(0.0, False)
+                    self.fingers_ready.emit(0, False)
+
+                self._telem_frame += 1
+                if self._telem_frame % 10 == 0:
+                    gray    = cv2.cvtColor(display, cv2.COLOR_RGB2GRAY)
+                    mean_b  = float(np.mean(gray))
+                    lighting = "DIM" if mean_b < 55 else ("BRIGHT" if mean_b > 200 else "GOOD")
+
+                    h_f, w_f = gray.shape
+                    corners = [
+                        gray[:h_f//4, :w_f//4],
+                        gray[:h_f//4, 3*w_f//4:],
+                        gray[3*h_f//4:, :w_f//4],
+                        gray[3*h_f//4:, 3*w_f//4:],
+                    ]
+                    corner_std  = float(np.mean([np.std(c) for c in corners]))
+                    background  = "CLEAR" if corner_std < 20 else ("OK" if corner_std < 50 else "CLUTTERED")
+                    self.telemetry_ready.emit(lighting, background)
+
+                h, w, ch = display.shape
+                qt_img = QImage(display.data, w, h, ch * w, QImage.Format_RGB888)
+                self.frame_ready.emit(qt_img.copy())
+        except Exception as e:
+            print(f"[Preview] Tracking loop crashed: {e}")
+        finally:
             try:
-                result = detector.detect_for_video(
-                    mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb), ts_ms)
+                cap.release()
             except Exception:
-                result = None
-
-            display  = rgb.copy()
-            has_hand = bool(result and result.hand_landmarks)
-            lms      = result.hand_landmarks[0] if has_hand else None
-
-            if lms:
-                draw_hand(display, lms)
-                self.distance_ready.emit(hand_size(lms), True)
-                self.fingers_ready.emit(count_fingers_up(lms), True)
-            else:
-                self.distance_ready.emit(0.0, False)
-                self.fingers_ready.emit(0, False)
-
-            self._telem_frame += 1
-            if self._telem_frame % 10 == 0:
-                gray    = cv2.cvtColor(display, cv2.COLOR_RGB2GRAY)
-                mean_b  = float(np.mean(gray))
-                lighting = "DIM" if mean_b < 55 else ("BRIGHT" if mean_b > 200 else "GOOD")
-
-                h_f, w_f = gray.shape
-                corners = [
-                    gray[:h_f//4, :w_f//4],
-                    gray[:h_f//4, 3*w_f//4:],
-                    gray[3*h_f//4:, :w_f//4],
-                    gray[3*h_f//4:, 3*w_f//4:],
-                ]
-                corner_std  = float(np.mean([np.std(c) for c in corners]))
-                background  = "CLEAR" if corner_std < 20 else ("OK" if corner_std < 50 else "CLUTTERED")
-                self.telemetry_ready.emit(lighting, background)
-
-            h, w, ch = display.shape
-            qt_img = QImage(display.data, w, h, ch * w, QImage.Format_RGB888)
-            self.frame_ready.emit(qt_img.copy())
-
-        cap.release()
-        detector.close()
+                pass
+            try:
+                detector.close()
+            except Exception:
+                pass
 
 class HandControllerThread(
     MouseModeMixin, SubwayModeMixin, RacingModeMixin, OpenWorldModeMixin, CustomModeMixin,
@@ -214,6 +224,7 @@ class HandControllerThread(
         self._cursor_point          = cursor_point
         self._right_half_mode       = False
         self._mouse_side            = sources.get('mouse_side', 'right')
+        self._custom_meta_gestures_enabled = sources.get('custom_meta_gestures', True)
 
         def _pick(mode, default_w, default_e, custom_w, custom_e):
             if sources.get(mode) == 'custom' and os.path.exists(custom_w) and os.path.exists(custom_e):
@@ -446,7 +457,15 @@ class HandControllerThread(
         elif opt == 6:
             self.active_game_mode  = 6
             self._right_half_mode  = False
+            self._set_zone(self.chosen_zone)
             self._init_ah_state()
+            self._devilhorn_mouse   = False
+            self.mouse_prev_row     = None
+            self.left_click_entry_t = None
+            self._pending_left_click = False
+            self.right_click_armed  = True
+            self.scroll_entry_t     = None
+            self.scroll_active      = False
             self.game_mode_changed.emit('air_hockey')
 
     def switch_game_mode(self, mode: str):
@@ -498,6 +517,9 @@ class HandControllerThread(
 
     def set_mouse_in_game(self, enabled: bool):
         self._mouse_in_game_enabled = enabled
+
+    def set_custom_meta_gestures_enabled(self, enabled: bool):
+        self._custom_meta_gestures_enabled = enabled
 
     def set_mouse_side(self, side: str):
         self._mouse_side = side
@@ -565,6 +587,7 @@ class HandControllerThread(
         cap = _open_camera(self.camera_index)
         if not cap.isOpened():
             self.error_occurred.emit(f"Cannot open camera {self.camera_index}")
+            cap.release()
             detector.close()
             return
         cap.set(cv2.CAP_PROP_FRAME_WIDTH,  640)
@@ -653,271 +676,284 @@ class HandControllerThread(
         game_opt_hold_t  = None
         game_opt_frac    = 0.0
 
-        while self._running and cap.isOpened():
-            if not self._paused_event.is_set():
-                time.sleep(0.01); continue
+        try:
+            while self._running and cap.isOpened():
+                if not self._paused_event.is_set():
+                    time.sleep(0.01); continue
 
-            ret, frame = cap.read()
-            if not ret: break
-            t_frame = time.time()
+                ret, frame = cap.read()
+                if not ret: break
+                t_frame = time.time()
 
-            frame = cv2.flip(frame, 1)
-            ts_ms = int(t_frame * 1000)
-            with _fl:
-                _latest_frame[0] = frame.copy()
-                _latest_ts[0]    = ts_ms
-            with _rl:
-                result    = _latest_result[0]
-                result_ts = _latest_result_ts[0]
-            self._current_frame_t = result_ts
+                frame = cv2.flip(frame, 1)
+                ts_ms = int(t_frame * 1000)
+                with _fl:
+                    _latest_frame[0] = frame.copy()
+                    _latest_ts[0]    = ts_ms
+                with _rl:
+                    result    = _latest_result[0]
+                    result_ts = _latest_result_ts[0]
+                self._current_frame_t = result_ts
 
-            has_hand = bool(result and result.hand_landmarks)
-            lms  = result.hand_landmarks[0] if has_hand else None
-            lms2 = result.hand_landmarks[1] if (has_hand and len(result.hand_landmarks) > 1) else None
-            display = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            now     = time.time()
+                has_hand = bool(result and result.hand_landmarks)
+                lms  = result.hand_landmarks[0] if has_hand else None
+                lms2 = result.hand_landmarks[1] if (has_hand and len(result.hand_landmarks) > 1) else None
+                display = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                now     = time.time()
 
-            if not has_hand:
-                self.mouse_prev_row = None
+                if not has_hand:
+                    self.mouse_prev_row = None
 
-            if self.app_state == 'intro':
-                elapsed   = now - self.intro_start_t
-                skip_frac = 0.0
-                if elapsed >= SKIP_LOCKOUT and lms and is_thumbs_up(lms):
-                    if thumb_hold_t is None: thumb_hold_t = now
-                    skip_frac = min((now - thumb_hold_t) / 1.0, 1.0)
-                    if skip_frac >= 1.0: elapsed = INTRO_DURATION
-                else:
-                    if not (lms and is_thumbs_up(lms)): thumb_hold_t = None
-                if lms: draw_hand(display, lms)
-                self.slide_progress.emit(elapsed / INTRO_DURATION, skip_frac)
-                if elapsed >= INTRO_DURATION:
-                    self.app_state = 'zone_intro'
-                    self.zone_intro_start_t = now
-                    thumb_hold_t = None
-                    self.state_changed.emit('zone_intro')
+                if self.app_state == 'intro':
+                    elapsed   = now - self.intro_start_t
+                    skip_frac = 0.0
+                    if elapsed >= SKIP_LOCKOUT and lms and is_thumbs_up(lms):
+                        if thumb_hold_t is None: thumb_hold_t = now
+                        skip_frac = min((now - thumb_hold_t) / 1.0, 1.0)
+                        if skip_frac >= 1.0: elapsed = INTRO_DURATION
+                    else:
+                        if not (lms and is_thumbs_up(lms)): thumb_hold_t = None
+                    if lms: draw_hand(display, lms)
+                    self.slide_progress.emit(elapsed / INTRO_DURATION, skip_frac)
+                    if elapsed >= INTRO_DURATION:
+                        self.app_state = 'zone_intro'
+                        self.zone_intro_start_t = now
+                        thumb_hold_t = None
+                        self.state_changed.emit('zone_intro')
 
-            elif self.app_state == 'zone_intro':
-                elapsed   = now - self.zone_intro_start_t
-                skip_frac = 0.0
-                if elapsed >= SKIP_LOCKOUT and lms and is_thumbs_up(lms):
-                    if thumb_hold_t is None: thumb_hold_t = now
-                    skip_frac = min((now - thumb_hold_t) / 1.0, 1.0)
-                    if skip_frac >= 1.0: elapsed = ZONE_INTRO_DURATION
-                else:
-                    if not (lms and is_thumbs_up(lms)): thumb_hold_t = None
-                if lms: draw_hand(display, lms)
-                self.slide_progress.emit(elapsed / ZONE_INTRO_DURATION, skip_frac)
-                if elapsed >= ZONE_INTRO_DURATION:
-                    self.app_state = 'zone_pick'
-                    self.zone_start_t = now
-                    thumb_hold_t = None
-                    self.state_changed.emit('zone_pick')
+                elif self.app_state == 'zone_intro':
+                    elapsed   = now - self.zone_intro_start_t
+                    skip_frac = 0.0
+                    if elapsed >= SKIP_LOCKOUT and lms and is_thumbs_up(lms):
+                        if thumb_hold_t is None: thumb_hold_t = now
+                        skip_frac = min((now - thumb_hold_t) / 1.0, 1.0)
+                        if skip_frac >= 1.0: elapsed = ZONE_INTRO_DURATION
+                    else:
+                        if not (lms and is_thumbs_up(lms)): thumb_hold_t = None
+                    if lms: draw_hand(display, lms)
+                    self.slide_progress.emit(elapsed / ZONE_INTRO_DURATION, skip_frac)
+                    if elapsed >= ZONE_INTRO_DURATION:
+                        self.app_state = 'zone_pick'
+                        self.zone_start_t = now
+                        thumb_hold_t = None
+                        self.state_changed.emit('zone_pick')
 
-            elif self.app_state == 'zone_pick':
-                elapsed       = now - self.zone_start_t
-                detected_zone = None
-                if lms:
-                    n = count_fingers_up(lms)
-                    if   n == 1: detected_zone = 'small'
-                    elif n == 2: detected_zone = 'medium'
-                    elif n >= 3: detected_zone = 'large'
-                confirm_frac = 0.0; confirm_secs = 0.0
-                if detected_zone:
-                    if detected_zone not in zone_finger_hold:
-                        zone_finger_hold = {detected_zone: now}
-                    held = now - zone_finger_hold[detected_zone]
-                    confirm_frac = min(held / ZONE_CONFIRM_TIME, 1.0)
-                    confirm_secs = max(0.0, ZONE_CONFIRM_TIME - held)
-                    if confirm_frac >= 1.0:
-                        self.chosen_zone = detected_zone
-                        self._set_zone(self.chosen_zone)
-                        self.app_state     = 'guide'
-                        self.guide_start_t = now
-                        thumb_hold_t = None; zone_finger_hold = {}
-                        self.state_changed.emit('guide')
-                else:
-                    zone_finger_hold = {}
-                skip_frac = 0.0
-                if elapsed >= SKIP_LOCKOUT and lms and is_thumbs_up(lms):
-                    if thumb_hold_t is None: thumb_hold_t = now
-                    skip_frac = min((now - thumb_hold_t) / 1.0, 1.0)
-                    if skip_frac >= 1.0:
+                elif self.app_state == 'zone_pick':
+                    elapsed       = now - self.zone_start_t
+                    detected_zone = None
+                    if lms:
+                        n = count_fingers_up(lms)
+                        if   n == 1: detected_zone = 'small'
+                        elif n == 2: detected_zone = 'medium'
+                        elif n >= 3: detected_zone = 'large'
+                    confirm_frac = 0.0; confirm_secs = 0.0
+                    if detected_zone:
+                        if detected_zone not in zone_finger_hold:
+                            zone_finger_hold = {detected_zone: now}
+                        held = now - zone_finger_hold[detected_zone]
+                        confirm_frac = min(held / ZONE_CONFIRM_TIME, 1.0)
+                        confirm_secs = max(0.0, ZONE_CONFIRM_TIME - held)
+                        if confirm_frac >= 1.0:
+                            self.chosen_zone = detected_zone
+                            self._set_zone(self.chosen_zone)
+                            self.app_state     = 'guide'
+                            self.guide_start_t = now
+                            thumb_hold_t = None; zone_finger_hold = {}
+                            self.state_changed.emit('guide')
+                    else:
+                        zone_finger_hold = {}
+                    skip_frac = 0.0
+                    if elapsed >= SKIP_LOCKOUT and lms and is_thumbs_up(lms):
+                        if thumb_hold_t is None: thumb_hold_t = now
+                        skip_frac = min((now - thumb_hold_t) / 1.0, 1.0)
+                        if skip_frac >= 1.0:
+                            self._set_zone(self.chosen_zone)
+                            self.app_state     = 'guide'
+                            self.guide_start_t = now
+                            thumb_hold_t = None
+                            self.state_changed.emit('guide')
+                    else:
+                        if not (lms and is_thumbs_up(lms)): thumb_hold_t = None
+                    if elapsed >= ZONE_DURATION and self.app_state == 'zone_pick':
                         self._set_zone(self.chosen_zone)
                         self.app_state     = 'guide'
                         self.guide_start_t = now
                         thumb_hold_t = None
                         self.state_changed.emit('guide')
-                else:
-                    if not (lms and is_thumbs_up(lms)): thumb_hold_t = None
-                if elapsed >= ZONE_DURATION and self.app_state == 'zone_pick':
-                    self._set_zone(self.chosen_zone)
-                    self.app_state     = 'guide'
-                    self.guide_start_t = now
-                    thumb_hold_t = None
-                    self.state_changed.emit('guide')
-                if lms: draw_hand(display, lms)
-                self.zone_pick_data.emit(
-                    detected_zone or '', self.chosen_zone,
-                    elapsed / ZONE_DURATION, confirm_frac, confirm_secs, skip_frac)
+                    if lms: draw_hand(display, lms)
+                    self.zone_pick_data.emit(
+                        detected_zone or '', self.chosen_zone,
+                        elapsed / ZONE_DURATION, confirm_frac, confirm_secs, skip_frac)
 
-            elif self.app_state == 'guide':
-                elapsed   = now - self.guide_start_t
-                skip_frac = 0.0
-                if elapsed >= SKIP_LOCKOUT and lms and is_thumbs_up(lms):
-                    if thumb_hold_t is None: thumb_hold_t = now
-                    skip_frac = min((now - thumb_hold_t) / 1.0, 1.0)
-                    if skip_frac >= 1.0: elapsed = GUIDE_DURATION
-                else:
-                    if not (lms and is_thumbs_up(lms)): thumb_hold_t = None
-                if lms: draw_hand(display, lms)
-                self.slide_progress.emit(elapsed / GUIDE_DURATION, skip_frac)
-                if elapsed >= GUIDE_DURATION:
-                    self.app_state   = 'distance_check'
-                    self.dist_ok_since = None
-                    thumb_hold_t = None
-                    self.state_changed.emit('distance_check')
-
-            elif self.app_state == 'distance_check':
-                dist     = hand_size(lms) if lms else 0.0
-                in_range = lms and abs(dist - TARGET_DIST) <= DIST_TOL
-                if in_range:
-                    if self.dist_ok_since is None: self.dist_ok_since = now
-                else:
-                    self.dist_ok_since = None
-                hold_frac = 0.0
-                if self.dist_ok_since:
-                    hold_frac = min((now - self.dist_ok_since) / DIST_OK_HOLD, 1.0)
-                    if hold_frac >= 1.0:
-                        self.app_state   = 'running'
+                elif self.app_state == 'guide':
+                    elapsed   = now - self.guide_start_t
+                    skip_frac = 0.0
+                    if elapsed >= SKIP_LOCKOUT and lms and is_thumbs_up(lms):
+                        if thumb_hold_t is None: thumb_hold_t = now
+                        skip_frac = min((now - thumb_hold_t) / 1.0, 1.0)
+                        if skip_frac >= 1.0: elapsed = GUIDE_DURATION
+                    else:
+                        if not (lms and is_thumbs_up(lms)): thumb_hold_t = None
+                    if lms: draw_hand(display, lms)
+                    self.slide_progress.emit(elapsed / GUIDE_DURATION, skip_frac)
+                    if elapsed >= GUIDE_DURATION:
+                        self.app_state   = 'distance_check'
                         self.dist_ok_since = None
-                        self.state_changed.emit('running')
-                if lms: draw_hand(display, lms)
-                self.distance_update.emit(dist, has_hand, hold_frac)
+                        thumb_hold_t = None
+                        self.state_changed.emit('distance_check')
 
-            elif self.app_state == 'running':
+                elif self.app_state == 'distance_check':
+                    dist     = hand_size(lms) if lms else 0.0
+                    in_range = lms and abs(dist - TARGET_DIST) <= DIST_TOL
+                    if in_range:
+                        if self.dist_ok_since is None: self.dist_ok_since = now
+                    else:
+                        self.dist_ok_since = None
+                    hold_frac = 0.0
+                    if self.dist_ok_since:
+                        hold_frac = min((now - self.dist_ok_since) / DIST_OK_HOLD, 1.0)
+                        if hold_frac >= 1.0:
+                            self.app_state   = 'running'
+                            self.dist_ok_since = None
+                            self.state_changed.emit('running')
+                    if lms: draw_hand(display, lms)
+                    self.distance_update.emit(dist, has_hand, hold_frac)
 
-                if self._pending_mode is not None:
-                    _opt_map = {'mouse': 1, 'subway': 2, 'racing': 3, 'open_world': 4, 'custom': 5, 'air_hockey': 6}
-                    self._activate_game_mode(_opt_map.get(self._pending_mode, 1))
-                    game_opt_hold_t = None; self.game_opt_number = None; game_opt_frac = 0.0
-                    self._pending_mode = None
+                elif self.app_state == 'running':
 
-                if self.active_game_mode == 6:
-                    game_opt_hold_t = None; self.game_opt_number = None; game_opt_frac = 0.0
-                else:
-                    _any_devil = (lms and is_devil_horn(lms)) or (lms2 and is_devil_horn(lms2))
-                    if _any_devil:
+                    if self._pending_mode is not None:
+                        _opt_map = {'mouse': 1, 'subway': 2, 'racing': 3, 'open_world': 4, 'custom': 5, 'air_hockey': 6}
+                        self._activate_game_mode(_opt_map.get(self._pending_mode, 1))
+                        game_opt_hold_t = None; self.game_opt_number = None; game_opt_frac = 0.0
+                        self._pending_mode = None
+
+                    if self.active_game_mode == 5 and not self._custom_meta_gestures_enabled:
                         game_opt_hold_t = None; self.game_opt_number = None; game_opt_frac = 0.0
                     else:
-                        game_opt_hold_t, self.game_opt_number, game_opt_frac, triggered_opt = \
-                            tick_game_opt(lms, lms2, now, game_opt_hold_t, self.game_opt_number)
-                        if triggered_opt is not None:
-                            self._activate_game_mode(triggered_opt)
+                        _any_devil = (lms and is_devil_horn(lms)) or (lms2 and is_devil_horn(lms2))
+                        if _any_devil:
                             game_opt_hold_t = None; self.game_opt_number = None; game_opt_frac = 0.0
+                        else:
+                            game_opt_hold_t, self.game_opt_number, game_opt_frac, triggered_opt = \
+                                tick_game_opt(lms, lms2, now, game_opt_hold_t, self.game_opt_number)
+                            if triggered_opt is not None:
+                                self._activate_game_mode(6 if triggered_opt == 5 else triggered_opt)
+                                game_opt_hold_t = None; self.game_opt_number = None; game_opt_frac = 0.0
 
-                if self.range_min_x is not None and self.active_game_mode != 6:
-                    draw_zone_rect(display,
-                                   self.range_min_x, self.range_max_x,
-                                   self.range_min_y, self.range_max_y)
+                    if self.range_min_x is not None and (self.active_game_mode != 6 or self._devilhorn_mouse):
+                        draw_zone_rect(display,
+                                       self.range_min_x, self.range_max_x,
+                                       self.range_min_y, self.range_max_y)
 
-                if self.active_game_mode is None:
-                    self._tick_mouse_mode(lms, lms2, result, display, now, game_opt_frac)
-                    if not self._running:
-                        break
+                    if self.active_game_mode is None:
+                        self._tick_mouse_mode(lms, lms2, result, display, now, game_opt_frac)
+                        if not self._running:
+                            break
 
-                elif self.active_game_mode == 2:
-                    self._tick_subway_mode(lms, lms2, result, display, now, game_opt_frac)
+                    elif self.active_game_mode == 2:
+                        self._tick_subway_mode(lms, lms2, result, display, now, game_opt_frac)
 
-                elif self.active_game_mode == 3:
-                    self._tick_racing_mode(lms, lms2, result, display, now, game_opt_frac)
+                    elif self.active_game_mode == 3:
+                        self._tick_racing_mode(lms, lms2, result, display, now, game_opt_frac)
 
-                elif self.active_game_mode == 4:
-                    with _owl: ow_result = _latest_ow_result[0]
-                    self._tick_open_world_mode(lms, lms2, result, display, now, game_opt_frac, ow_result)
+                    elif self.active_game_mode == 4:
+                        with _owl: ow_result = _latest_ow_result[0]
+                        self._tick_open_world_mode(lms, lms2, result, display, now, game_opt_frac, ow_result)
 
-                elif self.active_game_mode == 5:
-                    self._tick_custom_mode(lms, lms2, result, display, now, game_opt_frac)
+                    elif self.active_game_mode == 5:
+                        self._tick_custom_mode(lms, lms2, result, display, now, game_opt_frac)
 
-                elif self.active_game_mode == 6:
-                    self._tick_air_hockey_mode(lms, lms2, result, display, now, game_opt_frac)
+                    elif self.active_game_mode == 6:
+                        self._tick_air_hockey_mode(lms, lms2, result, display, now, game_opt_frac)
 
-                if lms is not None and self._current_frame_t > 0:
-                    self.nn_latency.emit((time.time() - self._current_frame_t) * 1000)
+                    if lms is not None and self._current_frame_t > 0:
+                        self.nn_latency.emit((time.time() - self._current_frame_t) * 1000)
 
-                self.distance_live.emit(hand_size(lms) if lms else 0.0, lms is not None)
+                    self.distance_live.emit(hand_size(lms) if lms else 0.0, lms is not None)
 
-            elif self.app_state == 'stopped':
-                both_peace = lms and lms2 and is_peace_sign(lms) and is_peace_sign(lms2)
-                both_fists = lms and lms2 and is_fist(lms) and is_fist(lms2)
-                resume_frac = 0.0; close_frac = 0.0
+                elif self.app_state == 'stopped':
+                    both_peace = lms and lms2 and is_peace_sign(lms) and is_peace_sign(lms2)
+                    both_fists = lms and lms2 and is_fist(lms) and is_fist(lms2)
+                    resume_frac = 0.0; close_frac = 0.0
 
-                if both_peace:
-                    if thumb_hold_t is None: thumb_hold_t = now
-                    resume_frac = min((now - thumb_hold_t) / HOLD_META, 1.0)
-                    if resume_frac >= 1.0:
-                        self.app_state = 'running'; thumb_hold_t = None
-                        self.meta_hold = {k: None for k in self.meta_hold}
-                        self.state_changed.emit('running')
-                else:
-                    thumb_hold_t = None
+                    if both_peace:
+                        if thumb_hold_t is None: thumb_hold_t = now
+                        resume_frac = min((now - thumb_hold_t) / HOLD_META, 1.0)
+                        if resume_frac >= 1.0:
+                            self.app_state = 'running'; thumb_hold_t = None
+                            self.meta_hold = {k: None for k in self.meta_hold}
+                            self.state_changed.emit('running')
+                    else:
+                        thumb_hold_t = None
 
-                if both_fists:
-                    if self.meta_hold['close'] is None: self.meta_hold['close'] = now
-                    close_frac = min((now - self.meta_hold['close']) / HOLD_CLOSE, 1.0)
-                    if close_frac >= 1.0:
+                    if both_fists:
+                        if self.meta_hold['close'] is None: self.meta_hold['close'] = now
+                        close_frac = min((now - self.meta_hold['close']) / HOLD_CLOSE, 1.0)
+                        if close_frac >= 1.0:
+                            self.meta_hold['close'] = None
+                            self._confirm_close_from   = 'stopped'
+                            self._confirm_close_hold_t = None
+                            self.app_state = 'confirm_close'
+                            self.state_changed.emit('confirm_close')
+                    else:
                         self.meta_hold['close'] = None
-                        self._confirm_close_from   = 'stopped'
-                        self._confirm_close_hold_t = None
-                        self.app_state = 'confirm_close'
-                        self.state_changed.emit('confirm_close')
-                else:
-                    self.meta_hold['close'] = None
 
-                if lms:  draw_hand(display, lms)
-                if lms2: draw_hand(display, lms2)
-                self.stopped_data.emit(resume_frac, close_frac)
-                self.distance_live.emit(hand_size(lms) if lms else 0.0, lms is not None)
+                    if lms:  draw_hand(display, lms)
+                    if lms2: draw_hand(display, lms2)
+                    self.stopped_data.emit(resume_frac, close_frac)
+                    self.distance_live.emit(hand_size(lms) if lms else 0.0, lms is not None)
 
-            elif self.app_state == 'confirm_close':
-                both_fists = lms and lms2 and is_fist(lms) and is_fist(lms2)
-                confirm_frac = 0.0
-                if both_fists:
-                    if self._confirm_close_hold_t is None:
-                        self._confirm_close_hold_t = now
-                    confirm_frac = min((now - self._confirm_close_hold_t) / CONFIRM_CLOSE_HOLD, 1.0)
-                    if confirm_frac >= 1.0:
-                        self._release_drag()
-                        self._rc_release_all()
-                        self._ow_release_all()
-                        self.close_requested.emit()
-                        self._running = False
-                        break
-                else:
-                    if self._confirm_close_hold_t is not None:
-                        self._confirm_close_hold_t = None
-                        self.app_state = self._confirm_close_from or 'running'
-                        self._confirm_close_from = None
-                        self.state_changed.emit(self.app_state)
-                if lms:  draw_hand(display, lms)
-                if lms2: draw_hand(display, lms2)
-                self.stopped_data.emit(0.0, confirm_frac)
-                self.distance_live.emit(hand_size(lms) if lms else 0.0, lms is not None)
+                elif self.app_state == 'confirm_close':
+                    both_fists = lms and lms2 and is_fist(lms) and is_fist(lms2)
+                    confirm_frac = 0.0
+                    if both_fists:
+                        if self._confirm_close_hold_t is None:
+                            self._confirm_close_hold_t = now
+                        confirm_frac = min((now - self._confirm_close_hold_t) / CONFIRM_CLOSE_HOLD, 1.0)
+                        if confirm_frac >= 1.0:
+                            self._release_drag()
+                            self._rc_release_all()
+                            self._ow_release_all()
+                            self.close_requested.emit()
+                            self._running = False
+                            break
+                    else:
+                        if self._confirm_close_hold_t is not None:
+                            self._confirm_close_hold_t = None
+                            self.app_state = self._confirm_close_from or 'running'
+                            self._confirm_close_from = None
+                            self.state_changed.emit(self.app_state)
+                    if lms:  draw_hand(display, lms)
+                    if lms2: draw_hand(display, lms2)
+                    self.stopped_data.emit(0.0, confirm_frac)
+                    self.distance_live.emit(hand_size(lms) if lms else 0.0, lms is not None)
 
-            h_img, w_img, ch = display.shape
-            qt_img = QImage(display.data, w_img, h_img, ch * w_img, QImage.Format_RGB888)
-            self.frame_ready.emit(qt_img.copy())
+                h_img, w_img, ch = display.shape
+                qt_img = QImage(display.data, w_img, h_img, ch * w_img, QImage.Format_RGB888)
+                self.frame_ready.emit(qt_img.copy())
 
-        self._release_drag()
-        self._rc_release_all()
-        self._ow_release_all()
-        self._ah_release_all()
-        _stop[0] = True
-        det.join(timeout=2.0)
-        det_ow.join(timeout=2.0)
-        cap.release()
-        detector.close()
-        if ow_recognizer is not None:
-            try: ow_recognizer.close()
-            except Exception: pass
-        self.state_changed.emit('idle')
+        except Exception as e:
+            print(f"[HandController] Tracking loop crashed: {e}")
+            self.error_occurred.emit(f"Gesture tracking stopped unexpectedly: {e}")
+        finally:
+            for _cleanup in (self._release_drag, self._rc_release_all,
+                              self._ow_release_all, self._ah_release_all):
+                try:
+                    _cleanup()
+                except Exception:
+                    pass
+            _stop[0] = True
+            det.join(timeout=2.0)
+            det_ow.join(timeout=2.0)
+            try:
+                cap.release()
+            except Exception:
+                pass
+            try:
+                detector.close()
+            except Exception:
+                pass
+            if ow_recognizer is not None:
+                try: ow_recognizer.close()
+                except Exception: pass
+            self.state_changed.emit('idle')

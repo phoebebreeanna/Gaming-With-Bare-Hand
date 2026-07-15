@@ -6,7 +6,7 @@ import time
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QTextEdit, QSizePolicy, QStackedWidget, QScrollArea,
-    QLineEdit, QComboBox, QInputDialog,
+    QLineEdit, QComboBox, QDialog, QFrame,
 )
 from PySide6.QtCore import Qt, Signal, QThread, QTimer
 from PySide6.QtGui import QFont, QPixmap, QImage
@@ -62,6 +62,160 @@ class _Worker(QThread):
                 self.finished_ok.emit(result)
             except Exception as exc:
                 self.finished_err.emit(str(exc))
+
+def _friendly_pipeline_error(raw: str) -> str:
+    low = raw.lower()
+    if "charmap" in low or "codec can't decode" in low or "unicodedecodeerror" in low:
+        return ("A saved file contains characters this system couldn't read. "
+                 "Try renaming the affected gesture or custom mode using plain "
+                 "letters, numbers, and spaces, then try again.")
+    if "no such file or directory" in low or "filenotfounderror" in low:
+        return ("A required file is missing. Make sure the previous step "
+                 "finished successfully, then try again.")
+    if "permission denied" in low or "permissionerror" in low:
+        return ("The app couldn't access a required file - close any other "
+                 "program that might be using it, then try again.")
+    if "no section" in low or "no option" in low or "configparser" in low:
+        return "This mode's configuration looks corrupted. Try recreating it from Custom Modes."
+    if "out of memory" in low or "cuda" in low or "memory" in low:
+        return "Not enough memory to complete this step. Try closing other apps and running it again."
+    return f"Something went wrong: {raw}"
+
+
+class _PipelineDialog(QDialog):
+
+    def __init__(self, parent=None, is_dark=False, width=300):
+        super().__init__(parent)
+        self.is_dark = is_dark
+        self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setModal(True)
+        self.setFixedWidth(width)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+
+        self.card = QFrame()
+        self.card.setObjectName("pipelineDialogCard")
+        outer.addWidget(self.card)
+
+        self.body = QVBoxLayout(self.card)
+        self.body.setContentsMargins(20, 18, 20, 18)
+        self.body.setSpacing(10)
+
+    def _palette(self):
+        if self.is_dark:
+            return dict(bg="#111111", border="#262626", text="#E8E8E8", muted="#9A9A9A",
+                        input_bg="#0A0A0A", pri_bg="#E8E8E8", pri_txt="#111111", hover="#1A1A1A")
+        return dict(bg="#FFFFFF", border="#D8CEC7", text="#111111", muted="#6F655F",
+                    input_bg="#F4F4F4", pri_bg="#111111", pri_txt="#FFFFFF", hover="#EDE5DF")
+
+    def _style_card(self):
+        p = self._palette()
+        self.card.setStyleSheet(f"""
+            QFrame#pipelineDialogCard {{
+                background: {p['bg']};
+                border: 1px solid {p['border']};
+                border-radius: 2px;
+            }}
+        """)
+        return p
+
+
+class PipelineInputDialog(_PipelineDialog):
+
+    def __init__(self, parent=None, is_dark=False, title="", label="", text="", placeholder=""):
+        super().__init__(parent, is_dark)
+
+        title_lbl = QLabel(title.upper())
+        self.body.addWidget(title_lbl)
+
+        label_lbl = None
+        if label:
+            label_lbl = QLabel(label)
+            label_lbl.setWordWrap(True)
+            self.body.addWidget(label_lbl)
+
+        self.input = QLineEdit()
+        self.input.setText(text)
+        self.input.setPlaceholderText(placeholder)
+        self.input.setFixedHeight(30)
+        self.input.returnPressed.connect(self.accept)
+        self.body.addWidget(self.input)
+
+        self.error_lbl = QLabel("")
+        self.error_lbl.setWordWrap(True)
+        self.error_lbl.hide()
+        self.body.addWidget(self.error_lbl)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        self.cancel_btn = QPushButton("CANCEL")
+        self.cancel_btn.setCursor(Qt.PointingHandCursor)
+        self.cancel_btn.setFixedHeight(30)
+        self.cancel_btn.clicked.connect(self.reject)
+        self.ok_btn = QPushButton("OK")
+        self.ok_btn.setCursor(Qt.PointingHandCursor)
+        self.ok_btn.setFixedHeight(30)
+        self.ok_btn.clicked.connect(self.accept)
+        btn_row.addWidget(self.cancel_btn)
+        btn_row.addWidget(self.ok_btn)
+        self.body.addLayout(btn_row)
+
+        p = self._style_card()
+        title_lbl.setStyleSheet(
+            f"font-size:11px; font-weight:800; letter-spacing:1.5px; color:{p['text']}; "
+            f"background:transparent; border:none;")
+        if label_lbl is not None:
+            label_lbl.setStyleSheet(
+                f"font-size:10px; color:{p['muted']}; background:transparent; border:none;")
+        self.input.setStyleSheet(f"""
+            QLineEdit {{
+                background: {p['input_bg']}; color: {p['text']};
+                border: 1px solid {p['border']}; border-radius: 2px;
+                padding: 4px 8px; font-size: 11px;
+            }}
+            QLineEdit:focus {{ border-color: {p['text']}; }}
+        """)
+        self.error_lbl.setStyleSheet(
+            "font-size:9px; font-weight:700; letter-spacing:0.5px; color:#CC4444; "
+            "background:transparent; border:none;")
+        self.cancel_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent; color: {p['muted']};
+                border: 1px solid {p['border']}; border-radius: 2px;
+                font-size: 9px; font-weight: 700; letter-spacing: 1px;
+            }}
+            QPushButton:hover {{ background: {p['hover']}; color: {p['text']}; }}
+        """)
+        self.ok_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {p['pri_bg']}; color: {p['pri_txt']};
+                border: 1px solid {p['pri_bg']}; border-radius: 2px;
+                font-size: 9px; font-weight: 700; letter-spacing: 1px;
+            }}
+        """)
+        self.input.setFocus()
+
+    def set_error(self, msg: str):
+        self.error_lbl.setText(msg)
+        self.error_lbl.setVisible(bool(msg))
+
+    @staticmethod
+    def get_text(parent, is_dark, title, label, text="", placeholder="", validator=None):
+        dlg = PipelineInputDialog(parent, is_dark, title=title, label=label,
+                                   text=text, placeholder=placeholder)
+        while True:
+            if dlg.exec() != QDialog.Accepted:
+                return "", False
+            value = dlg.input.text().strip()
+            if validator:
+                err = validator(value)
+                if err:
+                    dlg.set_error(err)
+                    continue
+            return value, True
+
 
 class PipelineUI(QWidget):
     on_menu_toggle    = Signal()
@@ -159,6 +313,22 @@ class PipelineUI(QWidget):
             self.mode_tabs[mode] = btn
             title_row.addWidget(btn)
         cl.addLayout(title_row)
+
+        self._banner = QWidget()
+        self._banner.hide()
+        banner_l = QHBoxLayout(self._banner)
+        banner_l.setContentsMargins(12, 8, 10, 8)
+        banner_l.setSpacing(8)
+        self._banner_lbl = QLabel("")
+        self._banner_lbl.setWordWrap(True)
+        banner_l.addWidget(self._banner_lbl, stretch=1)
+        self._banner_close_btn = QPushButton("✕")
+        self._banner_close_btn.setFixedSize(20, 20)
+        self._banner_close_btn.setCursor(Qt.PointingHandCursor)
+        self._banner_close_btn.clicked.connect(self._hide_banner)
+        banner_l.addWidget(self._banner_close_btn)
+        self._banner_kind = "error"
+        cl.addWidget(self._banner)
 
         self.top_stack = QStackedWidget()
         cl.addWidget(self.top_stack, stretch=3)
@@ -513,8 +683,15 @@ class PipelineUI(QWidget):
                 self.apply_theme(self.is_dark)
 
     def _on_custom_new(self):
-        name, ok = QInputDialog.getText(self, "New Custom Mode", "Mode name:")
-        if not ok or not name.strip():
+        def validate(value):
+            if not value:
+                return "Mode name can't be empty."
+            return None
+
+        name, ok = PipelineInputDialog.get_text(
+            self, self.is_dark, "New Custom Mode", "Mode name",
+            placeholder="e.g. My Gestures", validator=validate)
+        if not ok:
             return
         try:
             from logic.app_config import add_custom_mode, generate_custom_conf, set_selected_custom_mode_id
@@ -523,7 +700,7 @@ class PipelineUI(QWidget):
             self._custom_mode_id = mode['id']
             set_selected_custom_mode_id(mode['id'])
         except Exception as exc:
-            self._set_custom_status(f"Error: {exc}")
+            self._set_custom_status(_friendly_pipeline_error(str(exc)))
             return
         self._populate_custom_dropdown()
         self._refresh_custom_gesture_list()
@@ -535,9 +712,15 @@ class PipelineUI(QWidget):
         mode = self._get_current_custom_mode()
         if not mode:
             return
-        new_name, ok = QInputDialog.getText(
-            self, "Rename Mode", "New name:", text=mode['name'])
-        if not ok or not new_name.strip():
+        def validate(value):
+            if not value:
+                return "Name can't be empty."
+            return None
+
+        new_name, ok = PipelineInputDialog.get_text(
+            self, self.is_dark, "Rename Mode", "New name",
+            text=mode['name'], validator=validate)
+        if not ok:
             return
         try:
             from logic.app_config import update_custom_mode, generate_custom_conf
@@ -545,7 +728,7 @@ class PipelineUI(QWidget):
             mode['name'] = new_name.strip()
             generate_custom_conf(mode)
         except Exception as exc:
-            self._set_custom_status(f"Error: {exc}")
+            self._set_custom_status(_friendly_pipeline_error(str(exc)))
             return
         self._populate_custom_dropdown()
         self._load_conf()
@@ -567,7 +750,7 @@ class PipelineUI(QWidget):
                 from logic.app_config import delete_custom_mode
                 delete_custom_mode(mode['id'])
             except Exception as exc:
-                self._set_custom_status(f"Error: {exc}")
+                self._set_custom_status(_friendly_pipeline_error(str(exc)))
                 return
             self._custom_mode_id = ''
             self._populate_custom_dropdown()
@@ -634,7 +817,7 @@ class PipelineUI(QWidget):
                     generate_custom_conf(m)
                     break
         except Exception as exc:
-            self._set_custom_status(f"Error: {exc}")
+            self._set_custom_status(_friendly_pipeline_error(str(exc)))
             return
         self._custom_gesture_input.clear()
         self._set_custom_status(f"Added '{safe}'.")
@@ -655,7 +838,7 @@ class PipelineUI(QWidget):
                     generate_custom_conf(m)
                     break
         except Exception as exc:
-            self._set_custom_status(f"Error: {exc}")
+            self._set_custom_status(_friendly_pipeline_error(str(exc)))
             return
         self._set_custom_status(f"Removed '{gesture}'.")
         self._refresh_custom_gesture_list()
@@ -793,6 +976,7 @@ class PipelineUI(QWidget):
                 except Exception as exc:
                     self._cfg = None
                     self._log(f"Error loading custom conf: {exc}")
+                    self._show_banner(_friendly_pipeline_error(str(exc)), kind="error")
             else:
                 self._cfg = None
         else:
@@ -802,6 +986,7 @@ class PipelineUI(QWidget):
             except Exception as exc:
                 self._cfg = None
                 self._log(f"Error loading conf: {exc}")
+                self._show_banner(_friendly_pipeline_error(str(exc)), kind="error")
         self._refresh_counts()
 
     def _refresh_counts(self):
@@ -896,6 +1081,7 @@ class PipelineUI(QWidget):
     def _switch_mode(self, mode):
         if self._collect['worker'] is not None:
             self._finish_collect()
+        self._hide_banner()
         self.current_mode = mode
         self._log(f"Switched to {mode} mode.")
         if mode == "Custom":
@@ -916,6 +1102,39 @@ class PipelineUI(QWidget):
         self.log_area.append(f"> {text}")
         sb = self.log_area.verticalScrollBar()
         sb.setValue(sb.maximum())
+
+    def _show_banner(self, msg: str, kind: str = "error"):
+        self._banner_kind = kind
+        self._banner_lbl.setText(msg)
+        self._banner.show()
+        if hasattr(self, "_theme_ready"):
+            self._style_banner()
+
+    def _hide_banner(self):
+        self._banner.hide()
+
+    def _style_banner(self):
+        is_dark = self.is_dark
+        kind = getattr(self, "_banner_kind", "error")
+        if kind == "error":
+            accent = "#FF6666" if is_dark else "#B44545"
+            tint   = "#2A1414" if is_dark else "#FBEAEA"
+        elif kind == "success":
+            accent = "#00CC66" if is_dark else "#00A36C"
+            tint   = "#0E1F16" if is_dark else "#E9F7F0"
+        else:
+            accent = "#9A9A9A" if is_dark else "#6F655F"
+            tint   = "#161616" if is_dark else "#EFEFEF"
+        text = "#E8E8E8" if is_dark else "#111111"
+        self._banner.setStyleSheet(
+            f"background-color: {tint}; border: 1px solid {accent}; border-left: 3px solid {accent};")
+        self._banner_lbl.setStyleSheet(
+            f"color: {text}; font-size: 10px; font-weight: 600; letter-spacing: 0.3px; "
+            f"background: transparent; border: none;")
+        self._banner_close_btn.setStyleSheet(f"""
+            QPushButton {{ background: transparent; color: {accent}; border: none; font-size: 12px; font-weight: 700; }}
+            QPushButton:hover {{ color: {text}; }}
+        """)
 
     def _set_busy(self, busy: bool):
         for btn in self.mode_tabs.values():
@@ -1134,6 +1353,16 @@ class PipelineUI(QWidget):
     def _on_preprocess(self):
         if not self._cfg:
             return
+        self._hide_banner()
+        from logic.gesture_pipeline import count_existing
+        counts = count_existing(self._cfg['raw_csv'], self._cfg['gestures'])
+        target = self._cfg['target']
+        short = [g for g in self._cfg['gestures'] if counts.get(g, 0) < target]
+        if short:
+            self._show_banner(
+                f"Heads up - {', '.join(short)} have fewer than {target} samples collected. "
+                f"You can still preprocess, but the model may perform worse for these gestures.",
+                kind="info")
         self.top_stack.setCurrentIndex(self._PAGE_LOG)
         self._set_busy(True)
         state = "ON" if self._mirror_aug else "OFF"
@@ -1152,6 +1381,7 @@ class PipelineUI(QWidget):
     def _on_train(self):
         if not self._cfg:
             return
+        self._hide_banner()
         self.top_stack.setCurrentIndex(self._PAGE_LOG)
         self._set_busy(True)
         self._training_result = None
@@ -1197,14 +1427,20 @@ class PipelineUI(QWidget):
         self.training_complete.emit()
 
     def _on_review(self):
+        self._hide_banner()
         if not self._cfg or not self._training_result:
-            self._log("Run training first to generate flagged samples.")
+            self._show_banner("Train a model first to generate samples to review.", kind="info")
             return
         import pandas as pd
 
         flagged_idx, _, flagged_meta = self._training_result
         if not flagged_idx:
-            self._log("No flagged samples to review.")
+            self._log("No flagged samples - training didn't flag anything for review.")
+            self._show_banner(
+                "Nothing to review - training didn't flag any low-confidence or "
+                "mismatched samples. Your data looks clean.",
+                kind="success")
+            self.top_stack.setCurrentIndex(self._idle_page_index())
             return
 
         df = pd.read_csv(self._cfg['processed_csv'])
@@ -1295,6 +1531,7 @@ class PipelineUI(QWidget):
     def _step_error(self, err: str):
         self._set_busy(False)
         self._log(f"ERROR: {err}")
+        self._show_banner(_friendly_pipeline_error(err), kind="error")
         self._worker = None
 
     def _set_progress(self, frac: float):
@@ -1315,6 +1552,7 @@ class PipelineUI(QWidget):
     def apply_theme(self, is_dark: bool):
         self.is_dark      = is_dark
         self._theme_ready = True
+        self._style_banner()
 
         if is_dark:
             bg   = "#0a0a0a"; panel = "#111111"; border = "#262626"

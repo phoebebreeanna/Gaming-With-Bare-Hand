@@ -17,11 +17,11 @@ from ui.mainmenu_setup import MainMenuSetup
 from ui.mainmenu_calibration import MainMenuCalibration
 from ui.mainmenu_zone import MainMenuZone
 from ui.mainmenu_camera import MainMenuCamera
-from ui.handbot import HandBotOverlay, HandBotPagesOverlay #Add handbot overlay and pages overlay
+from ui.handbot import HandBotOverlay, HandBotPagesOverlay
 from ui.air_hockey_status import AirHockeyStatusPanel
 from ui.air_hockey_loading import AirHockeyLoadingOverlay
 from ui.air_hockey_launch_page import AirHockeyLaunchPage
-from ui.mini_camera_overlay import MiniCameraOverlay # for status overlay
+from ui.mini_camera_overlay import MiniCameraOverlay
 
 from logic.hand_controller import HandControllerThread, CameraPreviewThread, list_cameras
 from logic.app_config import is_setup_done, get_saved_zone, mark_setup_done, get_camera_index, set_camera_index, set_zone, get_mouse_side, set_mouse_side
@@ -132,6 +132,7 @@ class MainMenu(QWidget):
         self.game_mode_widget.custom_mode_selected.connect(self._on_custom_mode_selected)
         self.game_mode_widget.chatbot_enabled_changed.connect(self.handbot_pages.set_chatbot_enabled)
         self.game_mode_widget.mini_overlay_enabled_changed.connect(self._on_mini_overlay_enabled_changed)
+        self.game_mode_widget.custom_meta_gestures_changed.connect(self._on_custom_meta_gestures_changed)
         self.pages.addWidget(self.game_mode_widget)
 
         self.pipeline_ui = PipelineUI(is_dark=self.is_dark)
@@ -1344,6 +1345,10 @@ class MainMenu(QWidget):
         if self.controller:
             self.controller.set_mouse_in_game(enabled)
 
+    def _on_custom_meta_gestures_changed(self, enabled: bool):
+        if self.controller:
+            self.controller.set_custom_meta_gestures_enabled(enabled)
+
     def _on_mouse_side_changed(self, side: str):
         set_mouse_side(side)
         if self._is_running and self.controller:
@@ -1518,6 +1523,21 @@ class MainMenu(QWidget):
             self._preview_thread.wait(3000)
             self._preview_thread = None
 
+    def shutdown(self):
+        for timer_name in ("uptime_timer", "clock_timer"):
+            try:
+                getattr(self, timer_name).stop()
+            except Exception:
+                pass
+        try:
+            self._mini_overlay.hide()
+        except Exception:
+            pass
+        try:
+            self.handbot_pages.chat_panel.shutdown()
+        except Exception:
+            pass
+
     @Slot(object)
     def _on_preview_frame(self, image):
         pixmap = QPixmap.fromImage(image)
@@ -1606,11 +1626,15 @@ class MainMenu(QWidget):
                 self._on_zone_continue()
 
     def _start_controller(self):
-        from logic.app_config import get_model_source, get_game_mode, get_mouse_enabled, get_cursor_point, get_mouse_side
+        from logic.app_config import (
+            get_model_source, get_game_mode, get_mouse_enabled, get_cursor_point,
+            get_mouse_side, get_custom_meta_gestures_enabled,
+        )
         model_sources                  = {m: get_model_source(m) for m in ('mouse', 'subway', 'racing')}
         model_sources['mouse_in_game'] = get_mouse_enabled()
         model_sources['cursor_point']  = get_cursor_point()
         model_sources['mouse_side']    = get_mouse_side()
+        model_sources['custom_meta_gestures'] = get_custom_meta_gestures_enabled()
         initial_game_mode = get_game_mode()
         self._current_running_mode = initial_game_mode
         self._set_air_hockey_ui_active(initial_game_mode == 'air_hockey')
