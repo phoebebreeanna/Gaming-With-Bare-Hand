@@ -1,7 +1,8 @@
+import os
 import socket
+import tempfile
 
 import cv2
-import pyautogui
 
 from logic.hand_utils import (
     draw_hand, draw_zone_rect, draw_wrist_marker, draw_finger_dot, count_vertical_fingers_5,
@@ -10,11 +11,7 @@ from logic.hand_utils import (
 from logic.gesture_net import run_nn
 
 AH_REMOTE_PORT = 51246
-
-AH_SKILLS = {
-    1: {1: '1', 2: '2', 3: '3', 4: '4', 5: '5'},
-    2: {1: '6', 2: '7', 3: '8', 4: '9', 5: '0'},
-}
+AH_PORT_FILE = os.path.join(tempfile.gettempdir(), "air_hockey_port.txt")
 
 AH_QUARTER_W = 0.25
 AH_CENTER = {1: (0.375, 0.5), 2: (0.875, 0.5)}
@@ -36,11 +33,24 @@ class AirHockeyModeMixin:
         self.ah_skill_raw         = {1: 0, 2: 0}
         self.ah_skill_count_since = {1: None, 2: None}
         self.ah_last_fired        = {1: 0, 2: 0}
+        self._ah_remote_port      = AH_REMOTE_PORT
+        self._ah_port_checked_at  = 0.0
         if getattr(self, '_ah_udp_sock', None) is None:
             try:
                 self._ah_udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             except OSError:
                 self._ah_udp_sock = None
+
+    def _ah_resolve_port(self, now):
+        if now - self._ah_port_checked_at < 1.0:
+            return self._ah_remote_port
+        self._ah_port_checked_at = now
+        try:
+            with open(AH_PORT_FILE) as f:
+                self._ah_remote_port = int(f.read().strip())
+        except (OSError, ValueError):
+            self._ah_remote_port = AH_REMOTE_PORT
+        return self._ah_remote_port
 
     def _ah_release_all(self):
         pass
@@ -107,8 +117,8 @@ class AirHockeyModeMixin:
             if self._ah_udp_sock is not None:
                 try:
                     self._ah_udp_sock.sendto(
-                        f"{player},{frac_x:.4f},{frac_y:.4f}".encode("ascii"),
-                        ("127.0.0.1", AH_REMOTE_PORT))
+                        f"M,{player},{frac_x:.4f},{frac_y:.4f}".encode("ascii"),
+                        ("127.0.0.1", self._ah_resolve_port(now)))
                 except OSError:
                     pass
             draw_hand(display, mover_lms, AH_COLOR_MOVER)
@@ -119,14 +129,15 @@ class AirHockeyModeMixin:
             self.ah_skill_raw[player]         = raw_n
             self.ah_skill_count_since[player] = now
         held_for = now - (self.ah_skill_count_since[player] or now)
-        if held_for >= AH_SKILL_DEBOUNCE:
-            if raw_n == 0:
-                self.ah_last_fired[player] = 0
-            elif (1 <= raw_n <= 5 and raw_n != self.ah_last_fired[player]
-                    and mover_lms is not None):
-                try: pyautogui.press(AH_SKILLS[player][raw_n])
-                except Exception: pass
-                self.ah_last_fired[player] = raw_n
+        debounced_n = raw_n if held_for >= AH_SKILL_DEBOUNCE and mover_lms is not None else 0
+        if self._ah_udp_sock is not None:
+            try:
+                self._ah_udp_sock.sendto(
+                    f"K,{player},{debounced_n}".encode("ascii"),
+                    ("127.0.0.1", self._ah_resolve_port(now)))
+            except OSError:
+                pass
+        self.ah_last_fired[player] = debounced_n
         if skill_lms is not None:
             draw_hand(display, skill_lms, AH_COLOR_SKILL)
 

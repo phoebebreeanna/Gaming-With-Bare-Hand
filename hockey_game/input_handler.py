@@ -4,6 +4,7 @@ from typing import Dict, Set, Tuple
 import pygame
 
 import config as cfg
+import remote_input
 
 Vec2 = pygame.math.Vector2
 
@@ -40,6 +41,12 @@ class KeyboardInput(InputSource):
                 self._pressed[key] = bool(keys[key])
             for key in player_binds["powers"].values():
                 self._pressed[key] = bool(keys[key])
+
+        for player, binds in cfg.KEYBINDS.items():
+            n = remote_input.get_skill_state(player)
+            for i, key in enumerate(binds["powers"].values(), start=1):
+                if i == n:
+                    self._pressed[key] = True
 
     def _was_just_pressed(self, key: int) -> bool:
         return self._pressed.get(key, False) and not self._prev_pressed.get(key, False)
