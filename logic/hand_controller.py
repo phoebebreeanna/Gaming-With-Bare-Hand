@@ -617,7 +617,7 @@ class HandControllerThread(
                 if frame is None or ts == last_ts:
                     time.sleep(0.001); continue
                 last_ts = ts
-                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                rgb = frame
                 try:
                     result = detector.detect_for_video(
                         mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb), ts)
@@ -686,9 +686,10 @@ class HandControllerThread(
                 t_frame = time.time()
 
                 frame = cv2.flip(frame, 1)
+                rgb   = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 ts_ms = int(t_frame * 1000)
                 with _fl:
-                    _latest_frame[0] = frame.copy()
+                    _latest_frame[0] = rgb.copy()
                     _latest_ts[0]    = ts_ms
                 with _rl:
                     result    = _latest_result[0]
@@ -698,7 +699,7 @@ class HandControllerThread(
                 has_hand = bool(result and result.hand_landmarks)
                 lms  = result.hand_landmarks[0] if has_hand else None
                 lms2 = result.hand_landmarks[1] if (has_hand and len(result.hand_landmarks) > 1) else None
-                display = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                display = rgb
                 now     = time.time()
 
                 if not has_hand:
@@ -828,6 +829,8 @@ class HandControllerThread(
                         self._pending_mode = None
 
                     if self.active_game_mode == 5 and not self._custom_meta_gestures_enabled:
+                        game_opt_hold_t = None; self.game_opt_number = None; game_opt_frac = 0.0
+                    elif self.active_game_mode == 6:
                         game_opt_hold_t = None; self.game_opt_number = None; game_opt_frac = 0.0
                     else:
                         _any_devil = (lms and is_devil_horn(lms)) or (lms2 and is_devil_horn(lms2))

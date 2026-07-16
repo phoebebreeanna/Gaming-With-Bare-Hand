@@ -4,10 +4,8 @@ Preserved from comments removed during a cleanup pass. Keep these in mind when t
 
 ## Air Hockey Mode (`logic/modes/air_hockey_mode.py`, `logic/hand_controller.py`)
 
-- Key bindings mirror `hockey_game/config.py:KEYBINDS` exactly. `hockey_game` itself is untouched - this mode just simulates the same key presses a human would make.
-  - P1 (left half of frame): move = WASD, skills 1-5 = number row `1`-`5`.
-  - P2 (right half of frame): move = arrow keys, skills 1-5 = number row `6`-`0`.
-- The neutral center per half (`AH_CENTER`) is fixed - there is no calibration step. A wrist offset beyond `AH_DEADZONE` on a given axis holds that axis's key(s); diagonal offsets hold two keys at once.
+- Movement is absolute, not key-simulated: each frame, the mover hand's fractional position inside its green box (`AH_CENTER` + `AH_BOX_HALF_W`) is sent as a UDP packet (`player,frac_x,frac_y`) to `hockey_game/remote_input.py` on `127.0.0.1:AH_REMOTE_PORT`. `hockey_game/physics.py:set_paddle_target_fraction` maps that fraction directly onto the paddle's half of the table via `paddle_bounds` - the paddle position IS the hand position, no dead zone, no idle drift. If no fresh packet has arrived for a player (hand out of the box, or `hockey_game` run standalone), `hockey_game/main.py` falls back to `hockey_game/config.py:KEYBINDS` keyboard control for that paddle.
+- Skills still simulate real key presses (`hockey_game/config.py:KEYBINDS` powers): P1 skills 1-5 = number row `1`-`5`, P2 skills 1-5 = number row `6`-`0` (`AH_SKILLS`).
 - A raw finger count must be held stable for `AH_SKILL_DEBOUNCE` (0.18s) before it fires a skill key, and it won't re-fire until the hand returns to a different count (typically a fist first) - this avoids spamming key presses while a pose is held.
 - `_ah_classify` buckets up to 4 detected hands into P1-half/P2-half by wrist x position (capped at 2 hands per half), then assigns mover/skill roles within each half by MediaPipe handedness (Left = mover, Right = skill) - the same Left/Right convention used by `hand_utils.split_hands_by_handedness`.
 - Air hockey tracks up to 2 players x 2 hands each, so `hand_controller.py` raises MediaPipe's `num_hands` to 4 only when air hockey mode is active at startup. Every other mode only ever reads the first two hands, which keeps the extra detection cost out of solo use.

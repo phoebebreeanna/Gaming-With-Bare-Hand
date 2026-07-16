@@ -155,12 +155,16 @@ def _qwen_completion_to_prompt(completion: str) -> str:
 
 def _base_query_engine():
     import chromadb
-    from llama_index.core import VectorStoreIndex
+    from llama_index.core import Settings, VectorStoreIndex
     from llama_index.core.postprocessor import SimilarityPostprocessor
     from llama_index.vector_stores.chroma import ChromaVectorStore
 
     if not PERSIST_DIR.exists():
+        llm = Settings.llm
+        embed_model = Settings.embed_model
         _build_index()
+        Settings.llm = llm
+        Settings.embed_model = embed_model
 
     chroma_client = chromadb.PersistentClient(path=str(PERSIST_DIR))
     chroma_collection = chroma_client.get_or_create_collection(

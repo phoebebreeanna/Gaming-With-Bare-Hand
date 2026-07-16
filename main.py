@@ -3,7 +3,9 @@ import sys
 
 os.environ.setdefault("QT_LOGGING_RULES", "qt.multimedia.ffmpeg=false;qt.multimedia.ffmpeg.*=false")
 
-from PySide6.QtWidgets import QApplication, QMainWindow, QStackedWidget
+from PySide6.QtWidgets import (
+    QApplication, QMainWindow, QStackedWidget, QLineEdit, QTextEdit, QPlainTextEdit
+)
 from PySide6.QtCore import Qt, QObject, QEvent
 from ui.welcome_screen import WelcomeScreen
 from ui.main_menu import MainMenu
@@ -20,6 +22,9 @@ class _GestureKeyBlocker(QObject):
             if ctrl is not None and ctrl.isRunning():
                 kb = getattr(self._window.main_menu, 'key_bindings_widget', None)
                 if kb is not None and getattr(kb, '_capturing', None):
+                    return False
+                focused = QApplication.focusWidget()
+                if isinstance(focused, (QLineEdit, QTextEdit, QPlainTextEdit)):
                     return False
                 return True
         return False

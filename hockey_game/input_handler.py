@@ -8,12 +8,6 @@ import config as cfg
 Vec2 = pygame.math.Vector2
 
 
-def view_to_shared_direction(raw_dir: Vec2, player: int) -> Vec2:
-    if player == 1:
-        return Vec2(raw_dir)
-    return Vec2(-raw_dir.x, -raw_dir.y)
-
-
 class InputSource(ABC):
     @abstractmethod
     def update(self, events):
@@ -61,7 +55,7 @@ class KeyboardInput(InputSource):
             raw.x -= 1
         if self._pressed.get(binds["right"]):
             raw.x += 1
-        return view_to_shared_direction(raw, player_id)
+        return raw
 
     def get_triggered_powers(self, player_id: int) -> Set[str]:
         binds = cfg.KEYBINDS[player_id]["powers"]

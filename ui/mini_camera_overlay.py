@@ -167,9 +167,12 @@ class MiniCameraOverlay(QWidget):
 
     def update_frame(self, image: QImage):
         pixmap = QPixmap.fromImage(image)
-        self.image_label.setPixmap(
-            pixmap.scaled(self.image_label.size(), Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
-        )
+        target_size = self.image_label.size()
+        scaled = pixmap.scaled(target_size, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+        x = (scaled.width() - target_size.width()) // 2
+        y = (scaled.height() - target_size.height()) // 2
+        cropped = scaled.copy(x, y, target_size.width(), target_size.height())
+        self.image_label.setPixmap(cropped)
 
     def set_mode(self, text: str):
         self.mode_value.setText(text)

@@ -18,24 +18,8 @@ POWER_COOLDOWNS = {
     "speed_puck": cfg.SPEED_PUCK_COOLDOWN,
 }
 
-_TOP_GOAL_OWNER = 2
-_BOTTOM_GOAL_OWNER = 1
-
-
-def transform_point(p: Vec2, rotation: int) -> Vec2:
-    if rotation == 0:
-        return Vec2(p)
-    return Vec2(cfg.TABLE_WIDTH - p.x, cfg.TABLE_HEIGHT - p.y)
-
-
-def transform_rect(rect: pygame.Rect, rotation: int) -> pygame.Rect:
-    if rotation == 0:
-        return rect.copy()
-    p1 = transform_point(Vec2(rect.left, rect.top), rotation)
-    p2 = transform_point(Vec2(rect.right, rect.bottom), rotation)
-    x_min, x_max = sorted((p1.x, p2.x))
-    y_min, y_max = sorted((p1.y, p2.y))
-    return pygame.Rect(int(x_min), int(y_min), int(x_max - x_min), int(y_max - y_min))
+_LEFT_GOAL_OWNER = 1
+_RIGHT_GOAL_OWNER = 2
 
 
 def _lerp_color(c1, c2, t):
@@ -105,43 +89,43 @@ def _draw_rail_and_ice(surface: pygame.Surface):
     pygame.draw.rect(surface, (*cfg.COLOR_RAIL_BEVEL,), ice_rect, width=2, border_radius=6)
 
 
-def _draw_goal(surface: pygame.Surface, at_top: bool):
+def _draw_goal(surface: pygame.Surface, at_left: bool):
     wt = cfg.WALL_THICKNESS
-    owner = _TOP_GOAL_OWNER if at_top else _BOTTOM_GOAL_OWNER
+    owner = _LEFT_GOAL_OWNER if at_left else _RIGHT_GOAL_OWNER
     color = cfg.PLAYER_COLORS[owner]
 
-    slot_y = 0 if at_top else cfg.TABLE_HEIGHT - wt
-    slot = pygame.Rect(cfg.GOAL_X_MIN, slot_y, cfg.GOAL_WIDTH, wt)
+    slot_x = 0 if at_left else cfg.TABLE_WIDTH - wt
+    slot = pygame.Rect(slot_x, cfg.GOAL_Y_MIN, wt, cfg.GOAL_HEIGHT)
     pygame.draw.rect(surface, cfg.COLOR_GOAL_MOUTH, slot)
 
-    glow_h = 46
-    glow_y = 0 if at_top else cfg.TABLE_HEIGHT - glow_h
-    glow_rect = pygame.Rect(cfg.GOAL_X_MIN - 14, glow_y, cfg.GOAL_WIDTH + 28, glow_h)
+    glow_w = 46
+    glow_x = 0 if at_left else cfg.TABLE_WIDTH - glow_w
+    glow_rect = pygame.Rect(glow_x, cfg.GOAL_Y_MIN - 14, glow_w, cfg.GOAL_HEIGHT + 28)
     _draw_glow_rect(surface, glow_rect, color, layers=5, max_alpha=60, radius=10)
 
-    line_y = wt if at_top else cfg.TABLE_HEIGHT - wt
-    pygame.draw.line(surface, color, (cfg.GOAL_X_MIN, line_y), (cfg.GOAL_X_MAX, line_y), 3)
+    line_x = wt if at_left else cfg.TABLE_WIDTH - wt
+    pygame.draw.line(surface, color, (line_x, cfg.GOAL_Y_MIN), (line_x, cfg.GOAL_Y_MAX), 3)
 
 
 def _draw_center_markings(surface: pygame.Surface):
-    dash_w, gap_w = 14, 10
-    x = cfg.WALL_THICKNESS
-    while x < cfg.TABLE_WIDTH - cfg.WALL_THICKNESS:
-        x_end = min(x + dash_w, cfg.TABLE_WIDTH - cfg.WALL_THICKNESS)
-        pygame.draw.line(surface, cfg.COLOR_LINE, (x, cfg.CENTER_LINE_Y), (x_end, cfg.CENTER_LINE_Y), 2)
-        x += dash_w + gap_w
+    dash_h, gap_h = 14, 10
+    y = cfg.WALL_THICKNESS
+    while y < cfg.TABLE_HEIGHT - cfg.WALL_THICKNESS:
+        y_end = min(y + dash_h, cfg.TABLE_HEIGHT - cfg.WALL_THICKNESS)
+        pygame.draw.line(surface, cfg.COLOR_LINE, (cfg.CENTER_LINE_X, y), (cfg.CENTER_LINE_X, y_end), 2)
+        y += dash_h + gap_h
 
-    center = (cfg.TABLE_WIDTH / 2, cfg.CENTER_LINE_Y)
+    center = (cfg.CENTER_LINE_X, cfg.TABLE_HEIGHT / 2)
     pygame.gfxdraw.aacircle(surface, int(center[0]), int(center[1]), cfg.CENTER_CIRCLE_RADIUS, cfg.COLOR_LINE)
     pygame.gfxdraw.aacircle(surface, int(center[0]), int(center[1]), 4, cfg.COLOR_LINE_ACCENT)
     pygame.gfxdraw.filled_circle(surface, int(center[0]), int(center[1]), 3, cfg.COLOR_LINE_ACCENT)
 
 
-def _draw_shields(surface: pygame.Surface, state: GameState, rotation: int):
+def _draw_shields(surface: pygame.Surface, state: GameState):
     for owner, shield in state.shields.items():
         if shield is None:
             continue
-        r = transform_rect(shield.rect, rotation)
+        r = shield.rect
         color = cfg.PLAYER_COLORS[owner]
         overlay = pygame.Surface((r.width, r.height), pygame.SRCALPHA)
         overlay.fill((*color, 50))
@@ -153,19 +137,18 @@ def _lerp_pos(entity, alpha: float) -> Vec2:
     return entity.prev_pos.lerp(entity.pos, alpha)
 
 
-def _draw_pucks(surface: pygame.Surface, state: GameState, rotation: int, alpha: float):
+def _draw_pucks(surface: pygame.Surface, state: GameState, alpha: float):
     for puck in state.pucks:
         if puck.vel.length_squared() >= cfg.PUCK_TRAIL_MIN_SPEED ** 2 and len(puck.trail) > 1:
             n = len(puck.trail)
             for i, (tx, ty) in enumerate(puck.trail[:-1]):
                 t = (i + 1) / n
-                tp = transform_point(Vec2(tx, ty), rotation)
                 trail_alpha = int(70 * t)
                 radius = max(1, int(puck.radius * (0.25 + 0.55 * t)))
                 pygame.gfxdraw.filled_circle(
-                    surface, int(tp.x), int(tp.y), radius, (*cfg.COLOR_PUCK_TRAIL, trail_alpha))
+                    surface, int(tx), int(ty), radius, (*cfg.COLOR_PUCK_TRAIL, trail_alpha))
 
-        p = transform_point(_lerp_pos(puck, alpha), rotation)
+        p = _lerp_pos(puck, alpha)
         cx, cy, r = int(p.x), int(p.y), puck.radius
         rim_color = cfg.COLOR_PUCK_EXTRA_RIM if puck.puck_id != 0 else cfg.COLOR_PUCK_RIM
         _aa_filled_circle(surface, (cx, cy), r, rim_color)
@@ -173,10 +156,10 @@ def _draw_pucks(surface: pygame.Surface, state: GameState, rotation: int, alpha:
         pygame.gfxdraw.filled_circle(surface, cx - r // 3, cy - r // 3, max(r // 5, 1), (255, 255, 255, 90))
 
 
-def _draw_paddles(surface: pygame.Surface, state: GameState, rotation: int, alpha: float):
+def _draw_paddles(surface: pygame.Surface, state: GameState, alpha: float):
     flash_on = int(state.game_time * 8) % 2 == 0
     for player, paddle in state.paddles.items():
-        p = transform_point(_lerp_pos(paddle, alpha), rotation)
+        p = _lerp_pos(paddle, alpha)
         cx, cy, r = int(p.x), int(p.y), paddle.radius
         frozen = state.is_frozen(player)
 
@@ -203,7 +186,7 @@ def _draw_paddles(surface: pygame.Surface, state: GameState, rotation: int, alph
 _FX_LIFE = {"paddle_hit": 0.35, "wall_bounce": 0.25, "shield_block": 0.4, "goal": 0.9}
 
 
-def _draw_event_fx(surface: pygame.Surface, state: GameState, rotation: int):
+def _draw_event_fx(surface: pygame.Surface, state: GameState):
     for event in state.events:
         kind = event["kind"]
         life = _FX_LIFE.get(kind)
@@ -214,7 +197,7 @@ def _draw_event_fx(surface: pygame.Surface, state: GameState, rotation: int):
             continue
         frac = age / life
         fade = 1.0 - frac
-        p = transform_point(Vec2(event["pos"]), rotation)
+        p = Vec2(event["pos"])
 
         if kind == "goal":
             scorer = event.get("scorer", 1)
@@ -256,19 +239,19 @@ def _draw_event_fx(surface: pygame.Surface, state: GameState, rotation: int):
                     surface, int(sx), int(sy), spark_r, (*color, alpha))
 
 
-def _draw_table_surface(surface: pygame.Surface, state: GameState, rotation: int, alpha: float):
+def _draw_table_surface(surface: pygame.Surface, state: GameState, alpha: float):
     surface.fill(cfg.COLOR_BG)
     _draw_rail_and_ice(surface)
-    _draw_goal(surface, at_top=True)
-    _draw_goal(surface, at_top=False)
+    _draw_goal(surface, at_left=True)
+    _draw_goal(surface, at_left=False)
     _draw_center_markings(surface)
-    _draw_shields(surface, state, rotation)
-    _draw_pucks(surface, state, rotation, alpha)
-    _draw_paddles(surface, state, rotation, alpha)
-    _draw_event_fx(surface, state, rotation)
+    _draw_shields(surface, state)
+    _draw_pucks(surface, state, alpha)
+    _draw_paddles(surface, state, alpha)
+    _draw_event_fx(surface, state)
 
 
-def draw_score_panel(surface: pygame.Surface, state: GameState, viewer_player: int):
+def draw_score_panel(surface: pygame.Surface, state: GameState):
     bar = surface.get_rect()
     surface.fill(cfg.COLOR_HUD_PANEL)
     half_w = bar.width // 2
@@ -299,23 +282,6 @@ def draw_score_panel(surface: pygame.Surface, state: GameState, viewer_player: i
                 pygame.gfxdraw.aacircle(surface, px, pip_y, 3, cfg.PLAYER_COLORS[player])
             else:
                 pygame.gfxdraw.aacircle(surface, px, pip_y, 3, (*cfg.COLOR_TEXT_DIM, 110))
-
-    you_color = cfg.PLAYER_COLORS[viewer_player]
-    you_x = 10 if viewer_player == 1 else bar.width - 10
-    align = "left" if viewer_player == 1 else "right"
-    _blit_aligned(surface, f"P{viewer_player} (you)", (you_x, bar.height // 2), you_color, align)
-
-
-def _blit_aligned(surface, text, pos, color, align="left", size=13):
-    rendered = _get_font(size).render(text, True, color)
-    rect = rendered.get_rect()
-    if align == "left":
-        rect.midleft = pos
-    elif align == "right":
-        rect.midright = pos
-    else:
-        rect.midtop = pos
-    surface.blit(rendered, rect)
 
 
 def draw_power_dock(surface: pygame.Surface, state: GameState, viewer_player: int):
@@ -366,43 +332,11 @@ def _draw_keycap(surface: pygame.Surface, label: str, midleft, size: int = 14) -
     return rect
 
 
-def _draw_mini_rink(surface: pygame.Surface, center, rink_w: int = 500, rink_h: int = 92):
-    rect = pygame.Rect(0, 0, rink_w, rink_h)
-    rect.center = center
-    pygame.draw.rect(surface, cfg.COLOR_RAIL_DARK, rect.inflate(18, 18), border_radius=16)
-    pygame.draw.rect(surface, cfg.COLOR_RAIL_BEVEL, rect.inflate(10, 10), width=2, border_radius=13)
-    pygame.draw.rect(surface, cfg.COLOR_ICE_NEAR, rect, border_radius=8)
-
-    cy = rect.centery
-    y = rect.top + 5
-    while y < rect.bottom - 5:
-        pygame.draw.line(surface, cfg.COLOR_LINE, (rect.centerx, y), (rect.centerx, min(y + 8, rect.bottom - 5)), 2)
-        y += 14
-    pygame.gfxdraw.aacircle(surface, rect.centerx, cy, 24, cfg.COLOR_LINE)
-    pygame.gfxdraw.filled_circle(surface, rect.centerx, cy, 3, cfg.COLOR_LINE_ACCENT)
-
-    for player, gx in ((1, rect.left), (2, rect.right - 7)):
-        pygame.draw.rect(surface, cfg.COLOR_GOAL_MOUTH, (gx, cy - 19, 7, 38))
-        pygame.draw.line(surface, cfg.PLAYER_COLORS[player],
-                         (rect.left + 8 if player == 1 else rect.right - 8, cy - 19),
-                         (rect.left + 8 if player == 1 else rect.right - 8, cy + 19), 2)
-
-    for player, mx in ((1, rect.left + rink_w // 5), (2, rect.right - rink_w // 5)):
-        pygame.gfxdraw.filled_circle(surface, mx, cy, 13, (30, 30, 34))
-        pygame.gfxdraw.aacircle(surface, mx, cy, 13, (30, 30, 34))
-        pygame.gfxdraw.filled_circle(surface, mx, cy, 11, cfg.PLAYER_COLORS[player])
-        pygame.gfxdraw.filled_circle(surface, mx, cy, 5, cfg.PLAYER_MALLET_KNOB[player])
-        tag = _get_font(11).render(f"P{player}", True, cfg.PLAYER_COLORS[player])
-        surface.blit(tag, tag.get_rect(center=(mx, rect.bottom + 16)))
-    pygame.gfxdraw.filled_circle(surface, rect.centerx + 46, cy - 14, 8, cfg.COLOR_PUCK_RIM)
-    pygame.gfxdraw.filled_circle(surface, rect.centerx + 46, cy - 14, 6, cfg.COLOR_PUCK_BODY)
-
-
 def draw_intro_screen(surface: pygame.Surface):
     w, h = surface.get_size()
     surface.fill(cfg.COLOR_BG)
 
-    kicker = _get_font(13).render("D U A L - P O V   ·   L O C A L   M U L T I P L A Y E R", True, cfg.COLOR_TEXT_DIM)
+    kicker = _get_font(13).render("S H A R E D   T A B L E   ·   L O C A L   M U L T I P L A Y E R", True, cfg.COLOR_TEXT_DIM)
     surface.blit(kicker, kicker.get_rect(center=(w / 2, 44)))
     title = _get_font(46).render("AIR HOCKEY", True, cfg.COLOR_TEXT)
     surface.blit(title, title.get_rect(center=(w / 2, 84)))
@@ -416,11 +350,19 @@ def draw_intro_screen(surface: pygame.Surface):
         True, cfg.COLOR_TEXT_DIM)
     surface.blit(subtitle, subtitle.get_rect(center=(w / 2, 138)))
 
+    prompt_h = _get_font(17).render("X", True, cfg.COLOR_TEXT).get_height()
+    hint_h = _get_font(12, bold=False).render("X", True, cfg.COLOR_TEXT_DIM).get_height()
+    pill_h = prompt_h + 22
+    footer_gap, footer_inner_gap, footer_margin = 12, 6, 8
+    footer_reserve = footer_gap + pill_h + footer_inner_gap + hint_h + footer_margin
+
     margin, gap = 30, 24
     card_w = (w - 2 * margin - gap) // 2
-    card_y, pad = 172, 20
-    row_h = 64
-    card_h = pad + 30 + 44 + 14 + 5 * row_h + pad - 6
+    card_y, pad = 148, 12
+    avail_h = h - card_y - footer_reserve
+    fixed_h = pad + 4 + 40 + 40 + 14 + 40 + pad
+    row_h = max(30, min(64, (avail_h - fixed_h) // 4))
+    card_h = fixed_h + 4 * row_h
 
     for player in (1, 2):
         color = cfg.PLAYER_COLORS[player]
@@ -438,7 +380,7 @@ def draw_intro_screen(surface: pygame.Surface):
         header = _get_font(21).render(f"PLAYER {player}", True, color)
         surface.blit(header, header.get_rect(midleft=(cx0, y + 10)))
         seat = _get_font(12, bold=False).render(
-            "left screen" if player == 1 else "right screen", True, cfg.COLOR_TEXT_DIM)
+            "left side" if player == 1 else "right side", True, cfg.COLOR_TEXT_DIM)
         surface.blit(seat, seat.get_rect(midright=(card.right - pad, y + 10)))
         y += 40
 
@@ -461,28 +403,23 @@ def draw_intro_screen(surface: pygame.Surface):
             surface.blit(desc, desc.get_rect(topleft=(cap.right + 14, y + 26)))
             y += row_h
 
-    rink_cy = card_y + card_h + 84
-    _draw_mini_rink(surface, (w // 2, rink_cy))
-
-    tip = _get_font(13, bold=False).render(
-        "Defend your goal, score in theirs  ·  after a goal, the player who conceded serves.",
-        True, cfg.COLOR_TEXT_DIM)
-    surface.blit(tip, tip.get_rect(center=(w / 2, rink_cy + 82)))
+    card_bottom = card_y + card_h
+    pill_top = card_bottom + footer_gap
 
     pulse = (pygame.time.get_ticks() // 500) % 2 == 0
     prompt_color = cfg.COLOR_TEXT if pulse else cfg.COLOR_TEXT_DIM
     prompt_text = _get_font(17).render("PRESS  SPACE  TO  START", True, prompt_color)
-    pill = prompt_text.get_rect(center=(w / 2, h - 64)).inflate(48, 22)
+    pill = prompt_text.get_rect(centerx=w / 2, top=pill_top).inflate(48, 22)
     pill_surf = pygame.Surface(pill.size, pygame.SRCALPHA)
     pygame.draw.rect(pill_surf, (*cfg.COLOR_CARD, 235), pill_surf.get_rect(), border_radius=999)
     pygame.draw.rect(pill_surf, (*prompt_color, 140), pill_surf.get_rect(), width=1, border_radius=999)
     surface.blit(pill_surf, pill.topleft)
     surface.blit(prompt_text, prompt_text.get_rect(center=pill.center))
     hint = _get_font(12, bold=False).render("ESC quits  ·  ENTER rematches after a win", True, cfg.COLOR_TEXT_DIM)
-    surface.blit(hint, hint.get_rect(center=(w / 2, h - 28)))
+    surface.blit(hint, hint.get_rect(midtop=(w / 2, pill.bottom + footer_inner_gap)))
 
 
-def _draw_center_banner(surface: pygame.Surface, rotation: int, text: str, color,
+def _draw_center_banner(surface: pygame.Surface, text: str, color,
                         sub: str = None, size: int = 40):
     text_surf = _get_font(size).render(text, True, color)
     while text_surf.get_width() > cfg.TABLE_WIDTH - 68 and size > 16:
@@ -499,25 +436,22 @@ def _draw_center_banner(surface: pygame.Surface, rotation: int, text: str, color
     panel.blit(text_surf, text_surf.get_rect(midtop=(width / 2, padding / 2)))
     if sub_surf:
         panel.blit(sub_surf, sub_surf.get_rect(midtop=(width / 2, padding / 2 + text_surf.get_height() + 8)))
-    if rotation == 180:
-        panel = pygame.transform.rotate(panel, 180)
     surface.blit(panel, panel.get_rect(center=(cfg.TABLE_WIDTH / 2, cfg.TABLE_HEIGHT / 2)))
 
 
-def render_table(surface: pygame.Surface, state: GameState, rotation: int,
-                  viewer_player: int, alpha: float = 1.0):
-    _draw_table_surface(surface, state, rotation, alpha)
+def render_table(surface: pygame.Surface, state: GameState, alpha: float = 1.0):
+    _draw_table_surface(surface, state, alpha)
 
     if state.winner is not None:
         _draw_center_banner(
-            surface, rotation, f"PLAYER {state.winner} WINS!",
+            surface, f"PLAYER {state.winner} WINS!",
             cfg.PLAYER_COLORS[state.winner], sub="Press ENTER for a rematch")
     elif state.game_time < state.pause_until and state.last_scorer is not None:
         age = state.game_time - (state.pause_until - cfg.GOAL_PAUSE_DURATION)
         pop = max(0.0, 1.0 - age / cfg.GOAL_BANNER_POP_TIME)
         scorer = state.last_scorer
         _draw_center_banner(
-            surface, rotation, f"P{scorer} SCORES!",
+            surface, f"P{scorer} SCORES!",
             cfg.PLAYER_COLORS[scorer],
             sub=f"{state.score[1]}  -  {state.score[2]}   ·   first to {cfg.SCORE_TO_WIN}",
             size=int(40 * (1 + 0.45 * pop)))

@@ -46,15 +46,15 @@ class PowerManager:
                 state.slow_active[player] = False
 
     def _trigger_shield(self, state: GameState, player: int):
-        x_min = cfg.GOAL_X_MIN - cfg.SHIELD_MARGIN
-        width = (cfg.GOAL_X_MAX - cfg.GOAL_X_MIN) + 2 * cfg.SHIELD_MARGIN
+        y_min = cfg.GOAL_Y_MIN - cfg.SHIELD_MARGIN
+        height = (cfg.GOAL_Y_MAX - cfg.GOAL_Y_MIN) + 2 * cfg.SHIELD_MARGIN
         if player == 1:
-            y_center = cfg.TABLE_HEIGHT - cfg.SHIELD_OFFSET
+            x_center = cfg.SHIELD_OFFSET
         else:
-            y_center = cfg.SHIELD_OFFSET
+            x_center = cfg.TABLE_WIDTH - cfg.SHIELD_OFFSET
         rect = pygame.Rect(
-            int(x_min), int(y_center - cfg.SHIELD_THICKNESS / 2),
-            int(width), int(cfg.SHIELD_THICKNESS),
+            int(x_center - cfg.SHIELD_THICKNESS / 2), int(y_min),
+            int(cfg.SHIELD_THICKNESS), int(height),
         )
         state.shields[player] = Shield(owner=player, rect=rect, expires_at=state.game_time + cfg.SHIELD_DURATION)
         self._start_cooldown(state, player, "shield", cfg.SHIELD_COOLDOWN)
@@ -100,10 +100,10 @@ class PowerManager:
                 state.shields[player] = None
 
     def slow_multiplier(self, state: GameState, puck: Puck) -> float:
-        y = puck.pos.y
-        if state.slow_active[1] and y > cfg.CENTER_LINE_Y:
+        x = puck.pos.x
+        if state.slow_active[1] and x < cfg.CENTER_LINE_X:
             return cfg.SLOW_PUCK_FACTOR
-        if state.slow_active[2] and y < cfg.CENTER_LINE_Y:
+        if state.slow_active[2] and x > cfg.CENTER_LINE_X:
             return cfg.SLOW_PUCK_FACTOR
         return 1.0
 

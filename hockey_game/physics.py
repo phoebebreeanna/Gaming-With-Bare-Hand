@@ -43,8 +43,8 @@ class GameState:
         self.game_time: float = 0.0
 
         self.paddles: Dict[int, Paddle] = {
-            1: Paddle(1, Vec2(cfg.TABLE_WIDTH * 0.5, cfg.TABLE_HEIGHT - 80)),
-            2: Paddle(2, Vec2(cfg.TABLE_WIDTH * 0.5, 80)),
+            1: Paddle(1, Vec2(80, cfg.TABLE_HEIGHT * 0.5)),
+            2: Paddle(2, Vec2(cfg.TABLE_WIDTH - 80, cfg.TABLE_HEIGHT * 0.5)),
         }
 
         self.pucks: List[Puck] = [Puck(pos=self._center(), vel=Vec2(0, 0), puck_id=0)]
@@ -90,8 +90,8 @@ class GameState:
         self.events = [e for e in self.events if e["time"] >= cutoff]
 
     def reset_after_goal(self, conceder: int):
-        serve_y = cfg.TABLE_HEIGHT * (cfg.SERVE_Y_FRAC if conceder == 1 else 1 - cfg.SERVE_Y_FRAC)
-        self.pucks = [Puck(pos=Vec2(cfg.TABLE_WIDTH / 2, serve_y), vel=Vec2(0, 0), puck_id=0)]
+        serve_x = cfg.TABLE_WIDTH * (cfg.SERVE_X_FRAC if conceder == 1 else 1 - cfg.SERVE_X_FRAC)
+        self.pucks = [Puck(pos=Vec2(serve_x, cfg.TABLE_HEIGHT / 2), vel=Vec2(0, 0), puck_id=0)]
         self.double_puck_active = False
         self.pause_until = self.game_time + cfg.GOAL_PAUSE_DURATION
         self.goal_lock_until = self.game_time + cfg.GOAL_SCORE_DEBOUNCE
@@ -111,14 +111,14 @@ class GameState:
 
 
 def paddle_bounds(player: int, radius: int) -> Tuple[float, float, float, float]:
-    min_x = cfg.WALL_THICKNESS + radius
-    max_x = cfg.TABLE_WIDTH - cfg.WALL_THICKNESS - radius
+    min_y = cfg.WALL_THICKNESS + radius
+    max_y = cfg.TABLE_HEIGHT - cfg.WALL_THICKNESS - radius
     if player == 1:
-        min_y = cfg.CENTER_LINE_Y + radius
-        max_y = cfg.TABLE_HEIGHT - cfg.WALL_THICKNESS - radius
+        min_x = cfg.WALL_THICKNESS + radius
+        max_x = cfg.CENTER_LINE_X - radius
     else:
-        min_y = cfg.WALL_THICKNESS + radius
-        max_y = cfg.CENTER_LINE_Y - radius
+        min_x = cfg.CENTER_LINE_X + radius
+        max_x = cfg.TABLE_WIDTH - cfg.WALL_THICKNESS - radius
     return min_x, max_x, min_y, max_y
 
 
@@ -136,8 +136,23 @@ def move_paddle(paddle: Paddle, direction: Vec2, dt: float):
     paddle.vel = (new_pos - old_pos) / dt if dt > 0 else Vec2(0, 0)
 
 
-def _in_goal_mouth(x: float) -> bool:
-    return cfg.GOAL_X_MIN <= x <= cfg.GOAL_X_MAX
+def set_paddle_target_fraction(paddle: Paddle, frac_x: float, frac_y: float, dt: float):
+    min_x, max_x, min_y, max_y = paddle_bounds(paddle.player, paddle.radius)
+    old_pos = Vec2(paddle.pos)
+    target = Vec2(min_x + frac_x * (max_x - min_x), min_y + frac_y * (max_y - min_y))
+
+    delta = target - old_pos
+    max_step = cfg.PADDLE_TRACK_MAX_SPEED * dt
+    if delta.length_squared() > max_step * max_step:
+        delta.scale_to_length(max_step)
+    new_pos = old_pos + delta
+
+    paddle.pos = new_pos
+    paddle.vel = delta / dt if dt > 0 else Vec2(0, 0)
+
+
+def _in_goal_mouth(y: float) -> bool:
+    return cfg.GOAL_Y_MIN <= y <= cfg.GOAL_Y_MAX
 
 
 def integrate_puck(puck: Puck, dt: float, slow_multiplier: float):
@@ -154,57 +169,57 @@ def integrate_puck(puck: Puck, dt: float, slow_multiplier: float):
 def resolve_side_walls(puck: Puck) -> Optional[float]:
     left = cfg.WALL_THICKNESS + puck.radius
     right = cfg.TABLE_WIDTH - cfg.WALL_THICKNESS - puck.radius
+
+    if left <= puck.pos.x <= right:
+        return None
+
+    if _in_goal_mouth(puck.pos.y):
+        post_top = cfg.GOAL_Y_MIN + puck.radius
+        post_bottom = cfg.GOAL_Y_MAX - puck.radius
+        if puck.pos.y < post_top:
+            impact = abs(puck.vel.y)
+            puck.pos.y = post_top
+            puck.vel.y = -puck.vel.y * cfg.WALL_RESTITUTION
+            return impact
+        if puck.pos.y > post_bottom:
+            impact = abs(puck.vel.y)
+            puck.pos.y = post_bottom
+            puck.vel.y = -puck.vel.y * cfg.WALL_RESTITUTION
+            return impact
+        return None
+
+    impact = abs(puck.vel.x)
     if puck.pos.x < left:
-        impact = abs(puck.vel.x)
         puck.pos.x = left
-        puck.vel.x = -puck.vel.x * cfg.WALL_RESTITUTION
-        return impact
-    elif puck.pos.x > right:
-        impact = abs(puck.vel.x)
+    else:
         puck.pos.x = right
-        puck.vel.x = -puck.vel.x * cfg.WALL_RESTITUTION
-        return impact
-    return None
+    puck.vel.x = -puck.vel.x * cfg.WALL_RESTITUTION
+    return impact
 
 
 def resolve_top_bottom_walls(puck: Puck) -> Optional[float]:
     top = cfg.WALL_THICKNESS + puck.radius
     bottom = cfg.TABLE_HEIGHT - cfg.WALL_THICKNESS - puck.radius
-
-    if top <= puck.pos.y <= bottom:
-        return None
-
-    if _in_goal_mouth(puck.pos.x):
-        post_left = cfg.GOAL_X_MIN + puck.radius
-        post_right = cfg.GOAL_X_MAX - puck.radius
-        if puck.pos.x < post_left:
-            impact = abs(puck.vel.x)
-            puck.pos.x = post_left
-            puck.vel.x = -puck.vel.x * cfg.WALL_RESTITUTION
-            return impact
-        if puck.pos.x > post_right:
-            impact = abs(puck.vel.x)
-            puck.pos.x = post_right
-            puck.vel.x = -puck.vel.x * cfg.WALL_RESTITUTION
-            return impact
-        return None
-
-    impact = abs(puck.vel.y)
     if puck.pos.y < top:
+        impact = abs(puck.vel.y)
         puck.pos.y = top
-    else:
+        puck.vel.y = -puck.vel.y * cfg.WALL_RESTITUTION
+        return impact
+    elif puck.pos.y > bottom:
+        impact = abs(puck.vel.y)
         puck.pos.y = bottom
-    puck.vel.y = -puck.vel.y * cfg.WALL_RESTITUTION
-    return impact
+        puck.vel.y = -puck.vel.y * cfg.WALL_RESTITUTION
+        return impact
+    return None
 
 
 def check_goal(puck: Puck) -> Optional[int]:
-    if not _in_goal_mouth(puck.pos.x):
+    if not _in_goal_mouth(puck.pos.y):
         return None
-    if puck.pos.y < cfg.WALL_THICKNESS:
-        return 1
-    if puck.pos.y > cfg.TABLE_HEIGHT - cfg.WALL_THICKNESS:
+    if puck.pos.x < cfg.WALL_THICKNESS:
         return 2
+    if puck.pos.x > cfg.TABLE_WIDTH - cfg.WALL_THICKNESS:
+        return 1
     return None
 
 
@@ -216,11 +231,11 @@ def resolve_shield(puck: Puck, shield: Shield) -> bool:
     if dx * dx + dy * dy >= puck.radius * puck.radius:
         return False
 
-    if puck.pos.y < shield.rect.centery:
-        puck.pos.y = shield.rect.top - puck.radius
+    if puck.pos.x < shield.rect.centerx:
+        puck.pos.x = shield.rect.left - puck.radius
     else:
-        puck.pos.y = shield.rect.bottom + puck.radius
-    puck.vel.y = -puck.vel.y * cfg.WALL_RESTITUTION
+        puck.pos.x = shield.rect.right + puck.radius
+    puck.vel.x = -puck.vel.x * cfg.WALL_RESTITUTION
     return True
 
 

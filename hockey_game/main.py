@@ -4,9 +4,11 @@ import time
 import pygame
 
 import config as cfg
+import remote_input
 from physics import (
     GameState,
     move_paddle,
+    set_paddle_target_fraction,
     integrate_puck,
     resolve_side_walls,
     resolve_top_bottom_walls,
@@ -30,8 +32,12 @@ def physics_step(state: GameState, input_source, power_manager: PowerManager, dt
         if state.is_frozen(player):
             paddle.vel = pygame.math.Vector2(0, 0)
             continue
-        direction = input_source.get_paddle_position(player)
-        move_paddle(paddle, direction, dt)
+        remote_target = remote_input.get_target_fraction(player)
+        if remote_target is not None:
+            set_paddle_target_fraction(paddle, remote_target[0], remote_target[1], dt)
+        else:
+            direction = input_source.get_paddle_position(player)
+            move_paddle(paddle, direction, dt)
 
     power_manager.step_cleanup(state)
 
@@ -104,7 +110,8 @@ def _blit_scaled_to_fit(display_surface, virtual_surface):
 def main():
     pygame.init()
     audio.init()
-    pygame.display.set_caption("Dual-POV Air Hockey")
+    remote_input.start()
+    pygame.display.set_caption("Air Hockey")
     window_w, window_h = _initial_window_size()
     screen = pygame.display.set_mode(
         (window_w, window_h), pygame.RESIZABLE | pygame.DOUBLEBUF, vsync=1
@@ -112,14 +119,13 @@ def main():
     virtual = pygame.Surface((cfg.WINDOW_WIDTH, cfg.WINDOW_HEIGHT)).convert()
     clock = pygame.time.Clock()
 
-    def half_rects(offset_x):
-        top = pygame.Rect(offset_x, 0, cfg.TABLE_WIDTH, cfg.HUD_TOP_HEIGHT)
-        ice = pygame.Rect(offset_x, cfg.TABLE_Y_OFFSET, cfg.TABLE_WIDTH, cfg.TABLE_HEIGHT)
-        bottom = pygame.Rect(offset_x, cfg.TABLE_Y_OFFSET + cfg.TABLE_HEIGHT, cfg.TABLE_WIDTH, cfg.HUD_BOTTOM_HEIGHT)
-        return top, ice, bottom
-
-    p1_top, p1_ice, p1_bottom = (virtual.subsurface(r) for r in half_rects(cfg.P1_VIEW_OFFSET_X))
-    p2_top, p2_ice, p2_bottom = (virtual.subsurface(r) for r in half_rects(cfg.P2_VIEW_OFFSET_X))
+    top_bar = virtual.subsurface(pygame.Rect(0, 0, cfg.TABLE_WIDTH, cfg.HUD_TOP_HEIGHT))
+    ice = virtual.subsurface(pygame.Rect(0, cfg.TABLE_Y_OFFSET, cfg.TABLE_WIDTH, cfg.TABLE_HEIGHT))
+    bottom_bar = virtual.subsurface(
+        pygame.Rect(0, cfg.TABLE_Y_OFFSET + cfg.TABLE_HEIGHT, cfg.TABLE_WIDTH, cfg.HUD_BOTTOM_HEIGHT))
+    dock_w = cfg.TABLE_WIDTH // 2
+    p1_dock = bottom_bar.subsurface(pygame.Rect(0, 0, dock_w, cfg.HUD_BOTTOM_HEIGHT))
+    p2_dock = bottom_bar.subsurface(pygame.Rect(dock_w, 0, cfg.TABLE_WIDTH - dock_w, cfg.HUD_BOTTOM_HEIGHT))
 
     state = GameState()
     input_source = KeyboardInput()
@@ -175,19 +181,15 @@ def main():
         audio_seq = audio.play_new_events(state, audio_seq)
 
         alpha = min(accumulator / cfg.PHYSICS_DT, 1.0)
-        render_table(p1_ice, state, rotation=0, viewer_player=1, alpha=alpha)
-        render_table(p2_ice, state, rotation=180, viewer_player=2, alpha=alpha)
-        draw_score_panel(p1_top, state, viewer_player=1)
-        draw_score_panel(p2_top, state, viewer_player=2)
-        draw_power_dock(p1_bottom, state, viewer_player=1)
-        draw_power_dock(p2_bottom, state, viewer_player=2)
+        render_table(ice, state, alpha=alpha)
+        draw_score_panel(top_bar, state)
+        draw_power_dock(p1_dock, state, viewer_player=1)
+        draw_power_dock(p2_dock, state, viewer_player=2)
 
-        virtual.fill(cfg.COLOR_DIVIDER, pygame.Rect(cfg.TABLE_WIDTH, 0, cfg.DIVIDER_THICKNESS, cfg.WINDOW_HEIGHT))
-        seam_x = cfg.TABLE_WIDTH + cfg.DIVIDER_THICKNESS // 2
-        pygame.draw.line(virtual, cfg.COLOR_DIVIDER_BEVEL, (seam_x, 0), (seam_x, cfg.WINDOW_HEIGHT), 2)
         _blit_scaled_to_fit(screen, virtual)
         pygame.display.flip()
 
+    remote_input.stop()
     pygame.quit()
     sys.exit(0)
 

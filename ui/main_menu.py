@@ -686,12 +686,32 @@ class MainMenu(QWidget):
                 background-color: #F4E6E6;
             }
         """)
-        self.start_btn.clicked.connect(self._on_start)   
+        self.mouse_mode_btn = QPushButton("Mouse Mode")
+        self.mouse_mode_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #F7F3F0;
+                color: #2A2A2A;
+                font-size: 10px;
+                font-weight: 700;
+                letter-spacing: 1.5px;
+                border: 1px solid #D6CCC5;
+                border-radius: 2px;
+                padding: 8px 20px;
+                min-width: 64px;
+            }
+
+            QPushButton:hover {
+                background-color: #EFE7E1;
+            }
+        """)
+
+        self.start_btn.clicked.connect(self._on_start)
         self.pause_btn.clicked.connect(self._on_pause)
         self.stop_btn.clicked.connect(self._on_stop)
         self.exit_btn.clicked.connect(QApplication.quit)
+        self.mouse_mode_btn.clicked.connect(lambda: self.game_mode_widget.select_mode('mouse'))
 
-        self.footer_buttons = [self.start_btn, self.pause_btn, self.stop_btn, self.exit_btn]
+        self.footer_buttons = [self.start_btn, self.pause_btn, self.stop_btn, self.mouse_mode_btn, self.exit_btn]
         for btn in self.footer_buttons:
             btn.setMinimumWidth(70)
             btn.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
@@ -699,6 +719,7 @@ class MainMenu(QWidget):
         btn_row.addWidget(self.start_btn)
         btn_row.addWidget(self.pause_btn)
         btn_row.addWidget(self.stop_btn)
+        btn_row.addWidget(self.mouse_mode_btn)
         btn_row.addWidget(self.exit_btn)
         layout.addLayout(btn_row)
 
@@ -1030,6 +1051,23 @@ class MainMenu(QWidget):
                     color: #e8e8e8;
                 }
             """)
+            self.mouse_mode_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #111111;
+                    color: #9a9a9a;
+                    font-size: 10px;
+                    font-weight: 700;
+                    letter-spacing: 1.5px;
+                    border: 1px solid #262626;
+                    border-radius: 2px;
+                    padding: 8px 20px;
+                    min-width: 64px;
+                }
+                QPushButton:hover {
+                    background-color: #161616;
+                    color: #e8e8e8;
+                }
+            """)
         else:
             win = self.window()
             if win:
@@ -1295,6 +1333,23 @@ class MainMenu(QWidget):
 
                 QPushButton:hover {
                     background-color: #F4E6E6;
+                }
+            """)
+            self.mouse_mode_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #F7F3F0;
+                    color: #555555;
+                    font-size: 10px;
+                    font-weight: 700;
+                    letter-spacing: 1.5px;
+                    border: 1px solid #D6CCC5;
+                    border-radius: 2px;
+                    padding: 8px 20px;
+                    min-width: 64px;
+                }
+
+                QPushButton:hover {
+                    background-color: #EFE7E1;
                 }
             """)
 
