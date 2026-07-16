@@ -51,11 +51,30 @@ build-win:
 		--add-data="assets;assets" \
 		--add-data="logic/data;logic/data" \
 		--add-data="logic/conf;logic/conf" \
+		--add-data="logic/chatbot/data;logic/chatbot/data" \
+		--add-data="logic/chatbot/chroma_db;logic/chatbot/chroma_db" \
+		--add-data="hockey_game;hockey_game" \
+		--hidden-import=pygame \
+		--hidden-import=logic.gesture_pipeline \
 		--collect-all numpy \
 		--collect-all cv2 \
 		--collect-all mediapipe \
 		--collect-all scipy \
-		--collect-all sklearn
+		--collect-all sklearn \
+		--collect-all torch \
+		--collect-all pygame \
+		--collect-all chromadb \
+		--collect-all llama_cpp \
+		--collect-all llama_index \
+		--collect-all transformers \
+		--collect-all tokenizers \
+		--collect-all huggingface_hub \
+		--collect-all sentence_transformers
+
+ISCC ?= "C:/Program Files (x86)/Inno Setup 6/ISCC.exe"
+
+build-win-installer: build-win
+	$(ISCC) installer.iss
 
 eval:
 	cd research && python evaluate.py dataset
