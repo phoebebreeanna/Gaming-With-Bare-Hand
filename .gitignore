@@ -13,11 +13,6 @@ build
 dist
 main.spec
 
-chatbot_test
-chatbot_test/.venv
-chatbot_test/chroma_db
-chatbot_test/*
-
 logic/chatbot/chroma_db/
 logic/chatbot/models/
 .python-version
