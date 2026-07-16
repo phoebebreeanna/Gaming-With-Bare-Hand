@@ -1,14 +1,14 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QPushButton, QStackedWidget
+    QLabel, QPushButton, QStackedWidget, QSizePolicy, QScrollArea
 )
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QUrl
 from PySide6.QtGui import QPixmap
+from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput, QVideoSink
 
 import os
 import sys
 _BASE = sys._MEIPASS if getattr(sys, 'frozen', False) else os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
-
 
 class TrainModelGuide(QWidget):
 
@@ -21,35 +21,49 @@ class TrainModelGuide(QWidget):
         self.steps = [
             {
                 "title": "Collect Gesture Samples",
-                "image": None,
+                "videos": [
+                    "assets/train_model_guide/1.1.mp4",
+                    "assets/train_model_guide/1.2.mp4",
+                    "assets/train_model_guide/1.3.mp4",
+                    "assets/train_model_guide/1.4.mp4",
+                ],
                 "items": [
                     "Select your game mode tab at the top: Mouse, Subway, or Racing.",
-                    "Under Pipeline Steps, click Collect Data, then Add More to record samples with your camera.",
+                    "Under Pipeline Steps, click Collect Data, then Start to record samples with your camera.",
                     "Aim for around 50 samples per gesture - the Gesture Data panel on the left tracks your progress per gesture.",
                     "Turn on Mirror Aug if your gestures don't rely on left/right direction - it doubles your data automatically.",
                 ],
             },
             {
                 "title": "Preprocess Your Data",
-                "image": None,
+                "videos": [
+                    "assets/train_model_guide/2.1.mp4",
+                    "assets/train_model_guide/2.2.png",
+                ],
                 "items": [
-                    "Once you have enough samples, click Re-run next to Preprocess.",
+                    "Once you have enough samples, click Run next to Preprocess - this prepares your raw samples for training.",
                     "This step requires collected data to be available first.",
-                    "Preprocessing prepares your raw samples for training.",
                 ],
             },
             {
                 "title": "Train the Model",
-                "image": None,
+                "videos": [
+                    "assets/train_model_guide/3.1.mp4",
+                    "assets/train_model_guide/3.3.mp4",
+                ],
                 "items": [
-                    "Click Re-run next to Train Model once preprocessing is complete.",
+                    "Click Run next to Train Model once preprocessing is complete, or else it will be locked.",
                     "The training progress bar at the bottom shows completion (e.g. 150 / 150).",
-                    "This step requires your data to be preprocessed first.",
                 ],
             },
             {
                 "title": "Review Your Samples",
-                "image": None,
+                "videos": [
+                    "assets/train_model_guide/4.1.png",
+                    "assets/train_model_guide/4.2.png",
+                    "assets/train_model_guide/4.3.mp4",
+                    "assets/train_model_guide/4.4.png",
+                ],
                 "items": [
                     "Once training completes, Review Samples becomes Ready.",
                     "Each sample shows the True Label vs Predicted result, plus a confidence flag like LOW CONF.",
@@ -59,11 +73,13 @@ class TrainModelGuide(QWidget):
             },
             {
                 "title": "Use Your Custom Model",
-                "image": None,
+                "videos": [
+                    "assets/train_model_guide/5.1.mp4",
+                    "assets/train_model_guide/5.2.mp4",
+                ],
                 "items": [
-                    "Go to Settings (04) from the sidebar.",
-                    "Toggle Default to Custom for your chosen game mode.",
-                    "Your trained gestures are now active immediately.",
+                    "Go to Settings (05) from the sidebar.",
+                    "Toggle Default to Custom for your chosen game mode. Your trained gestures are now active immediately.",
                 ],
             },
         ]
@@ -74,6 +90,9 @@ class TrainModelGuide(QWidget):
         self.step_numbers = []
         self.step_titles = []
         self.step_images = []
+        self.step_video_players = []
+        self.step_video_sinks = []
+        self.step_audio_outputs = []
         self.step_item_nums = []
         self.step_item_texts = []
         self.step_item_rows = []
@@ -162,7 +181,13 @@ class TrainModelGuide(QWidget):
         self.update_navigation(0)
 
     def create_step_page(self, step_index, step):
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll.setStyleSheet("background: transparent; border: none;")
+
         page = QWidget()
+        page.setStyleSheet("background: transparent;")
         page_layout = QVBoxLayout(page)
         page_layout.setContentsMargins(24, 24, 24, 24)
         page_layout.setSpacing(0)
@@ -170,29 +195,9 @@ class TrainModelGuide(QWidget):
         card = QWidget()
         card.setMinimumHeight(160)
         self.step_cards.append(card)
-        hl = QHBoxLayout(card)
-        hl.setContentsMargins(0, 0, 0, 0)
-        hl.setSpacing(0)
-
-        img = QLabel()
-        img.setFixedSize(160, 160)
-        img.setAlignment(Qt.AlignCenter)
-        img_path = step.get("image")
-        if img_path:
-            pix = QPixmap(os.path.join(_BASE, img_path))
-            if not pix.isNull():
-                img.setPixmap(pix.scaled(160, 160, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-            else:
-                img.setText("NO IMAGE")
-        else:
-            img.setText("IMAGE")
-        self.step_images.append(img)
-        hl.addWidget(img)
-        
-        content = QWidget()
-        cl = QVBoxLayout(content)
-        cl.setContentsMargins(18, 14, 18, 14)
-        cl.setSpacing(6)
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(18, 14, 18, 14)
+        card_layout.setSpacing(10)
 
         header_row = QHBoxLayout()
         header_row.setSpacing(10)
@@ -206,32 +211,76 @@ class TrainModelGuide(QWidget):
         self.step_titles.append(title)
         header_row.addWidget(title)
         header_row.addStretch()
-        cl.addLayout(header_row)
-        
+        card_layout.addLayout(header_row)
+
         items = step["items"]
+        videos = step.get("videos", [])
+        step_players = []
+
         for i, item_text in enumerate(items):
             row = QHBoxLayout()
-            row.setSpacing(10)
+            row.setSpacing(14)
+
+            video_label = QLabel()
+            video_label.setFixedSize(280, 140)
+            video_label.setScaledContents(False)
+            video_label.setStyleSheet("background-color: black;")
+            
+            video_sink = QVideoSink()
+            video_sink.videoFrameChanged.connect(
+                lambda frame, lbl=video_label: self._update_video_frame(frame, lbl)
+            )
+            self.step_video_sinks.append(video_sink)
+
+            player = QMediaPlayer()
+            audio_output = QAudioOutput()
+            audio_output.setMuted(True)
+            player.setAudioOutput(audio_output)
+            self.step_audio_outputs.append(audio_output)
+            player.setVideoSink(video_sink)
+            player.setLoops(QMediaPlayer.Loops.Infinite)
+
+            if i < len(videos):
+                media_path = videos[i]
+                if media_path.lower().endswith((".png", ".jpg", ".jpeg")):
+                    pix = QPixmap(os.path.join(_BASE, media_path))
+                    if not pix.isNull():
+                        scaled = pix.scaled(
+                            video_label.width() or 280, 140,
+                            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                            Qt.TransformationMode.SmoothTransformation,
+                        )
+                        video_label.setPixmap(scaled)
+                else:
+                    player.setSource(QUrl.fromLocalFile(os.path.join(_BASE, media_path)))
+
+            step_players.append(player)
+            row.addWidget(video_label)
+
+            text_col = QVBoxLayout()
+            text_col.setSpacing(2)
 
             num_lbl = QLabel(f"{i + 1:02d}")
-            num_lbl.setFixedWidth(18)
             num_lbl.setAlignment(Qt.AlignLeft | Qt.AlignTop)
             self.step_item_nums.append(num_lbl)
-            row.addWidget(num_lbl)
+            text_col.addWidget(num_lbl)
 
             text_lbl = QLabel(item_text)
             text_lbl.setWordWrap(True)
             self.step_item_texts.append(text_lbl)
-            row.addWidget(text_lbl, stretch=1)
+            text_col.addWidget(text_lbl)
 
-            cl.addLayout(row)
-        
-        cl.addStretch()
-        hl.addWidget(content, stretch=1)
+            row.addLayout(text_col, stretch=1)
+            row.addStretch()
+            card_layout.addLayout(row)
 
+        self.step_video_players.append(step_players)
+
+        card_layout.addStretch()
         page_layout.addWidget(card)
         page_layout.addStretch()
-        return page
+        scroll.setWidget(page)
+        return scroll
         
     def go_next(self):
         current = self.step_stack.currentIndex()
@@ -254,6 +303,33 @@ class TrainModelGuide(QWidget):
         self.prev_btn.setEnabled(index > 0)
         self.next_btn.setEnabled(True)
         self.next_btn.setText("Done" if index == total - 1 else "Next")
+
+        for i, players in enumerate(self.step_video_players):
+            if i == index:
+                for player in players:
+                    player.play()
+            else:
+                for player in players:
+                    player.pause()
+        
+        if hasattr(self, "_theme_ready"):
+            self.apply_theme(self.is_dark)
+
+    def _update_video_frame(self, frame, label):
+        image = frame.toImage()
+        if image.isNull():
+            return
+        pix = QPixmap.fromImage(image)
+        target_size = label.size()
+        scaled = pix.scaled(
+            target_size,
+            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        x = (scaled.width() - target_size.width()) // 2
+        y = (scaled.height() - target_size.height()) // 2
+        cropped = scaled.copy(x, y, target_size.width(), target_size.height())
+        label.setPixmap(cropped)
 
     def apply_theme(self, is_dark: bool):
         self.is_dark = is_dark
