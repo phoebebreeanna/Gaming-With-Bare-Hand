@@ -1,10 +1,16 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QPushButton, QStackedWidget
+    QLabel, QPushButton, QStackedWidget, QSizePolicy, QScrollArea
 )
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QUrl
+from PySide6.QtGui import QPixmap
+from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput, QVideoSink
 
-class UserGuide(QWidget):
+import os
+import sys
+_BASE = sys._MEIPASS if getattr(sys, 'frozen', False) else os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
+
+class TrainModelGuide(QWidget):
 
     on_menu_toggle = Signal()
     on_done        = Signal()
@@ -14,67 +20,66 @@ class UserGuide(QWidget):
         self.is_dark = False
         self.steps = [
             {
-                "title": "Welcome",
+                "title": "Collect Gesture Samples",
+                "videos": [
+                    "assets/train_model_guide/1.1.mp4",
+                    "assets/train_model_guide/1.2.mp4",
+                    "assets/train_model_guide/1.3.mp4",
+                    "assets/train_model_guide/1.4.mp4",
+                ],
                 "items": [
-                    "HandMouse launches with a 3-second welcome screen - it navigates automatically.",
-                    "First-time users are taken through a quick setup wizard (camera, calibration, zone).",
-                    "Returning users land directly on the Home dashboard.",
-                    "Use the sidebar at any time to switch between pages.",
+                    "Select your game mode tab at the top: Mouse, Subway, or Racing.",
+                    "Under Pipeline Steps, click Collect Data, then Start to record samples with your camera.",
+                    "Aim for around 50 samples per gesture - the Gesture Data panel on the left tracks your progress per gesture.",
+                    "Turn on Mirror Aug if your gestures don't rely on left/right direction - it doubles your data automatically.",
                 ],
             },
             {
-                "title": "First-Time Setup",
+                "title": "Preprocess Your Data",
+                "videos": [
+                    "assets/train_model_guide/2.1.mp4",
+                    "assets/train_model_guide/2.2.png",
+                ],
                 "items": [
-                    "Camera Setup: select your camera and confirm the live preview looks correct.",
-                    "Distance Calibration: hold your hand at roughly arm's length until the progress bar completes.",
-                    "Zone Setup: hold 1, 2, or 3 fingers to choose Small, Medium, or Large movement zone.",
-                    "Once all steps are complete, setup is saved and the Home dashboard appears automatically.",
+                    "Once you have enough samples, click Run next to Preprocess - this prepares your raw samples for training.",
+                    "This step requires collected data to be available first.",
                 ],
             },
             {
-                "title": "Choose a Game Mode",
+                "title": "Train the Model",
+                "videos": [
+                    "assets/train_model_guide/3.1.mp4",
+                    "assets/train_model_guide/3.3.mp4",
+                ],
                 "items": [
-                    "Open Settings (04) from the sidebar.",
-                    "Choose Mouse, Subway Surfers, Racing, or Open World mode.",
-                    "For each mode, toggle Default or Custom model source - Custom activates once you have trained your own model via Train Model (05).",
-                    "Switching Default ↔ Custom takes effect immediately, even while the controller is running.",
+                    "Click Run next to Train Model once preprocessing is complete, or else it will be locked.",
+                    "The training progress bar at the bottom shows completion (e.g. 150 / 150).",
                 ],
             },
             {
-                "title": "Customize Controls",
+                "title": "Review Your Samples",
+                "videos": [
+                    "assets/train_model_guide/4.1.png",
+                    "assets/train_model_guide/4.2.png",
+                    "assets/train_model_guide/4.3.mp4",
+                    "assets/train_model_guide/4.4.png",
+                ],
                 "items": [
-                    "Open Key Bindings (06) from the sidebar.",
-                    "Click any key button to remap a gesture - press the desired key to confirm, or Escape to cancel.",
-                    "Locked gestures (greyed out) use fixed directional logic and cannot be rebound to a single key.",
-                    "Use the Reset All button at the top of each section to restore that mode's defaults instantly.",
+                    "Once training completes, Review Samples becomes Ready.",
+                    "Each sample shows the True Label vs Predicted result, plus a confidence flag like LOW CONF.",
+                    "Click Keep to confirm a sample, or Remove to mark it for exclusion and retraining.",
+                    "Click Done once you've reviewed all samples.",
                 ],
             },
             {
-                "title": "Start the Controller",
-                "items": [
-                    "Go to Home (01) from the sidebar.",
-                    "Check the distance alert in the camera feed: OPTIMAL / TOO FAR / TOO CLOSE.",
-                    "Click Start and wait for the status card to show Running.",
-                    "Keep your hand clearly inside the camera frame while playing.",
+                "title": "Use Your Custom Model",
+                "videos": [
+                    "assets/train_model_guide/5.1.mp4",
+                    "assets/train_model_guide/5.2.mp4",
                 ],
-            },
-            {
-                "title": "Using Gestures",
                 "items": [
-                    "Open Gesture Guide (03) from the sidebar to see all gestures for any mode.",
-                    "Show both open palms to pause the controller at any time.",
-                    "Show peace signs with both hands simultaneously to resume from the paused state.",
-                    "Hold both fists (two hands) to exit the controller completely.",
-                    "Switch game modes by holding one fist and N fingers on the other hand for 3 seconds.",
-                ],
-            },
-            {
-                "title": "Best Performance",
-                "items": [
-                    "Avoid strong backlight or a busy background behind your hand.",
-                    "Keep fingers clearly separated - spread them out for better detection accuracy.",
-                    "Use the distance alert on the Home page to stay at the optimal depth.",
-                    "Train a Custom model for your own gestures via Train Model (05) in the sidebar.",
+                    "Go to Settings (05) from the sidebar.",
+                    "Toggle Default to Custom for your chosen game mode. Your trained gestures are now active immediately.",
                 ],
             },
         ]
@@ -84,6 +89,10 @@ class UserGuide(QWidget):
         self.step_card_headers = []
         self.step_numbers = []
         self.step_titles = []
+        self.step_images = []
+        self.step_video_players = []
+        self.step_video_sinks = []
+        self.step_audio_outputs = []
         self.step_item_nums = []
         self.step_item_texts = []
         self.step_item_rows = []
@@ -107,8 +116,8 @@ class UserGuide(QWidget):
         self.menu_btn.clicked.connect(self.on_menu_toggle.emit)
         header_layout.addWidget(self.menu_btn)
 
-        self.title_ug = QLabel("User Guide")
-        header_layout.addWidget(self.title_ug)
+        self.title_tmg = QLabel("Train Model Guide")
+        header_layout.addWidget(self.title_tmg)
         header_layout.addStretch()
 
         self.step_indicator = QLabel()
@@ -172,65 +181,107 @@ class UserGuide(QWidget):
         self.update_navigation(0)
 
     def create_step_page(self, step_index, step):
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll.setStyleSheet("background: transparent; border: none;")
+
         page = QWidget()
+        page.setStyleSheet("background: transparent;")
         page_layout = QVBoxLayout(page)
         page_layout.setContentsMargins(24, 24, 24, 24)
         page_layout.setSpacing(0)
 
         card = QWidget()
+        card.setMinimumHeight(160)
         self.step_cards.append(card)
         card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(0, 0, 0, 0)
-        card_layout.setSpacing(0)
+        card_layout.setContentsMargins(18, 14, 18, 14)
+        card_layout.setSpacing(10)
 
-        card_header = QWidget()
-        card_header.setFixedHeight(48)
-        self.step_card_headers.append(card_header)
-        header_layout = QHBoxLayout(card_header)
-        header_layout.setContentsMargins(18, 0, 18, 0)
-        header_layout.setSpacing(14)
-
+        header_row = QHBoxLayout()
+        header_row.setSpacing(10)
         number = QLabel(str(step_index))
         number.setAlignment(Qt.AlignCenter)
         number.setFixedSize(24, 24)
         self.step_numbers.append(number)
-        header_layout.addWidget(number)
+        header_row.addWidget(number)
 
         title = QLabel(step["title"])
         self.step_titles.append(title)
-        header_layout.addWidget(title)
-        header_layout.addStretch()
-
-        card_layout.addWidget(card_header)
+        header_row.addWidget(title)
+        header_row.addStretch()
+        card_layout.addLayout(header_row)
 
         items = step["items"]
+        videos = step.get("videos", [])
+        step_players = []
+
         for i, item_text in enumerate(items):
-            row = QWidget()
-            row.setFixedHeight(42)
-            row_layout = QHBoxLayout(row)
-            row_layout.setContentsMargins(18, 0, 18, 0)
-            row_layout.setSpacing(14)
-            row_layout.setAlignment(Qt.AlignVCenter)
+            row = QHBoxLayout()
+            row.setSpacing(14)
+
+            video_label = QLabel()
+            video_label.setFixedSize(280, 140)
+            video_label.setScaledContents(False)
+            video_label.setStyleSheet("background-color: black;")
+            
+            video_sink = QVideoSink()
+            video_sink.videoFrameChanged.connect(
+                lambda frame, lbl=video_label: self._update_video_frame(frame, lbl)
+            )
+            self.step_video_sinks.append(video_sink)
+
+            player = QMediaPlayer()
+            audio_output = QAudioOutput()
+            audio_output.setMuted(True)
+            player.setAudioOutput(audio_output)
+            self.step_audio_outputs.append(audio_output)
+            player.setVideoSink(video_sink)
+            player.setLoops(QMediaPlayer.Loops.Infinite)
+
+            if i < len(videos):
+                media_path = videos[i]
+                if media_path.lower().endswith((".png", ".jpg", ".jpeg")):
+                    pix = QPixmap(os.path.join(_BASE, media_path))
+                    if not pix.isNull():
+                        scaled = pix.scaled(
+                            video_label.width() or 280, 140,
+                            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                            Qt.TransformationMode.SmoothTransformation,
+                        )
+                        video_label.setPixmap(scaled)
+                else:
+                    player.setSource(QUrl.fromLocalFile(os.path.join(_BASE, media_path)))
+
+            step_players.append(player)
+            row.addWidget(video_label)
+
+            text_col = QVBoxLayout()
+            text_col.setSpacing(2)
 
             num_lbl = QLabel(f"{i + 1:02d}")
-            num_lbl.setFixedWidth(18)
-            num_lbl.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            num_lbl.setAlignment(Qt.AlignLeft | Qt.AlignTop)
             self.step_item_nums.append(num_lbl)
-            row_layout.addWidget(num_lbl)
+            text_col.addWidget(num_lbl)
 
             text_lbl = QLabel(item_text)
             text_lbl.setWordWrap(True)
             self.step_item_texts.append(text_lbl)
-            row_layout.addWidget(text_lbl, stretch=1)
+            text_col.addWidget(text_lbl)
 
-            row.setProperty("has_bottom_border", i < len(items) - 1)
-            self.step_item_rows.append(row)
-            card_layout.addWidget(row)
+            row.addLayout(text_col, stretch=1)
+            row.addStretch()
+            card_layout.addLayout(row)
 
+        self.step_video_players.append(step_players)
+
+        card_layout.addStretch()
         page_layout.addWidget(card)
         page_layout.addStretch()
-        return page
-
+        scroll.setWidget(page)
+        return scroll
+        
     def go_next(self):
         current = self.step_stack.currentIndex()
         if current < len(self.steps) - 1:
@@ -252,8 +303,33 @@ class UserGuide(QWidget):
         self.prev_btn.setEnabled(index > 0)
         self.next_btn.setEnabled(True)
         self.next_btn.setText("Done" if index == total - 1 else "Next")
+
+        for i, players in enumerate(self.step_video_players):
+            if i == index:
+                for player in players:
+                    player.play()
+            else:
+                for player in players:
+                    player.pause()
+        
         if hasattr(self, "_theme_ready"):
             self.apply_theme(self.is_dark)
+
+    def _update_video_frame(self, frame, label):
+        image = frame.toImage()
+        if image.isNull():
+            return
+        pix = QPixmap.fromImage(image)
+        target_size = label.size()
+        scaled = pix.scaled(
+            target_size,
+            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        x = (scaled.width() - target_size.width()) // 2
+        y = (scaled.height() - target_size.height()) // 2
+        cropped = scaled.copy(x, y, target_size.width(), target_size.height())
+        label.setPixmap(cropped)
 
     def apply_theme(self, is_dark: bool):
         self.is_dark = is_dark
@@ -267,8 +343,7 @@ class UserGuide(QWidget):
             text = "#e8e8e8"
             dim = "#9a9a9a"
             muted = "#6b6b6b"
-            button_bg = strong
-            button_text = text
+            image_bg = "#161616"
         else:
             page_bg = "#F4F4F4"
             panel = "#FFFFFF"
@@ -277,8 +352,7 @@ class UserGuide(QWidget):
             text = "#111111"
             dim = "#6F655F"
             muted = "#B8B0AB"
-            button_bg = strong
-            button_text = text
+            image_bg = "#F0EBE7"
 
         self.setStyleSheet(f"background-color: {page_bg};")
         self.header.setStyleSheet(f"background-color: {page_bg}; border-bottom: 1px solid {border};")
@@ -287,22 +361,19 @@ class UserGuide(QWidget):
 
         self.menu_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: transparent;
-                color: {text};
-                font-size: 18px;
-                border: none;
-                border-radius: 2px;
+                background-color: transparent; color: {text};
+                font-size: 18px; border: none; border-radius: 2px;
             }}
             QPushButton:hover {{ background-color: {"#161616" if is_dark else "#EDE5DF"}; }}
         """)
-        self.title_ug.setStyleSheet(f"color: {text}; font-size: 22px; font-weight: 800; background: transparent; border: none;")
+        self.title_tmg.setStyleSheet(f"color: {text}; font-size: 22px; font-weight: 800; background: transparent; border: none;")
         self.step_indicator.setStyleSheet(f"color: {dim}; border: 1px solid {border}; font-size: 8px; font-weight: 700; letter-spacing: 1.5px; background: transparent;")
 
         current = self.step_stack.currentIndex()
         for index, step_box in enumerate(self.step_nav_items):
             if index < current:
                 step_box.setText("✓")
-                step_box.setStyleSheet(f"background-color: transparent; color: {button_text}; border: 1px solid {button_bg}; font-size: 9px; font-weight: 700;")
+                step_box.setStyleSheet(f"background-color: transparent; color: {text}; border: 1px solid {strong}; font-size: 9px; font-weight: 700;")
             elif index == current:
                 step_box.setText(str(index + 1))
                 step_box.setStyleSheet(f"background-color: transparent; color: {text}; border: 1px solid {strong}; font-size: 9px; font-weight: 700;")
@@ -318,14 +389,16 @@ class UserGuide(QWidget):
         for card in self.step_cards:
             card.setStyleSheet(f"background-color: {panel}; border: 1px solid {border};")
 
-        for card_header in self.step_card_headers:
-            card_header.setStyleSheet(f"background: transparent; border-bottom: 1px solid {border};")
-
         for number in self.step_numbers:
             number.setStyleSheet(f"color: {text}; border: 1px solid {strong}; background: transparent; font-size: 9px; font-weight: 700;")
 
         for title in self.step_titles:
             title.setStyleSheet(f"color: {text}; font-size: 12px; font-weight: 700; background: transparent; border: none;")
+
+        for img in self.step_images:
+            img.setStyleSheet(
+                f"color: {muted}; font-size: 9px; letter-spacing: 1.5px;"
+                f" border-right: 1px solid {border}; background: transparent;")
 
         for num_lbl in self.step_item_nums:
             num_lbl.setStyleSheet(f"color: {muted}; font-size: 9px; background: transparent; border: none;")
@@ -342,12 +415,9 @@ class UserGuide(QWidget):
         btn_hover = "#161616" if is_dark else "#EDE5DF"
         btn_style = f"""
             QPushButton {{
-                background-color: transparent;
-                color: {text};
+                background-color: transparent; color: {text};
                 border: 1px solid {border};
-                font-size: 9px;
-                font-weight: 700;
-                letter-spacing: 1.4px;
+                font-size: 9px; font-weight: 700; letter-spacing: 1.4px;
             }}
             QPushButton:hover {{ background-color: {btn_hover}; }}
             QPushButton:pressed {{ background-color: {btn_hover}; }}
@@ -355,3 +425,6 @@ class UserGuide(QWidget):
         """
         self.prev_btn.setStyleSheet(btn_style)
         self.next_btn.setStyleSheet(btn_style)
+
+        if hasattr(self, "handbot_icon"):
+            self.handbot_icon.apply_theme(is_dark)

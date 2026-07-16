@@ -22,3 +22,5 @@ logic/chatbot/chroma_db/
 logic/chatbot/models/
 .python-version
 install-pyenv-win.ps1
+
+assets/train_model_guide/_originals/

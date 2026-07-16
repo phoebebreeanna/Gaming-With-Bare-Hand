@@ -9,6 +9,7 @@ from PySide6.QtCore import Qt, Slot, QTimer, QEvent
 from PySide6.QtGui import QPixmap
 
 from ui.user_guide import UserGuide
+from ui.train_model_guide import TrainModelGuide
 from ui.gesture_guide import GestureGuide
 from ui.game_mode import GameMode
 from ui.pipeline_ui import PipelineUI
@@ -145,9 +146,15 @@ class MainMenu(QWidget):
         self.key_bindings_widget.binding_changed.connect(self._on_binding_changed)
         self.pages.addWidget(self.key_bindings_widget)
 
+        self.train_model_guide = TrainModelGuide()
+        self.train_model_guide.on_menu_toggle.connect(self.toggle_sidebar)
+        self.train_model_guide.on_done.connect(lambda: self.switch_page(0))
+        self.pages.addWidget(self.train_model_guide)
+
         self.air_hockey_launch_page = AirHockeyLaunchPage()
         self.air_hockey_launch_page.on_menu_toggle.connect(self.toggle_sidebar)
         self.pages.addWidget(self.air_hockey_launch_page)
+
 
         self.pages.setCurrentIndex(0)
 
@@ -240,6 +247,7 @@ class MainMenu(QWidget):
             ("01      -     HOME", 0),
             ("02      -     USER GUIDE", 1),
             ("03      -     GESTURE GUIDE", 2),
+            ("04      -     TRAIN MODEL GUIDE", 6),
         ]:
             btn = QPushButton(label)
             btn.setCheckable(True)
@@ -264,12 +272,14 @@ class MainMenu(QWidget):
         layout.addWidget(self.setup_lbl)
 
         for label, index in [
-            ("04      -     SETTING", 3),
-            ("05      -     TRAIN MODEL", 4),
-            ("06      -     KEY BINDINGS", 5),
-            ("07      -     AIR HOCKEY", 6),
+
+            ("05      -     SETTING", 3),
+            ("06      -     TRAIN MODEL", 4),
+            ("07      -     KEY BINDINGS", 5),
+            ("08      -     AIR HOCKEY", 7),
         ]:
             btn = QPushButton(label)
+            btn.setProperty("target_index", index)
             btn.setCheckable(True)
             btn.setFixedHeight(40)
             btn.clicked.connect(lambda checked, i=index: self.switch_page(i))
@@ -735,8 +745,8 @@ class MainMenu(QWidget):
 
     def switch_page(self, index):
         self.pages.setCurrentIndex(index)
-        for i, btn in enumerate(self.nav_buttons):
-            btn.setChecked(i == index)
+        for btn in self.nav_buttons:
+            btn.setChecked(btn.property("target_index") == index)
 
     def toggle_sidebar(self):
         self.sidebar.setVisible(not self.sidebar.isVisible())
@@ -1298,6 +1308,7 @@ class MainMenu(QWidget):
         self.game_mode_widget.apply_theme(self.is_dark)
         self.pipeline_ui.apply_theme(self.is_dark)
         self.key_bindings_widget.apply_theme(self.is_dark)
+        self.train_model_guide.apply_theme(self.is_dark)
         self.air_hockey_launch_page.apply_theme(self.is_dark)
         self.handbot.apply_theme(self.is_dark)
         self.handbot_pages.apply_theme(self.is_dark)
