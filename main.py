@@ -1,7 +1,18 @@
 import os
 import sys
+import time
 
 os.environ.setdefault("QT_LOGGING_RULES", "qt.multimedia.ffmpeg=false;qt.multimedia.ffmpeg.*=false")
+
+
+def _log_lifecycle(event: str):
+    try:
+        log_dir = os.path.join(os.path.expanduser('~'), '.handmouse')
+        os.makedirs(log_dir, exist_ok=True)
+        with open(os.path.join(log_dir, 'lifecycle.log'), 'a', encoding='utf-8') as f:
+            f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} pid={os.getpid()} {event}\n")
+    except OSError:
+        pass
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QStackedWidget, QLineEdit, QTextEdit, QPlainTextEdit
@@ -57,6 +68,7 @@ class MainWindow(QMainWindow):
         self.stacked.setCurrentIndex(1)
 
     def closeEvent(self, event):
+        _log_lifecycle("closeEvent entered")
         try:
             self.main_menu._stop_preview()
         except Exception as e:
@@ -91,6 +103,7 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"[Shutdown] Cleanup step failed: {e}")
 
+        _log_lifecycle("closeEvent accepting")
         event.accept()
 
 def _install_global_excepthook():
@@ -121,7 +134,40 @@ def _run_pipeline_subprocess(conf_path):
     _pipeline_main()
 
 
+def _acquire_single_instance_lock():
+    lock_dir = os.path.join(os.path.expanduser('~'), '.handmouse')
+    os.makedirs(lock_dir, exist_ok=True)
+    lock_path = os.path.join(lock_dir, 'handmouse.lock')
+    fh = open(lock_path, 'w')
+    try:
+        if sys.platform == 'win32':
+            import msvcrt
+            msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        fh.close()
+        return None
+    return fh
+
+
 if __name__ == "__main__":
+    if '-c' in sys.argv:
+        exec(sys.argv[sys.argv.index('-c') + 1])
+        sys.exit(0)
+
+    if len(sys.argv) >= 2 and sys.argv[1] == '--multiprocessing-fork':
+        from multiprocessing.spawn import spawn_main
+        _mp_kwds = {}
+        for _arg in sys.argv[2:]:
+            _name, _value = _arg.split('=')
+            _mp_kwds[_name] = None if _value == 'None' else int(_value)
+        spawn_main(**_mp_kwds)
+        sys.exit(0)
+
+    _log_lifecycle(f"process started argv={sys.argv!r} frozen={getattr(sys, 'frozen', False)}")
+
     if len(sys.argv) > 1 and sys.argv[1] == "--run-hockey":
         _run_hockey_subprocess()
         sys.exit(0)
@@ -129,6 +175,13 @@ if __name__ == "__main__":
     if len(sys.argv) > 2 and sys.argv[1] == "--run-pipeline":
         _run_pipeline_subprocess(sys.argv[2])
         sys.exit(0)
+
+    if getattr(sys, 'frozen', False):
+        _single_instance_lock = _acquire_single_instance_lock()
+        if _single_instance_lock is None:
+            _log_lifecycle("single-instance lock denied - exiting")
+            sys.exit(0)
+        _log_lifecycle("single-instance lock acquired")
 
     _install_global_excepthook()
     app = QApplication(sys.argv)
@@ -138,7 +191,9 @@ if __name__ == "__main__":
     app.installEventFilter(blocker)
     window.show()
     exit_code = app.exec()
+    _log_lifecycle(f"app.exec() returned exit_code={exit_code}")
 
     import atexit
     atexit._run_exitfuncs()
+    _log_lifecycle("about to os._exit()")
     os._exit(exit_code)

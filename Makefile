@@ -56,6 +56,8 @@ build-win:
 		--add-data="hockey_game;hockey_game" \
 		--hidden-import=pygame \
 		--hidden-import=logic.gesture_pipeline \
+		--hidden-import=tiktoken_ext.openai_public \
+		--hidden-import=tiktoken_ext \
 		--collect-all numpy \
 		--collect-all cv2 \
 		--collect-all mediapipe \
@@ -69,7 +71,12 @@ build-win:
 		--collect-all transformers \
 		--collect-all tokenizers \
 		--collect-all huggingface_hub \
-		--collect-all sentence_transformers
+		--collect-all sentence_transformers \
+		--collect-all certifi \
+		--collect-all openai \
+		--collect-all httpx \
+		--collect-all httpcore \
+		--collect-all tiktoken
 
 ISCC ?= "C:/Program Files (x86)/Inno Setup 6/ISCC.exe"
 

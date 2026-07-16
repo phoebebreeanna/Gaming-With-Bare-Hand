@@ -280,7 +280,7 @@ def ask_realtime(question: str, backend: str = "local") -> str:
             SWITCH_TO_LOCAL_MESSAGE if backend == "openai"
             else "Couldn't load the local chatbot model - please try again."
         )
-        raise ChatbotUnavailableError(message) from e
+        raise ChatbotUnavailableError(f"{message} ({type(e).__name__}: {e})") from e
 
     try:
         response = engine.query(question)
@@ -290,4 +290,4 @@ def ask_realtime(question: str, backend: str = "local") -> str:
             SWITCH_TO_LOCAL_MESSAGE if backend == "openai"
             else "The chatbot couldn't answer that - please try again."
         )
-        raise ChatbotUnavailableError(message) from e
+        raise ChatbotUnavailableError(f"{message} ({type(e).__name__}: {e})") from e
