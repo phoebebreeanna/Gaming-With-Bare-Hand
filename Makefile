@@ -78,7 +78,7 @@ build-win:
 		--collect-all httpcore \
 		--collect-all tiktoken
 
-ISCC ?= "C:/Program Files (x86)/Inno Setup 6/ISCC.exe"
+ISCC ?= "$(USERPROFILE)/AppData/Local/Programs/Inno Setup 6/ISCC.exe"
 
 build-win-installer: build-win
 	$(ISCC) installer.iss

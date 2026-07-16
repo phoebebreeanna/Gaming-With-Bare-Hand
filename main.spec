@@ -1,31 +1,47 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all
 
-datas = [
-    ('assets', 'assets'),
-    ('logic/data', 'logic/data'),
-    ('logic/conf', 'logic/conf'),
-    ('logic/chatbot/data', 'logic/chatbot/data'),
-    ('logic/chatbot/chroma_db', 'logic/chatbot/chroma_db'),
-    ('hockey_game', 'hockey_game'),
-]
+datas = [('assets', 'assets'), ('logic/data', 'logic/data'), ('logic/conf', 'logic/conf'), ('logic/chatbot/data', 'logic/chatbot/data'), ('logic/chatbot/chroma_db', 'logic/chatbot/chroma_db'), ('hockey_game', 'hockey_game')]
 binaries = []
-# pygame/gesture_pipeline are only reached via a dynamic on-disk import (re-exec
-# of the frozen binary with --run-hockey / --run-pipeline), so PyInstaller's
-# static analysis can't see them - list them explicitly.
-hiddenimports = [
-    'pygame', 'logic.gesture_pipeline',
-    'tiktoken_ext.openai_public', 'tiktoken_ext',
-]
-for _pkg in (
-    'numpy', 'cv2', 'mediapipe', 'scipy', 'sklearn',
-    'torch', 'pygame', 'chromadb', 'llama_cpp',
-    'llama_index', 'transformers', 'tokenizers', 'huggingface_hub',
-    'sentence_transformers', 'certifi', 'openai', 'httpx', 'httpcore',
-    'tiktoken',
-):
-    tmp_ret = collect_all(_pkg)
-    datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+hiddenimports = ['pygame', 'logic.gesture_pipeline', 'tiktoken_ext.openai_public', 'tiktoken_ext']
+tmp_ret = collect_all('numpy')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('cv2')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('mediapipe')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('scipy')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('sklearn')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('torch')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('pygame')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('chromadb')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('llama_cpp')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('llama_index')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('transformers')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('tokenizers')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('huggingface_hub')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('sentence_transformers')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('certifi')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('openai')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('httpx')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('httpcore')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('tiktoken')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 
 a = Analysis(
@@ -37,7 +53,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['libiconv'],
+    excludes=[],
     noarchive=False,
     optimize=0,
 )
@@ -48,7 +64,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='HandMouse',
+    name='main',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -59,7 +75,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['assets/logo/hand_gesture_icon.icns'],
+    icon=['assets\\logo\\hand_gesture_icon.ico'],
 )
 coll = COLLECT(
     exe,
@@ -68,11 +84,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='HandMouse',
-)
-app = BUNDLE(
-    coll,
-    name='HandMouse.app',
-    icon='assets/logo/hand_gesture_icon.icns',
-    bundle_identifier='com.handmouse.app',
+    name='main',
 )

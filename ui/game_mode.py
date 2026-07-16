@@ -823,8 +823,9 @@ class GameMode(QWidget):
         except Exception:
             pass
         try:
+            import threading
             from logic.chatbot.rag_service import reset_engine
-            reset_engine("openai")
+            threading.Thread(target=reset_engine, args=("openai",), daemon=True).start()
         except Exception:
             pass
 
