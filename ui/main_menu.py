@@ -155,7 +155,6 @@ class MainMenu(QWidget):
         self.air_hockey_launch_page.on_menu_toggle.connect(self.toggle_sidebar)
         self.pages.addWidget(self.air_hockey_launch_page)
 
-
         self.pages.setCurrentIndex(0)
 
     def create_sidebar(self):
@@ -250,6 +249,7 @@ class MainMenu(QWidget):
             ("04      -     TRAIN MODEL GUIDE", 6),
         ]:
             btn = QPushButton(label)
+            btn.setProperty("target_index", index)
             btn.setCheckable(True)
             btn.setFixedHeight(40)
             btn.clicked.connect(lambda checked, i=index: self.switch_page(i))
@@ -272,7 +272,6 @@ class MainMenu(QWidget):
         layout.addWidget(self.setup_lbl)
 
         for label, index in [
-
             ("05      -     SETTING", 3),
             ("06      -     TRAIN MODEL", 4),
             ("07      -     KEY BINDINGS", 5),
@@ -1546,6 +1545,10 @@ class MainMenu(QWidget):
             pass
         try:
             self.handbot_pages.chat_panel.shutdown()
+        except Exception:
+            pass
+        try:
+            self.train_model_guide.shutdown()
         except Exception:
             pass
 

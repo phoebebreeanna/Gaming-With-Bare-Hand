@@ -3,7 +3,7 @@ from PySide6.QtWidgets import (
     QLabel, QPushButton, QStackedWidget, QSizePolicy, QScrollArea
 )
 from PySide6.QtCore import Qt, Signal, QUrl
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QPixmap, QGuiApplication
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput, QVideoSink
 
 import os
@@ -85,6 +85,7 @@ class TrainModelGuide(QWidget):
         ]
         self.step_nav_items = []
         self.step_nav_lines = []
+        self.step_scrolls = []
         self.step_cards = []
         self.step_card_headers = []
         self.step_numbers = []
@@ -184,7 +185,8 @@ class TrainModelGuide(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        scroll.setStyleSheet("background: transparent; border: none;")
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.step_scrolls.append(scroll)
 
         page = QWidget()
         page.setStyleSheet("background: transparent;")
@@ -245,12 +247,19 @@ class TrainModelGuide(QWidget):
                 if media_path.lower().endswith((".png", ".jpg", ".jpeg")):
                     pix = QPixmap(os.path.join(_BASE, media_path))
                     if not pix.isNull():
+                        dpr = QGuiApplication.primaryScreen().devicePixelRatio()
+                        target_w = video_label.width() or 280
+                        target_h = 140
                         scaled = pix.scaled(
-                            video_label.width() or 280, 140,
+                            int(target_w * dpr), int(target_h * dpr),
                             Qt.AspectRatioMode.KeepAspectRatioByExpanding,
                             Qt.TransformationMode.SmoothTransformation,
                         )
-                        video_label.setPixmap(scaled)
+                        x = (scaled.width() - int(target_w * dpr)) // 2
+                        y = (scaled.height() - int(target_h * dpr)) // 2
+                        cropped = scaled.copy(x, y, int(target_w * dpr), int(target_h * dpr))
+                        cropped.setDevicePixelRatio(dpr)
+                        video_label.setPixmap(cropped)
                 else:
                     player.setSource(QUrl.fromLocalFile(os.path.join(_BASE, media_path)))
 
@@ -296,6 +305,12 @@ class TrainModelGuide(QWidget):
             self.step_stack.setCurrentIndex(current - 1)
             self.update_navigation(current - 1)
 
+    def shutdown(self):
+        for players in self.step_video_players:
+            for player in players:
+                player.stop()
+                player.setSource(QUrl())
+
     def update_navigation(self, index):
         total = len(self.steps)
         self.step_indicator.setText(f"STEP {index + 1} / {total}")
@@ -305,30 +320,48 @@ class TrainModelGuide(QWidget):
         self.next_btn.setText("Done" if index == total - 1 else "Next")
 
         for i, players in enumerate(self.step_video_players):
-            if i == index:
+            if i == index and self.isVisible():
                 for player in players:
                     player.play()
             else:
                 for player in players:
                     player.pause()
-        
+
         if hasattr(self, "_theme_ready"):
             self.apply_theme(self.is_dark)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        current = self.step_stack.currentIndex()
+        for i, players in enumerate(self.step_video_players):
+            if i == current:
+                for player in players:
+                    player.play()
+
+    def hideEvent(self, event):
+        for players in self.step_video_players:
+            for player in players:
+                player.pause()
+        super().hideEvent(event)
 
     def _update_video_frame(self, frame, label):
         image = frame.toImage()
         if image.isNull():
             return
         pix = QPixmap.fromImage(image)
-        target_size = label.size()
+        dpr = label.devicePixelRatio() or QGuiApplication.primaryScreen().devicePixelRatio()
+        logical_size = label.size()
+        target_w = int(logical_size.width() * dpr)
+        target_h = int(logical_size.height() * dpr)
         scaled = pix.scaled(
-            target_size,
+            target_w, target_h,
             Qt.AspectRatioMode.KeepAspectRatioByExpanding,
             Qt.TransformationMode.SmoothTransformation,
         )
-        x = (scaled.width() - target_size.width()) // 2
-        y = (scaled.height() - target_size.height()) // 2
-        cropped = scaled.copy(x, y, target_size.width(), target_size.height())
+        x = (scaled.width() - target_w) // 2
+        y = (scaled.height() - target_h) // 2
+        cropped = scaled.copy(x, y, target_w, target_h)
+        cropped.setDevicePixelRatio(dpr)
         label.setPixmap(cropped)
 
     def apply_theme(self, is_dark: bool):
@@ -385,6 +418,28 @@ class TrainModelGuide(QWidget):
             line.setStyleSheet(f"background-color: {border};")
 
         self.current_step_name.setStyleSheet(f"color: {muted}; font-size: 8px; letter-spacing: 1.4px; background: transparent; border: none;")
+
+        for scroll in self.step_scrolls:
+            scroll.setStyleSheet(f"""
+                QScrollArea {{ background-color: {page_bg}; border: none; }}
+                QScrollBar:vertical {{
+                    width: 4px;
+                    background: transparent;
+                    border: none;
+                    margin: 0;
+                }}
+                QScrollBar::handle:vertical {{
+                    background: {muted};
+                    border-radius: 2px;
+                    min-height: 24px;
+                }}
+                QScrollBar::handle:vertical:hover {{ background: {dim}; }}
+                QScrollBar::add-line:vertical,
+                QScrollBar::sub-line:vertical {{ height: 0px; }}
+                QScrollBar::add-page:vertical,
+                QScrollBar::sub-page:vertical {{ background: none; }}
+            """)
+            scroll.viewport().setStyleSheet(f"background-color: {page_bg}; border: none;")
 
         for card in self.step_cards:
             card.setStyleSheet(f"background-color: {panel}; border: 1px solid {border};")

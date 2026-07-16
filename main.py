@@ -1,5 +1,8 @@
 import os
 import sys
+
+os.environ.setdefault("QT_LOGGING_RULES", "qt.multimedia.ffmpeg=false;qt.multimedia.ffmpeg.*=false")
+
 from PySide6.QtWidgets import QApplication, QMainWindow, QStackedWidget
 from PySide6.QtCore import Qt, QObject, QEvent
 from ui.welcome_screen import WelcomeScreen

@@ -120,8 +120,8 @@ the recommended default. Click "FINISH" or wait 3s to complete and land on Home.
 - Sidebar toggled hidden/visible via hamburger (☰) button top-left.
 
 ### Sidebar Navigation
-- **Menu section**: 01 HOME, 02 USER GUIDE, 03 GESTURE GUIDE
-- **Setup section**: 04 SETTING, 05 TRAIN MODEL, 06 KEY BINDINGS, 07 AIR HOCKEY
+- **Menu section**: 01 HOME, 02 USER GUIDE, 03 GESTURE GUIDE, 04 TRAIN MODEL GUIDE
+- **Setup section**: 05 SETTING, 06 TRAIN MODEL, 07 KEY BINDINGS, 08 AIR HOCKEY
 
 ### Theme Switching
 Light/Dark mode toggle. **Theme selection does NOT persist - resets to Light
@@ -150,7 +150,7 @@ GESTURE, the ACTION it triggered, and a progress bar while a held gesture is
 building up (e.g. mode-switch or exit holds). Double-click it to bring the
 main HandMouse window back to the front.
 
-Controlled by the **STATUS OVERLAY** toggle on the Settings page (04),
+Controlled by the **STATUS OVERLAY** toggle on the Settings page (05),
 enabled by default. On macOS, staying on top of full-screen games relies on
 the `pyobjc` package - if it isn't installed, the overlay still works but may
 not stay above a full-screen game window.
@@ -164,7 +164,7 @@ so rather than guessing. The first question you ask triggers a one-time
 download (~2 GB) of its local answering model, so the first reply can take a
 while.
 
-Controlled by the **ENABLE CHATBOT** toggle on the Settings page (04),
+Controlled by the **ENABLE CHATBOT** toggle on the Settings page (05),
 enabled by default.
 
 ## Feature Guides (per page)
@@ -189,7 +189,14 @@ Surfers, Open World (racing gestures also covered in the full gesture
 reference - see below). Each card: illustration, number, name, description,
 mode tag.
 
-### 04 - Game Mode & Settings
+### 04 - Train Model Guide
+Read-only, step-by-step walkthrough (with per-step reference videos/images) for
+training a custom gesture model: Collect Gesture Samples, Preprocess Your
+Data, Train the Model, Review Your Samples, and Use Your Custom Model. This
+page only explains the workflow - to actually train a model, use the
+**Train Model** page (06).
+
+### 05 - Game Mode & Settings
 
 **Game modes:**
 
@@ -229,7 +236,7 @@ using these gestures normally. With it OFF, you can still switch modes or
 close the app via the GUI buttons on the Home page or the Settings mode
 cards.
 
-### 05 - Train Model (Custom Gestures)
+### 06 - Train Model (Custom Gestures)
 Four tabs: Mouse, Subway, Racing, and **Custom**.
 
 **Retraining an existing mode** (Mouse, Subway, or Racing tab - **not** Open
@@ -251,12 +258,12 @@ from scratch for a game or app that has no built-in mode of its own.
    and **ADD** button (no fixed limit on gestures or modes).
 3. Collect samples and train the same way as above (50 samples/gesture,
    mirror option available).
-4. Once trained, open **06 KEY BINDINGS** - your custom mode gets its own
+4. Once trained, open **07 KEY BINDINGS** - your custom mode gets its own
    section there, listing every gesture you added, ready to bind to a key.
 5. Rename or delete a custom mode from the Custom tab at any time (delete
    requires a confirmation click within 3 seconds).
 
-### 06 - Key Bindings
+### 07 - Key Bindings
 Remap keys for Subway Surfers, Racing, Open World modes, and any Custom mode
 you've created (each gets its own auto-generated section). Select mode tab
 → click binding → press desired key → saved automatically. "RESET TO DEFAULT"
@@ -297,12 +304,12 @@ reverts a mode's bindings.
 | Grip | Alt | Little Finger | Right click |
 | | | Grabbing | E |
 
-### 07 - Air Hockey
+### 08 - Air Hockey
 Launches the built-in Air Hockey game (a separate window) and lets you
 control it with gestures - including a two-player mode where both players
 share a single webcam.
 
-**Launching**: sidebar → 07 AIR HOCKEY → the game window opens
+**Launching**: sidebar → 08 AIR HOCKEY → the game window opens
 automatically. Keep it focused/visible while playing with gestures.
 
 **Multiplayer**: both players stand in front of the same camera. The app
@@ -446,7 +453,7 @@ All your preferences (camera, zone, mode, key bindings, etc.) are saved
 automatically as you change them - there's nothing to manually save. If you
 want to reset:
 
-1. **Key bindings for one mode**: Key Bindings page (sidebar 06) → "RESET TO
+1. **Key bindings for one mode**: Key Bindings page (sidebar 07) → "RESET TO
    DEFAULT".
 2. **Everything**: delete the app's settings file - the setup flow runs again
    on next launch and every default is restored
@@ -470,7 +477,7 @@ Symptom: blank preview or "Failed to open camera".
 | Improve lighting | Even, bright frontal lighting; avoid backlighting/colored light |
 | Recalibrate distance | Maintain 50–70 cm; delete `app_config.json` to re-trigger setup flow |
 | Reduce background clutter | Avoid patterned clothing/busy backgrounds |
-| Use a custom model | Train via Train Model page (sidebar 05) |
+| Use a custom model | Train via Train Model page (sidebar 06) |
 
 ### Cursor Drift / Out-of-Zone Mapping
 | Solution | Details |
@@ -497,7 +504,7 @@ zone and it'll pick up tracking again.
 | Cause | Solution |
 |---|---|
 | Target app not in foreground | Click the game window to focus it before gesturing |
-| Wrong key binding | Verify mapping in Key Bindings (sidebar 06) |
+| Wrong key binding | Verify mapping in Key Bindings (sidebar 07) |
 | Anti-cheat blocking (Windows) | Kernel-level anti-cheat can block synthetic input - game-side restriction, cannot be bypassed |
 | macOS Accessibility permission | System Preferences → Privacy & Security → Accessibility → enable Python/Terminal |
 

@@ -34,16 +34,16 @@ class UserGuide(QWidget):
             {
                 "title": "Choose a Game Mode",
                 "items": [
-                    "Open Settings (04) from the sidebar.",
+                    "Open Settings (05) from the sidebar.",
                     "Choose Mouse, Subway Surfers, Racing, or Open World mode.",
-                    "For each mode, toggle Default or Custom model source - Custom activates once you have trained your own model via Train Model (05).",
+                    "For each mode, toggle Default or Custom model source - Custom activates once you have trained your own model via Train Model (06).",
                     "Switching Default ↔ Custom takes effect immediately, even while the controller is running.",
                 ],
             },
             {
                 "title": "Customize Controls",
                 "items": [
-                    "Open Key Bindings (06) from the sidebar.",
+                    "Open Key Bindings (07) from the sidebar.",
                     "Click any key button to remap a gesture - press the desired key to confirm, or Escape to cancel.",
                     "Locked gestures (greyed out) use fixed directional logic and cannot be rebound to a single key.",
                     "Use the Reset All button at the top of each section to restore that mode's defaults instantly.",
@@ -74,7 +74,7 @@ class UserGuide(QWidget):
                     "Avoid strong backlight or a busy background behind your hand.",
                     "Keep fingers clearly separated - spread them out for better detection accuracy.",
                     "Use the distance alert on the Home page to stay at the optimal depth.",
-                    "Train a Custom model for your own gestures via Train Model (05) in the sidebar.",
+                    "Train a Custom model for your own gestures via Train Model (06) in the sidebar.",
                 ],
             },
         ]

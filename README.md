@@ -20,6 +20,7 @@ No hardware required - powered by MediaPipe, OpenCV, PyTorch, and PySide6.
 - **Zone calibration** - choose Small, Medium, or Large movement zone
 - **Dark / Light theme** - full theme toggle across all pages
 - **Custom gesture modes** - define and train an entirely new gesture set (not just Mouse/Subway/Racing) from the Train Model page, then select and run it from Settings
+- **Train Model Guide** - step-by-step walkthrough (with per-step reference videos/images) covering the full custom-training workflow: collecting samples, preprocessing, training, reviewing, and using your custom model
 - **HandBot chatbot** - ask questions from the chat panel; runs fully offline on a bundled local model (auto-downloaded on first use, no setup), or switch to ChatGPT in Settings by adding your own OpenAI API key - no `.env` file needed, the key is stored on-device
 - **Status overlay** - optional small status panel that stays visible when you switch to another app/game window
 - **Air Hockey mode** - launch the bundled local 2-player air hockey game and drive a paddle with your left-hand wrist position; right hand fires powers by finger count
@@ -216,15 +217,15 @@ Setup is saved to `logic/app_config.json`. Subsequent launches skip straight to 
 
 ### Step 2 - Choose a mode and model source
 
-Open **Settings (04)** from the sidebar:
+Open **Settings (05)** from the sidebar:
 
 - Click a mode card to select it (Mouse / Subway Surfers / Racing / Open World).
-- Toggle **DEFAULT** or **CUSTOM** below each card. Custom is enabled once you have trained a model via Train Model (05).
+- Toggle **DEFAULT** or **CUSTOM** below each card. Custom is enabled once you have trained a model via Train Model (06).
 - Switching Default ↔ Custom takes effect immediately, even while the controller is running.
 
 ### Step 3 - Customize key bindings
 
-Open **Key Bindings (06)** from the sidebar:
+Open **Key Bindings (07)** from the sidebar:
 
 - Click any key button to remap a gesture - press the desired key to confirm, Escape to cancel.
 - Locked gestures (greyed out) use fixed directional logic and cannot be rebound.
@@ -330,7 +331,7 @@ keyboard/mouse directly - HandMouse launches it as its own window and then
 sends synthetic keypresses to it, the same way Subway Surfers and Racing mode
 work.
 
-1. Open the **07 - AIR HOCKEY** tab in the sidebar and click **LAUNCH AIR
+1. Open the **08 - AIR HOCKEY** tab in the sidebar and click **LAUNCH AIR
    HOCKEY**. This opens the game in its own window (the button disables
    while it's running).
 2. Go to **Settings**, select the **AIR HOCKEY** card in Game Mode to make it
@@ -350,13 +351,16 @@ right half control Player 2 (Arrow keys / 6-0).
 
 ## Custom model training
 
-1. Open **Train Model (05)** from the sidebar.
+1. Open **Train Model (06)** from the sidebar.
 2. Select a mode (Mouse / Subway / Racing).
 3. Use the **Collect** tab to record gesture samples - point the camera at your hand and record each gesture class.
 4. Use the **Train** tab to train the neural network on your collected data.
-5. Once training completes, go to **Settings (04)** and switch the mode's source to **CUSTOM**.
+5. Once training completes, go to **Settings (05)** and switch the mode's source to **CUSTOM**.
 
 Custom models are saved to `logic/data/custom/` and are not tracked by git.
+
+New to the workflow? **Train Model Guide (04)** in the sidebar walks through
+all five steps above with reference videos and images for each one.
 
 ---
 
@@ -448,6 +452,7 @@ HandMouse/
     ├── main_menu.py               # Sidebar + home dashboard
     ├── user_guide.py
     ├── gesture_guide.py
+    ├── train_model_guide.py       # Train Model Guide page - step-by-step walkthrough w/ videos
     ├── game_mode.py               # Settings page (mode, camera, model source)
     ├── key_bindings.py            # Key binding editor
     ├── pipeline_ui.py             # Train Model page
@@ -504,7 +509,7 @@ Download the file and place it in `logic/` - see Installation step 4.
 Make sure `hagridv2_gesture_recognizer.task` is placed in `logic/data/`. Without it, only the landmark-based movement gestures (WASD) are active.
 
 **Custom model not available**
-The Custom button is greyed out until both `.pt` and `.pkl` files exist in `logic/data/custom/`. Train a model first via Train Model (05).
+The Custom button is greyed out until both `.pt` and `.pkl` files exist in `logic/data/custom/`. Train a model first via Train Model (06).
 
 **Gestures triggering my own app UI**
 HandMouse filters out gesture-generated keypresses from its own UI automatically via an application-level event filter.
