@@ -28,7 +28,7 @@ run:
 	python main.py
 
 build-mac-app:
-	pyinstaller main.spec --noconfirm
+	pyinstaller main_mac.spec --noconfirm
 	/usr/libexec/PlistBuddy -c \
 		"Add :NSCameraUsageDescription string 'HandMouse uses the camera to detect hand gestures for mouse control.'" \
 		dist/HandMouse.app/Contents/Info.plist
@@ -46,37 +46,7 @@ build-mac-dmg: build-mac-app
 		"dist/HandMouse.app"
 
 build-win:
-	pyinstaller main.py --noconsole --onedir \
-		--icon="$(ICON_WIN)" \
-		--add-data="assets;assets" \
-		--add-data="logic/data;logic/data" \
-		--add-data="logic/conf;logic/conf" \
-		--add-data="logic/chatbot/data;logic/chatbot/data" \
-		--add-data="logic/chatbot/chroma_db;logic/chatbot/chroma_db" \
-		--add-data="hockey_game;hockey_game" \
-		--hidden-import=pygame \
-		--hidden-import=logic.gesture_pipeline \
-		--hidden-import=tiktoken_ext.openai_public \
-		--hidden-import=tiktoken_ext \
-		--collect-all numpy \
-		--collect-all cv2 \
-		--collect-all mediapipe \
-		--collect-all scipy \
-		--collect-all sklearn \
-		--collect-all torch \
-		--collect-all pygame \
-		--collect-all chromadb \
-		--collect-all llama_cpp \
-		--collect-all llama_index \
-		--collect-all transformers \
-		--collect-all tokenizers \
-		--collect-all huggingface_hub \
-		--collect-all sentence_transformers \
-		--collect-all certifi \
-		--collect-all openai \
-		--collect-all httpx \
-		--collect-all httpcore \
-		--collect-all tiktoken
+	pyinstaller main_win.spec --noconfirm
 
 ISCC ?= "$(USERPROFILE)/AppData/Local/Programs/Inno Setup 6/ISCC.exe"
 

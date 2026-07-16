@@ -153,18 +153,23 @@ def _qwen_completion_to_prompt(completion: str) -> str:
     return f"<|im_start|>user\n{completion}<|im_end|>\n<|im_start|>assistant\n"
 
 
-def _base_query_engine():
+_index_build_lock = threading.Lock()
+
+
+def _base_query_engine(llm, embed_model):
     import chromadb
     from llama_index.core import Settings, VectorStoreIndex
     from llama_index.core.postprocessor import SimilarityPostprocessor
     from llama_index.vector_stores.chroma import ChromaVectorStore
 
     if not PERSIST_DIR.exists():
-        llm = Settings.llm
-        embed_model = Settings.embed_model
-        _build_index()
-        Settings.llm = llm
-        Settings.embed_model = embed_model
+        with _index_build_lock:
+            if not PERSIST_DIR.exists():
+                prev_llm, prev_embed = Settings.llm, Settings.embed_model
+                try:
+                    _build_index()
+                finally:
+                    Settings.llm, Settings.embed_model = prev_llm, prev_embed
 
     chroma_client = chromadb.PersistentClient(path=str(PERSIST_DIR))
     chroma_collection = chroma_client.get_or_create_collection(
@@ -172,8 +177,9 @@ def _base_query_engine():
     )
     vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
 
-    index = VectorStoreIndex.from_vector_store(vector_store)
+    index = VectorStoreIndex.from_vector_store(vector_store, embed_model=embed_model)
     query_engine = index.as_query_engine(
+        llm=llm,
         similarity_top_k=SIMILARITY_TOP_K,
         node_postprocessors=[SimilarityPostprocessor(similarity_cutoff=SIMILARITY_CUTOFF)],
         response_mode="simple_summarize",
@@ -183,7 +189,6 @@ def _base_query_engine():
 
 
 def _load_local_engine():
-    from llama_index.core import Settings
     from llama_index.embeddings.huggingface import HuggingFaceEmbedding
     from llama_index.llms.llama_cpp import LlamaCPP
 
@@ -192,10 +197,10 @@ def _load_local_engine():
             "The chatbot model hasn't been downloaded yet."
         )
 
-    Settings.embed_model = HuggingFaceEmbedding(
+    embed_model = HuggingFaceEmbedding(
         model_name=EMBED_MODEL_NAME, query_instruction=QUERY_INSTRUCTION
     )
-    Settings.llm = LlamaCPP(
+    llm = LlamaCPP(
         model_path=str(_primary_model_path()),
         temperature=0.2,
         max_new_tokens=512,
@@ -205,11 +210,10 @@ def _load_local_engine():
         completion_to_prompt=_qwen_completion_to_prompt,
         verbose=False,
     )
-    return _base_query_engine()
+    return _base_query_engine(llm, embed_model)
 
 
 def _load_openai_engine():
-    from llama_index.core import Settings
     from llama_index.embeddings.huggingface import HuggingFaceEmbedding
     from llama_index.llms.openai import OpenAI
 
@@ -221,16 +225,16 @@ def _load_openai_engine():
             "No ChatGPT API key found - add one in Settings under AI Backend."
         )
 
-    Settings.embed_model = HuggingFaceEmbedding(
+    embed_model = HuggingFaceEmbedding(
         model_name=EMBED_MODEL_NAME, query_instruction=QUERY_INSTRUCTION
     )
-    Settings.llm = OpenAI(
+    llm = OpenAI(
         api_key=api_key,
         model=OPENAI_MODEL_NAME,
         temperature=0.2,
         max_tokens=512,
     )
-    return _base_query_engine()
+    return _base_query_engine(llm, embed_model)
 
 
 _ENGINE_LOADERS = {
@@ -239,14 +243,14 @@ _ENGINE_LOADERS = {
 }
 
 _engines = {}
-_engine_lock = threading.Lock()
+_engine_locks = {backend: threading.Lock() for backend in _ENGINE_LOADERS}
 
 
 def _get_engine(backend: str):
     if backend not in _ENGINE_LOADERS:
         backend = "local"
     if backend not in _engines:
-        with _engine_lock:
+        with _engine_locks[backend]:
             if backend not in _engines:
                 _engines[backend] = _ENGINE_LOADERS[backend]()
     return _engines[backend]
@@ -257,7 +261,7 @@ def is_engine_ready(backend: str = "local") -> bool:
 
 
 def reset_engine(backend: str = "openai") -> None:
-    with _engine_lock:
+    with _engine_locks.get(backend, threading.Lock()):
         _engines.pop(backend, None)
 
 
