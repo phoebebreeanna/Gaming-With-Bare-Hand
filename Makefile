@@ -27,8 +27,6 @@ APP_NAME = HandMouse
 run:
 	python main.py
 
-# Builds dist/HandMouse.app from main.spec (the single source of truth for
-# what gets bundled - see collect_all/datas at the top of main.spec).
 build-mac-app:
 	pyinstaller main.spec --noconfirm
 	/usr/libexec/PlistBuddy -c \
@@ -36,8 +34,6 @@ build-mac-app:
 		dist/HandMouse.app/Contents/Info.plist
 	codesign --force --deep --sign - dist/HandMouse.app
 
-# Wraps dist/HandMouse.app in a distributable .dmg with a drag-to-Applications
-# layout. Requires `brew install create-dmg`.
 build-mac-dmg: build-mac-app
 	rm -f "dist/$(DMG_NAME)"
 	create-dmg \
