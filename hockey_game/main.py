@@ -107,6 +107,32 @@ def _blit_scaled_to_fit(display_surface, virtual_surface):
     display_surface.blit(scaled, ((dw - new_w) // 2, (dh - new_h) // 2))
 
 
+def _bring_window_to_foreground():
+    try:
+        wm_info = pygame.display.get_wm_info()
+    except Exception:
+        return
+    hwnd = wm_info.get('window')
+    if not hwnd:
+        return
+    if sys.platform == 'win32':
+        try:
+            import ctypes
+            user32 = ctypes.windll.user32
+            SW_RESTORE = 9
+            user32.ShowWindow(hwnd, SW_RESTORE)
+            user32.SetForegroundWindow(hwnd)
+        except Exception:
+            pass
+    elif sys.platform == 'darwin':
+        try:
+            import objc
+            from AppKit import NSApplication, NSApplicationActivateIgnoringOtherApps
+            NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
+        except Exception:
+            pass
+
+
 def main():
     pygame.init()
     audio.init()
@@ -116,6 +142,7 @@ def main():
     screen = pygame.display.set_mode(
         (window_w, window_h), pygame.RESIZABLE | pygame.DOUBLEBUF, vsync=1
     )
+    _bring_window_to_foreground()
     virtual = pygame.Surface((cfg.WINDOW_WIDTH, cfg.WINDOW_HEIGHT)).convert()
     clock = pygame.time.Clock()
 

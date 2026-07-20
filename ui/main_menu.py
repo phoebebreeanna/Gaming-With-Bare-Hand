@@ -134,6 +134,7 @@ class MainMenu(QWidget):
         self.game_mode_widget.chatbot_enabled_changed.connect(self.handbot_pages.set_chatbot_enabled)
         self.game_mode_widget.mini_overlay_enabled_changed.connect(self._on_mini_overlay_enabled_changed)
         self.game_mode_widget.custom_meta_gestures_changed.connect(self._on_custom_meta_gestures_changed)
+        self.game_mode_widget.mode_switch_lock_changed.connect(self._on_mode_switch_lock_changed)
         self.pages.addWidget(self.game_mode_widget)
 
         self.pipeline_ui = PipelineUI(is_dark=self.is_dark)
@@ -159,7 +160,7 @@ class MainMenu(QWidget):
 
     def create_sidebar(self):
         self.sidebar = sidebar = QWidget()
-        sidebar.setFixedWidth(222)
+        sidebar.setFixedWidth(240)
         sidebar.setStyleSheet("""
             QWidget {
                 background-color: #ECECEC;
@@ -170,9 +171,9 @@ class MainMenu(QWidget):
                 background-color: transparent;
                 color: #1A1A1A;
                 font-size: 11px;
-                letter-spacing: 1.2px;
+                letter-spacing: 0.6px;
                 text-align: left;
-                padding: 13px 14px;
+                padding: 13px 10px;
                 border: none;
                 border-radius: 0px;
             }
@@ -243,10 +244,10 @@ class MainMenu(QWidget):
         layout.addWidget(self.menu_lbl)
 
         for label, index in [
-            ("01      -     HOME", 0),
-            ("02      -     USER GUIDE", 1),
-            ("03      -     GESTURE GUIDE", 2),
-            ("04      -     TRAIN MODEL GUIDE", 6),
+            ("01  -  HOME", 0),
+            ("02  -  USER GUIDE", 1),
+            ("03  -  GESTURE GUIDE", 2),
+            ("04  -  TRAIN MODEL GUIDE", 6),
         ]:
             btn = QPushButton(label)
             btn.setProperty("target_index", index)
@@ -272,10 +273,10 @@ class MainMenu(QWidget):
         layout.addWidget(self.setup_lbl)
 
         for label, index in [
-            ("05      -     SETTING", 3),
-            ("06      -     TRAIN MODEL", 4),
-            ("07      -     KEY BINDINGS", 5),
-            ("08      -     AIR HOCKEY", 7),
+            ("05  -  SETTING", 3),
+            ("06  -  TRAIN MODEL", 4),
+            ("07  -  KEY BINDINGS", 5),
+            ("08  -  AIR HOCKEY", 7),
         ]:
             btn = QPushButton(label)
             btn.setProperty("target_index", index)
@@ -459,7 +460,7 @@ class MainMenu(QWidget):
 
         self.camera_combo = QComboBox()
         self.camera_combo.hide()
-        self._refresh_cameras()
+        self._refresh_cameras(scan=False)
         self.camera_combo.currentIndexChanged.connect(self._on_camera_changed)
 
         layout.addLayout(top_row)
@@ -1372,10 +1373,22 @@ class MainMenu(QWidget):
         self.update()
         self.repaint()
 
-    def _refresh_cameras(self):
+    def _refresh_cameras(self, scan=True):
         self.camera_combo.blockSignals(True)
         self.camera_combo.clear()
-        cameras = list_cameras()
+        if scan:
+            cameras = list_cameras()
+            try:
+                from logic.app_config import set_cached_cameras
+                set_cached_cameras(cameras)
+            except Exception:
+                pass
+        else:
+            try:
+                from logic.app_config import get_cached_cameras
+                cameras = get_cached_cameras()
+            except Exception:
+                cameras = []
         if not cameras:
             self.camera_combo.addItem("No camera found", -1)
         else:
@@ -1413,6 +1426,10 @@ class MainMenu(QWidget):
     def _on_custom_meta_gestures_changed(self, enabled: bool):
         if self.controller:
             self.controller.set_custom_meta_gestures_enabled(enabled)
+
+    def _on_mode_switch_lock_changed(self, mode: str, locked: bool):
+        if self.controller:
+            self.controller.set_mode_switch_locked(mode, locked)
 
     def _on_mouse_side_changed(self, side: str):
         set_mouse_side(side)
@@ -1697,13 +1714,17 @@ class MainMenu(QWidget):
     def _start_controller(self):
         from logic.app_config import (
             get_model_source, get_game_mode, get_mouse_enabled, get_cursor_point,
-            get_mouse_side, get_custom_meta_gestures_enabled,
+            get_mouse_side, get_custom_meta_gestures_enabled, get_mode_switch_locked,
         )
         model_sources                  = {m: get_model_source(m) for m in ('mouse', 'subway', 'racing')}
         model_sources['mouse_in_game'] = get_mouse_enabled()
         model_sources['cursor_point']  = get_cursor_point()
         model_sources['mouse_side']    = get_mouse_side()
         model_sources['custom_meta_gestures'] = get_custom_meta_gestures_enabled()
+        model_sources['mode_locks']    = {
+            m: get_mode_switch_locked(m)
+            for m in ('mouse', 'subway', 'racing', 'open_world', 'air_hockey')
+        }
         initial_game_mode = get_game_mode()
         self._current_running_mode = initial_game_mode
         self._set_air_hockey_ui_active(initial_game_mode == 'air_hockey')

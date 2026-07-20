@@ -72,7 +72,10 @@ _DOT_CLR = {
 }
 
 def hand_size(lms):
-    return np.hypot(lms[0].x - lms[9].x, lms[0].y - lms[9].y)
+    d09  = np.hypot(lms[0].x - lms[9].x,  lms[0].y - lms[9].y)
+    d05  = np.hypot(lms[0].x - lms[5].x,  lms[0].y - lms[5].y)
+    d017 = np.hypot(lms[0].x - lms[17].x, lms[0].y - lms[17].y)
+    return max(d09, d05, d017)
 
 def tip_dist(lms, a, b):
     return np.hypot(lms[a].x - lms[b].x, lms[a].y - lms[b].y)

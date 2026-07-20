@@ -106,6 +106,31 @@ class MainWindow(QMainWindow):
         _log_lifecycle("closeEvent accepting")
         event.accept()
 
+def _check_mac_accessibility_permission():
+    if sys.platform != 'darwin':
+        return
+    try:
+        from ApplicationServices import AXIsProcessTrustedWithOptions
+        trusted = AXIsProcessTrustedWithOptions({"AXTrustedCheckOptionPrompt": True})
+    except Exception:
+        _log_lifecycle("accessibility check unavailable (pyobjc missing)")
+        return
+    _log_lifecycle(f"accessibility trusted={trusted}")
+    if not trusted:
+        from PySide6.QtWidgets import QMessageBox
+        box = QMessageBox()
+        box.setWindowTitle("Accessibility Permission Needed")
+        box.setIcon(QMessageBox.Warning)
+        box.setText(
+            "HandMouse needs Accessibility permission to send keyboard/mouse "
+            "input for gestures (mouse, subway, racing, custom modes).\n\n"
+            "macOS should have just shown a permission prompt - open "
+            "System Settings > Privacy & Security > Accessibility and enable "
+            "HandMouse, then restart the app."
+        )
+        box.exec()
+
+
 def _install_global_excepthook():
     import traceback
 
@@ -186,6 +211,7 @@ if __name__ == "__main__":
     _install_global_excepthook()
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
+    _check_mac_accessibility_permission()
     window = MainWindow()
     blocker = _GestureKeyBlocker(window)
     app.installEventFilter(blocker)

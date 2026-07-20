@@ -85,6 +85,14 @@ def set_camera_index(idx: int) -> None:
     config['camera_index'] = idx
     _write(config)
 
+def get_cached_cameras() -> list:
+    return _read().get('cached_cameras', [])
+
+def set_cached_cameras(cameras: list) -> None:
+    config = _read()
+    config['cached_cameras'] = list(cameras)
+    _write(config)
+
 def set_zone(zone: str) -> None:
     config = _read()
     config['zone'] = zone
@@ -136,6 +144,25 @@ def get_custom_meta_gestures_enabled() -> bool:
 def set_custom_meta_gestures_enabled(enabled: bool) -> None:
     config = _read()
     config['custom_meta_gestures_enabled'] = enabled
+    _write(config)
+
+MODE_SWITCH_LOCK_DEFAULTS = {
+    'mouse':      False,
+    'subway':     False,
+    'racing':     True,
+    'open_world': True,
+    'air_hockey': True,
+}
+
+def get_mode_switch_locked(mode: str) -> bool:
+    default = MODE_SWITCH_LOCK_DEFAULTS.get(mode, False)
+    return _read().get('mode_switch_locks', {}).get(mode, default)
+
+def set_mode_switch_locked(mode: str, locked: bool) -> None:
+    config = _read()
+    locks = config.get('mode_switch_locks', {})
+    locks[mode] = locked
+    config['mode_switch_locks'] = locks
     _write(config)
 
 def get_chatbot_backend() -> str:
@@ -231,6 +258,8 @@ def set_selected_custom_mode_id(mode_id: str) -> None:
     _write(config)
 
 def get_custom_data_root() -> str:
+    if getattr(sys, 'frozen', False):
+        return os.path.join(os.path.expanduser('~'), '.handmouse', 'data', 'custom')
     logic_dir = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(logic_dir, 'data', 'custom')
 

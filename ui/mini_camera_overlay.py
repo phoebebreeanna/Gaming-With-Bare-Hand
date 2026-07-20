@@ -60,7 +60,7 @@ class MiniCameraOverlay(QWidget):
         self.image_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.image_label)
 
-        self.hint_label = QLabel("HandMouse · double-click to return", self)
+        self.hint_label = QLabel("HandMouse · click here or double-click to return", self)
         self.hint_label.setGeometry(0, _IMAGE_HEIGHT - 20, 260, 20)
 
         self.info_panel = QWidget()
@@ -207,8 +207,13 @@ class MiniCameraOverlay(QWidget):
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
+            pos = event.position().toPoint()
+            was_click = (self._press_pos is not None and
+                         (event.globalPosition().toPoint() - self._press_pos).manhattanLength() < 4)
             self._drag_offset = None
             self._press_pos = None
+            if was_click and self.hint_label.geometry().contains(pos) and self._on_restore is not None:
+                self._on_restore()
         super().mouseReleaseEvent(event)
 
     def mouseDoubleClickEvent(self, event):

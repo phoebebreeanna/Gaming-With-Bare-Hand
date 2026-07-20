@@ -74,7 +74,16 @@ def load_conf(path):
     cfg.read(path, encoding='utf-8')
     base         = os.path.dirname(os.path.abspath(path))
     data_dir     = cfg['files'].get('data_dir', 'data')
-    full_data_dir = os.path.join(base, data_dir)
+    full_data_dir = os.path.normpath(os.path.join(base, data_dir))
+
+    if getattr(sys, 'frozen', False):
+        parts = full_data_dir.replace('\\', '/').split('/')
+        if 'data' in parts and 'custom' in parts:
+            marker = max(i for i, p in enumerate(parts) if p == 'data')
+            tail   = parts[marker + 2:]
+            writable_root = os.path.join(os.path.expanduser('~'), '.handmouse', 'data', 'custom')
+            full_data_dir = os.path.join(writable_root, *tail) if tail else writable_root
+
     os.makedirs(full_data_dir, exist_ok=True)
 
     def dp(name):

@@ -46,9 +46,14 @@ from logic.modes.custom_mode     import CustomModeMixin
 from logic.modes.air_hockey_mode import AirHockeyModeMixin
 
 import sys as _sys
-LOGIC_DIR  = os.path.join(_sys._MEIPASS, 'logic') if getattr(_sys, 'frozen', False) else os.path.dirname(os.path.abspath(__file__))
+if getattr(_sys, 'frozen', False):
+    LOGIC_DIR       = os.path.join(_sys._MEIPASS, 'logic')
+    _CUSTOM_DATA_DIR = os.path.join(os.path.expanduser('~'), '.handmouse', 'data')
+else:
+    LOGIC_DIR       = os.path.dirname(os.path.abspath(__file__))
+    _CUSTOM_DATA_DIR = os.path.join(LOGIC_DIR, 'data')
 DATA_DIR   = os.path.join(LOGIC_DIR, 'data')
-CUSTOM_DIR = os.path.join(DATA_DIR, 'custom')
+CUSTOM_DIR = os.path.join(_CUSTOM_DATA_DIR, 'custom')
 MODEL_PATH = os.path.join(DATA_DIR, 'hand_landmarker.task')
 
 MOUSE_WEIGHTS  = os.path.join(DATA_DIR, 'mouse_gesture_model_best.pt')
@@ -69,6 +74,19 @@ OW_MODEL_PATH = os.path.join(DATA_DIR, 'hagridv2_gesture_recognizer.task')
 
 MP_PRESENCE_THRESH   = 0.7
 CONFIRM_CLOSE_HOLD   = 3.0
+
+_MODE_SWITCH_LOCK_DEFAULTS = {
+    'mouse':      False,
+    'subway':     False,
+    'racing':     True,
+    'open_world': True,
+    'air_hockey': True,
+}
+
+_MODE_NAME_BY_OPT = {
+    None: 'mouse', 2: 'subway', 3: 'racing',
+    4: 'open_world', 5: 'custom', 6: 'air_hockey',
+}
 
 def list_cameras(max_test=6):
     available = []
@@ -225,6 +243,7 @@ class HandControllerThread(
         self._right_half_mode       = False
         self._mouse_side            = sources.get('mouse_side', 'right')
         self._custom_meta_gestures_enabled = sources.get('custom_meta_gestures', True)
+        self._mode_switch_locks = dict(sources.get('mode_locks', {}))
 
         def _pick(mode, default_w, default_e, custom_w, custom_e):
             if sources.get(mode) == 'custom' and os.path.exists(custom_w) and os.path.exists(custom_e):
@@ -520,6 +539,9 @@ class HandControllerThread(
 
     def set_custom_meta_gestures_enabled(self, enabled: bool):
         self._custom_meta_gestures_enabled = enabled
+
+    def set_mode_switch_locked(self, mode: str, locked: bool):
+        self._mode_switch_locks[mode] = locked
 
     def set_mouse_side(self, side: str):
         self._mouse_side = side
@@ -828,9 +850,15 @@ class HandControllerThread(
                         game_opt_hold_t = None; self.game_opt_number = None; game_opt_frac = 0.0
                         self._pending_mode = None
 
-                    if self.active_game_mode == 5 and not self._custom_meta_gestures_enabled:
-                        game_opt_hold_t = None; self.game_opt_number = None; game_opt_frac = 0.0
-                    elif self.active_game_mode == 6:
+                    _current_mode_name = _MODE_NAME_BY_OPT.get(self.active_game_mode, 'mouse')
+                    if _current_mode_name == 'custom':
+                        _switch_locked = not self._custom_meta_gestures_enabled
+                    else:
+                        _switch_locked = self._mode_switch_locks.get(
+                            _current_mode_name,
+                            _MODE_SWITCH_LOCK_DEFAULTS.get(_current_mode_name, False))
+
+                    if _switch_locked:
                         game_opt_hold_t = None; self.game_opt_number = None; game_opt_frac = 0.0
                     else:
                         _any_devil = (lms and is_devil_horn(lms)) or (lms2 and is_devil_horn(lms2))

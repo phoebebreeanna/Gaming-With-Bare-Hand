@@ -1,4 +1,5 @@
 import os
+import sys
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
@@ -6,14 +7,29 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal, QTimer
 
-_LOGIC_DIR  = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logic")
-_CUSTOM_DIR = os.path.join(_LOGIC_DIR, "data", "custom")
+if getattr(sys, 'frozen', False):
+    _CUSTOM_DIR = os.path.join(os.path.expanduser('~'), '.handmouse', 'data', 'custom')
+else:
+    _LOGIC_DIR  = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logic")
+    _CUSTOM_DIR = os.path.join(_LOGIC_DIR, "data", "custom")
 
 _CUSTOM_FILES = {
     'mouse':  ('mouse_gesture_model_best.pt',  'mouse_label_encoder.pkl'),
     'subway': ('subway_gesture_model_best.pt', 'subway_label_encoder.pkl'),
     'racing': ('racing_gesture_model_best.pt', 'racing_label_encoder.pkl'),
 }
+
+MODE_SWITCH_LOCK_DEFAULTS = {
+    'mouse':      False,
+    'subway':     False,
+    'racing':     True,
+    'open_world': True,
+    'air_hockey': True,
+}
+MODE_SWITCH_LOCK_LABELS = (
+    ('mouse', 'MOUSE'), ('subway', 'SUBWAY'), ('racing', 'RACING'),
+    ('open_world', 'OPEN WORLD'), ('air_hockey', 'AIR HOCKEY'),
+)
 
 def _custom_game_mode_model_exists(mode_id: str) -> bool:
     mode_dir = os.path.join(_CUSTOM_DIR, mode_id)
@@ -35,6 +51,7 @@ class GameMode(QWidget):
     chatbot_backend_changed = Signal(str)
     mini_overlay_enabled_changed = Signal(bool)
     custom_meta_gestures_changed = Signal(bool)
+    mode_switch_lock_changed     = Signal(str, bool)
 
     def __init__(self):
         super().__init__()
@@ -49,6 +66,7 @@ class GameMode(QWidget):
         self._source_btns    = {}
         self._mode_cards     = {}
         self._camera_combo   = None
+        self._camera_scan_btn = None
         self._cursor_btns    = {}
         self._zone_btns      = {}
         self._side_btns      = {}
@@ -61,6 +79,8 @@ class GameMode(QWidget):
         self._custom_meta_gestures_enabled = True
         self._custom_mode_combo   = None
         self._selected_custom_id  = ''
+        self._mode_switch_locks   = dict(MODE_SWITCH_LOCK_DEFAULTS)
+        self._mode_lock_btns      = {}
 
         self._load_state()
         self._init_ui()
@@ -74,6 +94,7 @@ class GameMode(QWidget):
                 get_selected_custom_mode_id,
                 get_chatbot_enabled, get_mini_overlay_enabled, get_chatbot_backend,
                 get_custom_meta_gestures_enabled, get_openai_api_key,
+                get_mode_switch_locked,
             )
             self.selected_mode      = get_game_mode()
             self.mouse_enabled      = get_mouse_enabled()
@@ -90,6 +111,8 @@ class GameMode(QWidget):
             self._selected_custom_id = get_selected_custom_mode_id()
             for m in ('mouse', 'subway', 'racing'):
                 self._mode_sources[m] = get_model_source(m)
+            for m in MODE_SWITCH_LOCK_DEFAULTS:
+                self._mode_switch_locks[m] = get_mode_switch_locked(m)
         except Exception:
             self._camera_index = 0
 
@@ -290,8 +313,17 @@ class GameMode(QWidget):
         self._camera_combo.setMinimumWidth(100)
         self._camera_combo.currentIndexChanged.connect(self._on_camera_combo_changed)
         cp.addWidget(self._camera_combo)
+
+        self._camera_scan_btn = QPushButton("Scan")
+        self._camera_scan_btn.setFixedHeight(26)
+        self._camera_scan_btn.setMinimumWidth(56)
+        self._camera_scan_btn.setCursor(Qt.PointingHandCursor)
+        self._camera_scan_btn.clicked.connect(self._scan_cameras)
+        cp.addSpacing(6)
+        cp.addWidget(self._camera_scan_btn)
+
         cl.addWidget(self.camera_panel)
-        self._populate_cameras()
+        self._populate_cameras(scan=False)
 
         self.div1e = QWidget()
         self.div1e.setFixedHeight(1)
@@ -642,6 +674,47 @@ class GameMode(QWidget):
         mgp.addWidget(self.meta_gestures_toggle_btn)
         cl.addWidget(self.meta_gestures_panel)
 
+        self.div1k = QWidget()
+        self.div1k.setFixedHeight(1)
+        cl.addWidget(self.div1k)
+
+        self.mode_lock_panel = QWidget()
+        mlp = QVBoxLayout(self.mode_lock_panel)
+        mlp.setContentsMargins(16, 10, 16, 10)
+        mlp.setSpacing(6)
+
+        mode_lock_text_col = QVBoxLayout()
+        mode_lock_text_col.setSpacing(2)
+        self.mode_lock_hdr_lbl = QLabel("LOCK GESTURE MODE SWITCHING")
+        self.mode_lock_sub_lbl = QLabel(
+            "When ON for a mode, the hand-gesture shortcut can't switch out of it while it's active")
+        self.mode_lock_sub_lbl.setWordWrap(True)
+        mode_lock_text_col.addWidget(self.mode_lock_hdr_lbl)
+        mode_lock_text_col.addWidget(self.mode_lock_sub_lbl)
+        mlp.addLayout(mode_lock_text_col)
+
+        mode_lock_row = QHBoxLayout()
+        mode_lock_row.setSpacing(6)
+        self._mode_lock_name_lbls = []
+        for mode_id, mode_label in MODE_SWITCH_LOCK_LABELS:
+            col = QVBoxLayout()
+            col.setSpacing(2)
+            name_lbl = QLabel(mode_label)
+            name_lbl.setAlignment(Qt.AlignCenter)
+            self._mode_lock_name_lbls.append(name_lbl)
+            btn = QPushButton()
+            btn.setFixedHeight(24)
+            btn.setMinimumWidth(64)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.clicked.connect(lambda _, m=mode_id: self._toggle_mode_switch_lock(m))
+            self._mode_lock_btns[mode_id] = btn
+            col.addWidget(name_lbl)
+            col.addWidget(btn)
+            mode_lock_row.addLayout(col)
+        mlp.addLayout(mode_lock_row)
+        cl.addWidget(self.mode_lock_panel)
+        self._refresh_mode_lock_buttons()
+
         cl.addStretch()
 
         self._settings_scroll = QScrollArea()
@@ -880,6 +953,23 @@ class GameMode(QWidget):
         self.custom_meta_gestures_changed.emit(self._custom_meta_gestures_enabled)
         self.apply_theme(self.is_dark)
 
+    def _toggle_mode_switch_lock(self, mode_id: str):
+        locked = not self._mode_switch_locks.get(mode_id, MODE_SWITCH_LOCK_DEFAULTS.get(mode_id, False))
+        self._mode_switch_locks[mode_id] = locked
+        try:
+            from logic.app_config import set_mode_switch_locked
+            set_mode_switch_locked(mode_id, locked)
+        except Exception:
+            pass
+        self._refresh_mode_lock_buttons()
+        self.mode_switch_lock_changed.emit(mode_id, locked)
+        self.apply_theme(self.is_dark)
+
+    def _refresh_mode_lock_buttons(self):
+        for mode_id, btn in self._mode_lock_btns.items():
+            locked = self._mode_switch_locks.get(mode_id, MODE_SWITCH_LOCK_DEFAULTS.get(mode_id, False))
+            btn.setText("LOCKED" if locked else "OPEN")
+
     def _set_model_source(self, mode: str, source: str):
         if source == 'custom' and not self._custom_exists(mode):
             return
@@ -892,18 +982,34 @@ class GameMode(QWidget):
         self.model_source_changed.emit(mode, source)
         self.apply_theme(self.is_dark)
 
-    def _populate_cameras(self):
+    def _populate_cameras(self, scan=True):
         if self._camera_combo is None:
             return
-        try:
-            from logic.hand_controller import list_cameras
-            cameras = list_cameras()
-        except Exception:
-            cameras = []
+        cameras = []
+        if scan:
+            try:
+                from logic.hand_controller import list_cameras
+                cameras = list_cameras()
+            except Exception:
+                cameras = []
+            try:
+                from logic.app_config import set_cached_cameras
+                set_cached_cameras(cameras)
+            except Exception:
+                pass
+        else:
+            try:
+                from logic.app_config import get_cached_cameras
+                cameras = get_cached_cameras()
+            except Exception:
+                cameras = []
+            if self._camera_index not in cameras:
+                cameras = sorted(set(cameras) | {self._camera_index})
+
         self._camera_combo.blockSignals(True)
         self._camera_combo.clear()
         if not cameras:
-            self._camera_combo.addItem("No camera found", -1)
+            self._camera_combo.addItem("Press Scan to detect cameras", -1)
         else:
             for idx in cameras:
                 self._camera_combo.addItem(
@@ -913,6 +1019,17 @@ class GameMode(QWidget):
                     self._camera_combo.setCurrentIndex(i)
                     break
         self._camera_combo.blockSignals(False)
+
+    def _scan_cameras(self):
+        if self._camera_scan_btn is not None:
+            self._camera_scan_btn.setEnabled(False)
+            self._camera_scan_btn.setText("Scanning...")
+        try:
+            self._populate_cameras(scan=True)
+        finally:
+            if self._camera_scan_btn is not None:
+                self._camera_scan_btn.setEnabled(True)
+                self._camera_scan_btn.setText("Scan")
 
     def _on_camera_combo_changed(self, combo_idx: int):
         if self._camera_combo is None:
@@ -1274,6 +1391,16 @@ class GameMode(QWidget):
                     selection-color: {text}; outline: none;
                 }}
             """)
+        if self._camera_scan_btn:
+            self._camera_scan_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {tog_off_bg}; color: {tog_off_txt};
+                    font-size: 8px; font-weight: 700; letter-spacing: 1px;
+                    border: 1px solid {border}; border-radius: 2px;
+                }}
+                QPushButton:hover {{ background-color: {hover}; color: {text}; }}
+                QPushButton:disabled {{ color: {muted}; }}
+            """)
 
         self.mode_section_hdr.setStyleSheet(
             f"color: {muted}; font-size: 8px; font-weight: 700; letter-spacing: 1.4px; background: transparent; border: none;")
@@ -1391,3 +1518,33 @@ class GameMode(QWidget):
                 """)
         if hasattr(self, 'div1j'):
             self.div1j.setStyleSheet(f"background-color: {border};")
+
+        if hasattr(self, 'mode_lock_panel'):
+            self.mode_lock_panel.setStyleSheet(
+                f"background-color: {panel}; border: 1px solid {border};")
+            self.mode_lock_hdr_lbl.setStyleSheet(
+                f"font-size: 9px; font-weight: 700; color: {text}; letter-spacing: 1.5px; background: transparent; border: none;")
+            self.mode_lock_sub_lbl.setStyleSheet(
+                f"font-size: 8px; color: {muted}; letter-spacing: 1px; background: transparent; border: none;")
+            for name_lbl in self._mode_lock_name_lbls:
+                name_lbl.setStyleSheet(
+                    f"font-size: 8px; color: {muted}; letter-spacing: 0.5px; background: transparent; border: none;")
+            for mode_id, btn in self._mode_lock_btns.items():
+                locked = self._mode_switch_locks.get(mode_id, MODE_SWITCH_LOCK_DEFAULTS.get(mode_id, False))
+                if locked:
+                    btn.setStyleSheet(f"""
+                        QPushButton {{
+                            background-color: {tog_on_bg}; color: {tog_on_txt};
+                            font-size: 8px; font-weight: 700; letter-spacing: 1px;
+                            border: 1px solid {tog_on_bg}; border-radius: 2px;
+                        }}
+                    """)
+                else:
+                    btn.setStyleSheet(f"""
+                        QPushButton {{
+                            background-color: {tog_off_bg}; color: {tog_off_txt};
+                            font-size: 8px; font-weight: 700; letter-spacing: 1px;
+                            border: 1px solid {border}; border-radius: 2px;
+                        }}
+                        QPushButton:hover {{ background-color: {hover}; }}
+                    """)
