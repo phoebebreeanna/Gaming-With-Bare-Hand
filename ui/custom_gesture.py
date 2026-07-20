@@ -24,10 +24,12 @@ class _PipelineRunner(QThread):
             pipeline = os.path.join(os.path.dirname(os.path.dirname(__file__)),
                                     'logic', 'gesture_pipeline.py')
             cmd = [sys.executable, pipeline, self.conf_path]
+        env = os.environ.copy()
+        env['PYTHONIOENCODING'] = 'utf-8'
         proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, bufsize=1,
+            text=True, encoding='utf-8', bufsize=1, env=env,
         )
         for line in proc.stdout:
             self.output_line.emit(line.rstrip())

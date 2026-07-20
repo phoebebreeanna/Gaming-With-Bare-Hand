@@ -55,7 +55,7 @@ class _Worker(QThread):
 
     def run(self):
         sio = _SignalIO(self.log_line.emit)
-        wrapper = io.TextIOWrapper(sio, line_buffering=True)
+        wrapper = io.TextIOWrapper(sio, encoding="utf-8", line_buffering=True)
         with contextlib.redirect_stdout(wrapper):
             try:
                 result = self._fn(*self._args)
