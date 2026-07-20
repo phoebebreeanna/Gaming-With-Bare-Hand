@@ -218,8 +218,9 @@ class PipelineInputDialog(_PipelineDialog):
 
 
 class PipelineUI(QWidget):
-    on_menu_toggle    = Signal()
-    training_complete = Signal()
+    on_menu_toggle      = Signal()
+    training_complete   = Signal()
+    custom_data_changed = Signal()
 
     _PAGE_IDLE        = 0
     _PAGE_COLLECT     = 1
@@ -240,6 +241,7 @@ class PipelineUI(QWidget):
         self._raw_ready       = False
         self._processed_ready = False
         self._trained         = False
+        self._review_dirty    = False
         self._custom_mode_id       = ''
         self._custom_delete_timer  = None
         self._custom_delete_state  = False
@@ -758,6 +760,7 @@ class PipelineUI(QWidget):
             self._load_conf()
             if hasattr(self, '_theme_ready'):
                 self.apply_theme(self.is_dark)
+            self.custom_data_changed.emit()
 
     def _reset_custom_delete_btn(self):
         self._custom_delete_state = False
@@ -889,8 +892,19 @@ class PipelineUI(QWidget):
         sp.setContentsMargins(14, 10, 14, 10)
         sp.setSpacing(0)
 
+        steps_hdr_row = QHBoxLayout()
+        steps_hdr_row.setSpacing(6)
         self._steps_hdr = QLabel("PIPELINE STEPS")
-        sp.addWidget(self._steps_hdr)
+        steps_hdr_row.addWidget(self._steps_hdr)
+        steps_hdr_row.addStretch()
+        self._delete_model_btn = QPushButton("DELETE MODEL")
+        self._delete_model_btn.setFixedHeight(20)
+        self._delete_model_btn.setCursor(Qt.PointingHandCursor)
+        self._delete_model_btn.clicked.connect(self._on_delete_model)
+        steps_hdr_row.addWidget(self._delete_model_btn)
+        sp.addLayout(steps_hdr_row)
+        self._delete_model_timer = None
+        self._delete_model_state = False
         self._steps_sep = QWidget()
         self._steps_sep.setFixedHeight(1)
         sp.addWidget(self._steps_sep)
@@ -966,6 +980,7 @@ class PipelineUI(QWidget):
         from logic.gesture_pipeline import load_conf
         self._training_result = None
         self._trained = False
+        self._review_dirty = False
         if self.current_mode == "Custom":
             mode = self._get_current_custom_mode()
             if mode and mode.get('gestures'):
@@ -1069,14 +1084,68 @@ class PipelineUI(QWidget):
                 elif key == "preprocess":
                     w["status"].setText("RUN" if not self._processed_ready else "RE-RUN")
                 elif key == "train":
-                    w["status"].setText("RUN" if not self._trained else "RE-RUN")
+                    if self._review_dirty:
+                        w["status"].setText("RETRAIN NEEDED")
+                    else:
+                        w["status"].setText("RUN" if not self._trained else "RE-RUN")
                 else:
                     w["status"].setText("RUN")
             else:
                 w["status"].setText("LOCKED")
 
+        is_custom_tab = (self.current_mode == "Custom")
+        self._delete_model_btn.setVisible(not is_custom_tab)
+        if not is_custom_tab:
+            self._delete_model_btn.setEnabled(self._model_exists())
+            if not self._delete_model_btn.isEnabled():
+                self._reset_delete_model_btn()
+
         if hasattr(self, "_theme_ready"):
             self.apply_theme(self.is_dark)
+
+    def _model_exists(self) -> bool:
+        if not self._cfg:
+            return False
+        return (os.path.exists(self._cfg.get('model_best', '')) and
+                os.path.exists(self._cfg.get('label_encoder', '')))
+
+    def _reset_delete_model_btn(self):
+        self._delete_model_state = False
+        self._delete_model_btn.setText("DELETE MODEL")
+        if self._delete_model_timer:
+            self._delete_model_timer.stop()
+
+    def _on_delete_model(self):
+        if self.current_mode == "Custom" or not self._model_exists():
+            return
+        if not self._delete_model_state:
+            self._delete_model_state = True
+            self._delete_model_btn.setText("CONFIRM?")
+            self._delete_model_timer = QTimer(self)
+            self._delete_model_timer.setSingleShot(True)
+            self._delete_model_timer.timeout.connect(self._reset_delete_model_btn)
+            self._delete_model_timer.start(3000)
+            return
+        self._reset_delete_model_btn()
+        for key in ('model_best', 'model_out', 'label_encoder'):
+            path = self._cfg.get(key, '')
+            if path and os.path.exists(path):
+                try:
+                    os.remove(path)
+                except OSError as exc:
+                    self._show_banner(_friendly_pipeline_error(str(exc)), kind="error")
+                    return
+        try:
+            from logic.app_config import set_model_source
+            set_model_source(self.current_mode.lower(), 'default')
+        except Exception:
+            pass
+        self._trained = False
+        self._training_result = None
+        self._review_dirty = False
+        self._update_step_states()
+        self._show_banner("Trained model deleted.", kind="success")
+        self.custom_data_changed.emit()
 
     def _switch_mode(self, mode):
         if self._collect['worker'] is not None:
@@ -1143,6 +1212,7 @@ class PipelineUI(QWidget):
         if busy:
             for w in self._step_widgets.values():
                 w["row"].setEnabled(False)
+            self._delete_model_btn.setEnabled(False)
         else:
             self._update_step_states()
 
@@ -1386,6 +1456,7 @@ class PipelineUI(QWidget):
         self._set_busy(True)
         self._training_result = None
         self._trained = False
+        self._review_dirty = False
         self._epoch = 0
         self._total_epochs = self._cfg['epochs']
         self.progress_label.setText(f"TRAINING  ·  0 / {self._total_epochs}")
@@ -1428,6 +1499,11 @@ class PipelineUI(QWidget):
 
     def _on_review(self):
         self._hide_banner()
+        if self._review_dirty:
+            self._show_banner(
+                "Your last review removed samples that haven't been retrained yet. "
+                "Re-run TRAIN MODEL before reviewing again.", kind="info")
+            return
         if not self._cfg or not self._training_result:
             self._show_banner("Train a model first to generate samples to review.", kind="info")
             return
@@ -1443,7 +1519,7 @@ class PipelineUI(QWidget):
             self.top_stack.setCurrentIndex(self._idle_page_index())
             return
 
-        df = pd.read_csv(self._cfg['processed_csv'])
+        df = pd.read_csv(self._cfg['processed_csv'], encoding='utf-8')
         feature_cols = [c for c in df.columns if c != 'label']
 
         r = self._review
@@ -1515,9 +1591,15 @@ class PipelineUI(QWidget):
         if r['to_remove'] and r['df'] is not None:
             csv_path = self._cfg['processed_csv']
             tmp = csv_path + '.tmp'
-            r['df'].drop(index=r['to_remove']).reset_index(drop=True).to_csv(tmp, index=False)
+            r['df'].drop(index=r['to_remove']).reset_index(drop=True).to_csv(
+                tmp, index=False, encoding='utf-8')
             shutil.move(tmp, csv_path)
             self._log(f"Removed {len(r['to_remove'])} samples.")
+            self._review_dirty = True
+            self._update_step_states()
+            self._show_banner(
+                f"Removed {len(r['to_remove'])} samples - retrain the model to apply this change.",
+                kind="info")
         else:
             self._log("Review complete - no samples removed.")
         self._review_pixmap = None
@@ -1713,6 +1795,22 @@ class PipelineUI(QWidget):
                 border: 1px solid {border}; border-radius: 2px;
                 font-family: 'Courier New', monospace; font-size: 9px;
             }}
+            QScrollBar:vertical {{
+                width: 4px;
+                background: transparent;
+                border: none;
+                margin: 0;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {muted};
+                border-radius: 2px;
+                min-height: 24px;
+            }}
+            QScrollBar::handle:vertical:hover {{ background: {dim}; }}
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical {{ height: 0px; }}
+            QScrollBar::add-page:vertical,
+            QScrollBar::sub-page:vertical {{ background: none; }}
         """)
 
         self._review_hand_lbl.setStyleSheet(f"background-color: transparent; border: none;")
@@ -1868,7 +1966,12 @@ class PipelineUI(QWidget):
                     f"color: {text}; font-size: 10px; font-weight: 700; letter-spacing: 1px; background: transparent; border: none;")
                 sw["note"].setStyleSheet(
                     f"color: {muted}; font-size: 8px; letter-spacing: 1px; background: transparent; border: none;")
-                s_color = success if sw["status"].text() in ("READY", "DONE") else text
+                if sw["status"].text() in ("READY", "DONE"):
+                    s_color = success
+                elif sw["status"].text() == "RETRAIN NEEDED":
+                    s_color = warn
+                else:
+                    s_color = text
                 sw["status"].setStyleSheet(
                     f"color: {s_color}; font-size: 8px; font-weight: 700; letter-spacing: 1.2px; background: transparent; border: none;")
             else:
@@ -1878,6 +1981,24 @@ class PipelineUI(QWidget):
                         f"color: {locked_col}; font-size: {'10' if lbl is sw['name'] else '8'}px; "
                         f"font-weight: {'700' if lbl is not sw['note'] else '400'}; "
                         f"letter-spacing: 1px; background: transparent; border: none;")
+
+        if self._delete_model_btn.isEnabled():
+            self._delete_model_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: transparent; color: {warn};
+                    border: 1px solid {warn if self._delete_model_state else border};
+                    font-size: 7px; font-weight: 700; letter-spacing: 1.2px; padding: 0 6px;
+                }}
+                QPushButton:hover {{ background-color: {hover}; }}
+            """)
+        else:
+            self._delete_model_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: transparent; color: {locked_col};
+                    border: 1px solid {border};
+                    font-size: 7px; font-weight: 700; letter-spacing: 1.2px; padding: 0 6px;
+                }}
+            """)
 
         self.progress_label.setStyleSheet(
             f"color: {muted}; font-size: 8px; font-weight: 700; letter-spacing: 1.4px; background: transparent; border: none;")

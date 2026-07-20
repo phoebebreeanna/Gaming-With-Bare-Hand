@@ -226,6 +226,9 @@ class KeyBindings(QWidget):
             cl.removeWidget(w)
             w.deleteLater()
         self._custom_section_widgets.clear()
+        for key in list(self._section_widgets.keys()):
+            if key.startswith('custom_'):
+                del self._section_widgets[key]
         for key in list(self._key_btns.keys()):
             if isinstance(key, tuple) and key[0].startswith('custom_'):
                 del self._key_btns[key]

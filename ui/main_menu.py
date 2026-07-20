@@ -140,6 +140,7 @@ class MainMenu(QWidget):
         self.pipeline_ui = PipelineUI(is_dark=self.is_dark)
         self.pipeline_ui.on_menu_toggle.connect(self.toggle_sidebar)
         self.pipeline_ui.training_complete.connect(self._on_training_complete)
+        self.pipeline_ui.custom_data_changed.connect(self._on_training_complete)
         self.pages.addWidget(self.pipeline_ui)
 
         self.key_bindings_widget = KeyBindings()
@@ -729,8 +730,13 @@ class MainMenu(QWidget):
     def _on_training_complete(self):
         self.game_mode_widget.refresh_custom_availability()
         self.key_bindings_widget.refresh_custom_modes()
-        if self.controller and self.game_mode_widget._selected_custom_id:
-            self.controller.set_custom_mode(self.game_mode_widget._selected_custom_id)
+        if self.controller:
+            try:
+                from logic.app_config import get_selected_custom_mode_id
+                current_id = get_selected_custom_mode_id()
+            except Exception:
+                current_id = ''
+            self.controller.set_custom_mode(current_id)
 
     def _mode_label(self, mode: str) -> str:
         _base = {'mouse': 'MOUSE', 'subway': 'SUBWAY', 'racing': 'RACING',

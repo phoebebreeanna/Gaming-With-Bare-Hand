@@ -505,7 +505,7 @@ def run_preprocess(cfg, mirror=False):
         print(f"ERROR: {raw_path} not found.")
         return False
 
-    df           = pd.read_csv(raw_path, dtype={'label': str})
+    df           = pd.read_csv(raw_path, dtype={'label': str}, encoding='utf-8')
     feature_cols = [c for c in df.columns if c != 'label']
     raw_counts   = df['label'].value_counts().to_dict()
     print(f"Loaded {len(df)} raw samples")
@@ -590,7 +590,7 @@ def run_training(cfg):
     _label_encoder_path = cfg['label_encoder']
     print(f"Output directory: {os.path.dirname(_model_out_path)}")
 
-    df    = pd.read_csv(data_path, dtype={'label': str})
+    df    = pd.read_csv(data_path, dtype={'label': str}, encoding='utf-8')
     df    = df[df['label'].isin(cfg['gestures'])].reset_index(drop=True)
     X     = df.drop('label', axis=1).values.astype(np.float32)
     y     = df['label'].values
@@ -915,7 +915,7 @@ def run_visualizer(cfg, flagged_indices, flagged_meta):
         return False
 
     csv_path     = cfg['processed_csv']
-    df           = pd.read_csv(csv_path, dtype={'label': str})
+    df           = pd.read_csv(csv_path, dtype={'label': str}, encoding='utf-8')
     feature_cols = [c for c in df.columns if c != 'label']
 
     banner(f"STEP 4 - REVIEW  ({len(flagged_indices)} flagged samples)")
@@ -932,7 +932,7 @@ def run_visualizer(cfg, flagged_indices, flagged_meta):
         return False
 
     tmp = csv_path + '.tmp'
-    df.drop(index=to_remove).reset_index(drop=True).to_csv(tmp, index=False)
+    df.drop(index=to_remove).reset_index(drop=True).to_csv(tmp, index=False, encoding='utf-8')
     shutil.move(tmp, csv_path)
     banner(f"Removed {len(to_remove)} samples - {len(df) - len(to_remove)} remaining")
     return True

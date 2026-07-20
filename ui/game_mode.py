@@ -799,6 +799,12 @@ class GameMode(QWidget):
                     set_model_source(key, 'default')
                 except Exception:
                     pass
+                self.model_source_changed.emit(key, 'default')
+        try:
+            from logic.app_config import get_selected_custom_mode_id
+            self._selected_custom_id = get_selected_custom_mode_id()
+        except Exception:
+            pass
         self._populate_custom_mode_combo()
         self.apply_theme(self.is_dark)
 
