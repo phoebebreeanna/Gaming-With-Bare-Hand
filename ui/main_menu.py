@@ -750,6 +750,7 @@ class MainMenu(QWidget):
         self._sync_mini_overlay()
         if not (self._is_running and self.controller):
             return
+        self._reset_gesture_display()
         if (self._current_running_mode == 'air_hockey') != (mode == 'air_hockey'):
             self._pending_restart = True
             self.air_hockey_loading.show_loading(
@@ -1722,7 +1723,8 @@ class MainMenu(QWidget):
             get_model_source, get_game_mode, get_mouse_enabled, get_cursor_point,
             get_mouse_side, get_custom_meta_gestures_enabled, get_mode_switch_locked,
         )
-        model_sources                  = {m: get_model_source(m) for m in ('mouse', 'subway', 'racing')}
+        model_sources                  = {m: get_model_source(m) for m in ('mouse', 'subway')}
+        model_sources['racing']        = 'default'
         model_sources['mouse_in_game'] = get_mouse_enabled()
         model_sources['cursor_point']  = get_cursor_point()
         model_sources['mouse_side']    = get_mouse_side()
@@ -1822,6 +1824,7 @@ class MainMenu(QWidget):
         if hasattr(self, "home_stack"):
             self.home_stack.setCurrentIndex(0)
         self.air_hockey_loading.hide_loading()
+        self._reset_gesture_display()
         if self.controller and self.controller.isRunning():
             self.controller.stop()
             self.controller.wait(4000)
@@ -1856,6 +1859,7 @@ class MainMenu(QWidget):
         self.pause_btn.setText("Pause")
         self.stop_btn.setEnabled(False)
         self.info_cards["STATUS"].setText("Press Start")
+        self._reset_gesture_display()
         self._last_camera_pixmap = None
         self.camera_label.setPixmap(QPixmap())
         self.camera_label.setText("LIVE CAMERA FEED")
@@ -1943,6 +1947,12 @@ class MainMenu(QWidget):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._rescale_camera_frame()
+
+    def _reset_gesture_display(self):
+        self.info_cards["GESTURE"].setText("IDLE")
+        self.info_cards["ACTION"].setText("None")
+        self._mini_overlay.set_gesture("IDLE", "None")
+        self._hide_hold_bar()
 
     @Slot(str, str)
     def _update_gesture(self, gesture: str, action: str):

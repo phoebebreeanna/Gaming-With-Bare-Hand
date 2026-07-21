@@ -36,7 +36,7 @@ class UserGuide(QWidget):
                 "items": [
                     "Open Settings (05) from the sidebar.",
                     "Choose Mouse, Subway Surfers, Racing, or Open World mode.",
-                    "For each mode, toggle Default or Custom model source - Custom activates once you have trained your own model via Train Model (06).",
+                    "For Mouse and Subway, toggle Default or Custom model source - Custom activates once you have trained your own model via Train Model (06). Racing and Open World always use their built-in gesture set.",
                     "Switching Default ↔ Custom takes effect immediately, even while the controller is running.",
                 ],
             },

@@ -28,7 +28,7 @@ class TrainModelGuide(QWidget):
                     "assets/train_model_guide/1.4.mp4",
                 ],
                 "items": [
-                    "Select your game mode tab at the top: Mouse, Subway, or Racing.",
+                    "Select your game mode tab at the top: Mouse or Subway.",
                     "Under Pipeline Steps, click Collect Data, then Start to record samples with your camera.",
                     "Aim for around 50 samples per gesture - the Gesture Data panel on the left tracks your progress per gesture.",
                     "Turn on Mirror Aug if your gestures don't rely on left/right direction - it doubles your data automatically.",

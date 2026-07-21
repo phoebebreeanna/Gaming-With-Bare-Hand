@@ -167,6 +167,13 @@ while.
 Controlled by the **ENABLE CHATBOT** toggle on the Settings page (05),
 enabled by default.
 
+**AI Backend**: choose LOCAL (runs fully offline on your device, one-time
+~2 GB model download) or CHATGPT (calls the OpenAI API instead). Switching to
+CHATGPT reveals an **OpenAI API Key** field - paste your key and click SAVE;
+click SHOW to reveal/hide it while typing. The key is stored locally on your
+device only, no `.env` file needed. If CHATGPT is selected without a valid
+key, the chatbot tells you to add one or switch back to Local.
+
 ## Feature Guides (per page)
 
 ### 01 - Home Dashboard
@@ -216,14 +223,28 @@ Click a mode card to switch - saved immediately.
   on the left.
 - Cursor Point - TIP (fingertip) or KNUCKLE (default, more stable).
 
-**Camera Selection**: dropdown of devices; takes effect next session start.
+**Camera Selection**: dropdown of devices. On page load it shows only
+previously detected cameras (or a prompt to scan if none are cached yet).
+Click **Scan** to re-probe every attached camera and refresh the dropdown -
+the button shows "Scanning..." while it works; camera 0 is labelled
+"(Default)". Camera choice takes effect next session start.
 
 **Detection Zone**: SMALL/MEDIUM/LARGE; takes effect immediately, autosaved.
 
-**Model Source (per mode)**: DEFAULT (bundled) or CUSTOM (greyed out until a
-custom model has been trained for that mode).
+**Model Source (per mode)**: DEFAULT (bundled) or CUSTOM. Only available for
+Mouse and Subway - Custom is greyed out until you've trained a model for that
+mode via Train Model (06). Racing and Open World have no Custom option and
+always run their built-in gesture set.
 
 **Performance Display**: real-time FPS and gesture detection latency.
+
+**Lock Gesture Mode Switching**: a per-mode LOCKED/OPEN toggle for Mouse,
+Subway, Racing, Open World, and Air Hockey. Defaults: Mouse and Subway are
+OPEN, Racing/Open World/Air Hockey are LOCKED. When a mode is LOCKED, the
+in-session hand-gesture shortcut (Fist + N fingers, held) cannot switch the
+controller out of that mode while it's active - this only blocks the gesture
+shortcut. You can always switch modes from the GUI (clicking a mode card on
+this Settings page) regardless of the lock state.
 
 **Allow Meta Gestures In Custom Mode** toggle - ON by default. Controls
 whether Custom Mode responds to the two system-wide "meta" gestures: the
@@ -237,19 +258,30 @@ close the app via the GUI buttons on the Home page or the Settings mode
 cards.
 
 ### 06 - Train Model (Custom Gestures)
-Four tabs: Mouse, Subway, Racing, and **Custom**.
+Three tabs: Mouse, Subway, and **Custom**. Racing and Open World cannot be
+custom-trained - only their built-in gesture sets are available.
 
-**Retraining an existing mode** (Mouse, Subway, or Racing tab - **not** Open
-World):
+**Retraining an existing mode** (Mouse or Subway tab):
 1. Select mode to train.
-2. "Collect Data" → record (or delete) 50 samples per gesture class.
+2. "Collect Data" → record 50 samples per gesture class. Tap the delete
+   control for a gesture and tap again within 3 seconds to confirm - this
+   removes all collected samples for that gesture label.
 3. Preprocess collected data to generate additional samples; optional mirror
    option for left-hand support.
 4. Train - progress bar until complete.
-5. App flags gestures it's uncertain about → review, remove or keep.
+5. App flags gestures it's uncertain about → review, remove or keep. If you
+   remove any samples here, the Train step shows **RETRAIN NEEDED** until you
+   run Train Model again - Review is locked (with an info banner) until then.
 6. Model retrains on changes, or finalises if none.
 7. Your custom model is saved separately - it does **not** overwrite the
    built-in defaults - and becomes selectable in Settings.
+
+**Delete Model**: a "DELETE MODEL" button next to the Pipeline Steps header
+(Mouse/Subway tabs only, disabled if no trained model exists yet). Click once
+to arm it (label changes to "CONFIRM?" for 3 seconds), click again within
+that window to permanently delete the trained model files and reset that
+mode's Settings source back to Default. Letting the 3 seconds pass without a
+second click cancels the deletion.
 
 **Custom Mode & Keybind** (Custom tab): build an entirely new control scheme
 from scratch for a game or app that has no built-in mode of its own.
@@ -257,7 +289,7 @@ from scratch for a game or app that has no built-in mode of its own.
 2. Add as many gesture labels as you like, one at a time, via the text box
    and **ADD** button (no fixed limit on gestures or modes).
 3. Collect samples and train the same way as above (50 samples/gesture,
-   mirror option available).
+   mirror option available, same delete-gesture and Delete Model controls).
 4. Once trained, open **07 KEY BINDINGS** - your custom mode gets its own
    section there, listing every gesture you added, ready to bind to a key.
 5. Rename or delete a custom mode from the Custom tab at any time (delete
@@ -512,9 +544,9 @@ zone and it'll pick up tracking again.
 
 - **Theme choice doesn't persist.** Dark/Light mode resets to Light every time
   you restart the app.
-- **Open World mode only supports the built-in gesture set.** You can't use a
-  custom-trained model for Open World mode yet (custom models work for Mouse,
-  Subway Surfers, and Racing).
+- **Racing and Open World only support their built-in gesture sets.** Custom
+  training has been removed for Racing, and Open World never supported it -
+  custom-trained models only work for Mouse and Subway Surfers.
 - **The Status Overlay is a separate floating window, not drawn on the game
   itself.** It sits on top of your game rather than being layered directly
   onto the game's own canvas, and on macOS it needs the `pyobjc` package to

@@ -16,7 +16,6 @@ _LOGIC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file
 CONF_MAP = {
     "Mouse":  os.path.join(_LOGIC_DIR, "conf", "mouse_control.conf"),
     "Subway": os.path.join(_LOGIC_DIR, "conf", "subway_surfers.conf"),
-    "Racing": os.path.join(_LOGIC_DIR, "conf", "racing.conf"),
 }
 
 class _SignalIO(io.RawIOBase):
@@ -307,7 +306,7 @@ class PipelineUI(QWidget):
         title_row.addWidget(self.page_title)
         title_row.addStretch()
         self.mode_tabs = {}
-        for mode in ("Mouse", "Subway", "Racing", "Custom"):
+        for mode in ("Mouse", "Subway", "Custom"):
             btn = QPushButton(mode.upper())
             btn.setFixedHeight(26)
             btn.setCursor(Qt.PointingHandCursor)

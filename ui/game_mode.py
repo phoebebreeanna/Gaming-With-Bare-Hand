@@ -16,7 +16,6 @@ else:
 _CUSTOM_FILES = {
     'mouse':  ('mouse_gesture_model_best.pt',  'mouse_label_encoder.pkl'),
     'subway': ('subway_gesture_model_best.pt', 'subway_label_encoder.pkl'),
-    'racing': ('racing_gesture_model_best.pt', 'racing_label_encoder.pkl'),
 }
 
 MODE_SWITCH_LOCK_DEFAULTS = {
@@ -62,7 +61,7 @@ class GameMode(QWidget):
         self._cursor_point = 'knuckle'
         self._zone         = 'large'
         self._mouse_side   = 'right'
-        self._mode_sources = {k: 'default' for k in ('mouse', 'subway', 'racing')}
+        self._mode_sources = {k: 'default' for k in ('mouse', 'subway')}
         self._source_btns    = {}
         self._mode_cards     = {}
         self._camera_combo   = None
@@ -109,7 +108,7 @@ class GameMode(QWidget):
             self._mini_overlay_enabled = get_mini_overlay_enabled()
             self._custom_meta_gestures_enabled = get_custom_meta_gestures_enabled()
             self._selected_custom_id = get_selected_custom_mode_id()
-            for m in ('mouse', 'subway', 'racing'):
+            for m in ('mouse', 'subway'):
                 self._mode_sources[m] = get_model_source(m)
             for m in MODE_SWITCH_LOCK_DEFAULTS:
                 self._mode_switch_locks[m] = get_mode_switch_locked(m)
@@ -549,7 +548,7 @@ class GameMode(QWidget):
             self._mode_cards[key] = {'card': card, 'name': name_lbl}
             card_col.addWidget(card)
 
-            if key != 'air_hockey':
+            if key in ('mouse', 'subway'):
                 src_row = QHBoxLayout()
                 src_row.setSpacing(4)
                 src_row.setContentsMargins(0, 0, 0, 0)
