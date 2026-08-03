@@ -3,9 +3,7 @@ from logic.hand_utils import (
     _mouse_move, _mouse_scroll,
     MOUSE_SMOOTHING, MOUSE_CONF_THRESH, DRAG_HOLD_THRESH,
     CLICK_COOLDOWN, SCROLL_SPEED, MP_PRESENCE_THRESH,
-    HOLD_META, HOLD_CLOSE,
     draw_hand, draw_finger_dot,
-    is_open_palm, is_peace_sign, is_fist, get_game_option,
 )
 
 from logic.gesture_net import run_nn
@@ -118,54 +116,16 @@ class MouseModeMixin:
             self.right_click_entry_t = None
 
     def _tick_mouse_mode(self, lms, lms2, result, display, now, game_opt_frac):
-        meta_hold_fracs = {k: 0.0 for k in ('start', 'stop', 'close', 'game_opt')}
-        triggered_meta  = None
-
-        both_open = lms is not None and lms2 is not None and is_open_palm(lms) and is_open_palm(lms2)
-        if both_open:
-            if self.meta_hold['stop'] is None: self.meta_hold['stop'] = now
-            meta_hold_fracs['stop'] = min((now - self.meta_hold['stop']) / HOLD_META, 1.0)
-            if meta_hold_fracs['stop'] >= 1.0: triggered_meta = 'stop'
-        else:
-            self.meta_hold['stop'] = None
-
-        both_peace = lms and lms2 and is_peace_sign(lms) and is_peace_sign(lms2)
-        if both_peace:
-            if self.meta_hold['start'] is None: self.meta_hold['start'] = now
-            meta_hold_fracs['start'] = min((now - self.meta_hold['start']) / HOLD_META, 1.0)
-        else:
-            self.meta_hold['start'] = None
-
-        game_opt_now = get_game_option(lms, lms2)
-        both_fists   = lms and lms2 and is_fist(lms) and is_fist(lms2)
-        if both_fists and game_opt_now is None:
-            if self.meta_hold['close'] is None: self.meta_hold['close'] = now
-            meta_hold_fracs['close'] = min((now - self.meta_hold['close']) / HOLD_CLOSE, 1.0)
-            if meta_hold_fracs['close'] >= 1.0: triggered_meta = 'close'
-        else:
-            self.meta_hold['close'] = None
-
+        meta_hold_fracs, meta_handled = self._tick_control_gestures(
+            'mouse', lms, lms2, now, self._release_drag)
         meta_hold_fracs['game_opt'] = game_opt_frac
-
-        if triggered_meta == 'stop':
-            self._release_drag()
-            self.app_state = 'stopped'
-            self.meta_hold = {k: None for k in self.meta_hold}
-            self.state_changed.emit('stopped')
-            return
-        elif triggered_meta == 'close':
-            self._release_drag()
-            self._confirm_close_from   = 'running'
-            self._confirm_close_hold_t = None
-            self.meta_hold = {k: None for k in self.meta_hold}
-            self.app_state = 'confirm_close'
-            self.state_changed.emit('confirm_close')
+        if meta_handled:
             return
 
         any_meta = any(v is not None for v in self.meta_hold.values()) or game_opt_frac > 0
         gesture  = 'idle'
 
-        if lms and triggered_meta is None and not any_meta:
+        if lms and not any_meta:
             mp_ok = True
             try:
                 mp_ok = result.handedness[0][0].score >= MP_PRESENCE_THRESH

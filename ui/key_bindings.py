@@ -344,6 +344,7 @@ class KeyBindings(QWidget):
                 if m == mode:
                     self._bindings.setdefault(mode, {}).pop(gesture, None)
                     btn.setText('-')
+                    self.binding_changed.emit(mode, gesture, '')
         else:
             for entry in _GESTURE_META.get(mode, []):
                 gesture = entry[0]
@@ -351,6 +352,7 @@ class KeyBindings(QWidget):
                     continue
                 key_str = self._bindings[mode].get(gesture, '?')
                 self._key_btns[(mode, gesture)].setText(key_str.upper())
+                self.binding_changed.emit(mode, gesture, key_str)
         self.apply_theme(self.is_dark)
 
     def _start_capture(self, mode: str, gesture: str):

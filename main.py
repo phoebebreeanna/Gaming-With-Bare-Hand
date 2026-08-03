@@ -111,12 +111,13 @@ def _check_mac_accessibility_permission():
         return
     try:
         from ApplicationServices import AXIsProcessTrustedWithOptions
-        trusted = AXIsProcessTrustedWithOptions({"AXTrustedCheckOptionPrompt": True})
+        trusted = AXIsProcessTrustedWithOptions({"AXTrustedCheckOptionPrompt": False})
     except Exception:
         _log_lifecycle("accessibility check unavailable (pyobjc missing)")
         return
     _log_lifecycle(f"accessibility trusted={trusted}")
     if not trusted:
+        import subprocess
         from PySide6.QtWidgets import QMessageBox
         box = QMessageBox()
         box.setWindowTitle("Accessibility Permission Needed")
@@ -124,11 +125,25 @@ def _check_mac_accessibility_permission():
         box.setText(
             "HandMouse needs Accessibility permission to send keyboard/mouse "
             "input for gestures (mouse, subway, racing, custom modes).\n\n"
-            "macOS should have just shown a permission prompt - open "
-            "System Settings > Privacy & Security > Accessibility and enable "
-            "HandMouse, then restart the app."
+            "1. Click \"Open System Settings\" below.\n"
+            "2. Turn HandMouse ON in the Accessibility list (if it's already "
+            "listed but greyed out, remove it first with the − button, then "
+            "re-add it and check it).\n"
+            "3. Come back here and click \"Done\"."
         )
-        box.exec()
+        open_btn = box.addButton("Open System Settings", QMessageBox.ActionRole)
+        done_btn = box.addButton("Done", QMessageBox.AcceptRole)
+        box.setDefaultButton(done_btn)
+        while True:
+            box.exec()
+            if box.clickedButton() is open_btn:
+                subprocess.run([
+                    'open',
+                    'x-apple.systempreferences:com.apple.preference.security'
+                    '?Privacy_Accessibility',
+                ])
+                continue
+            break
 
 
 def _install_global_excepthook():

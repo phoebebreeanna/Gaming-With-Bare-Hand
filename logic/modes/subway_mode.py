@@ -13,6 +13,12 @@ SS_CONFIDENCE_THRESH = 0.75
 class SubwayModeMixin:
 
     def _tick_subway_mode(self, lms, lms2, result, display, now, game_opt_frac):
+        meta_hold_fracs, meta_handled = self._tick_control_gestures(
+            'subway', lms, lms2, now, self._release_drag)
+        meta_hold_fracs['game_opt'] = game_opt_frac
+        if meta_handled:
+            return
+
         user_left, user_right = split_hands_by_handedness(result)
 
         if self._mouse_side == 'right':
@@ -53,7 +59,7 @@ class SubwayModeMixin:
                 'gesture': gesture_m,
                 'game_opt_num': self.game_opt_number or 0,
                 'game_opt_frac': game_opt_frac,
-                'meta': {'game_opt': game_opt_frac},
+                'meta': meta_hold_fracs,
             })
         else:
             gesture_ss = 'none'; conf_ss = 0.0
@@ -99,5 +105,5 @@ class SubwayModeMixin:
                 'conf': conf_ss,
                 'game_opt_num': self.game_opt_number or 0,
                 'game_opt_frac': game_opt_frac,
-                'meta': {'game_opt': game_opt_frac},
+                'meta': meta_hold_fracs,
             })

@@ -30,6 +30,19 @@ MODE_SWITCH_LOCK_LABELS = (
     ('open_world', 'OPEN WORLD'), ('air_hockey', 'AIR HOCKEY'),
 )
 
+CONTROL_GESTURE_DEFAULTS = {
+    'mouse':      True,
+    'subway':     False,
+    'racing':     False,
+    'open_world': False,
+    'custom':     False,
+    'air_hockey': False,
+}
+CONTROL_GESTURE_LABELS = (
+    ('mouse', 'MOUSE'), ('subway', 'SUBWAY'), ('racing', 'RACING'),
+    ('open_world', 'OPEN WORLD'), ('custom', 'CUSTOM'), ('air_hockey', 'AIR HOCKEY'),
+)
+
 def _custom_game_mode_model_exists(mode_id: str) -> bool:
     mode_dir = os.path.join(_CUSTOM_DIR, mode_id)
     return (os.path.exists(os.path.join(mode_dir, 'gesture_model_best.pt')) and
@@ -51,6 +64,7 @@ class GameMode(QWidget):
     mini_overlay_enabled_changed = Signal(bool)
     custom_meta_gestures_changed = Signal(bool)
     mode_switch_lock_changed     = Signal(str, bool)
+    control_gestures_changed     = Signal(str, bool)
 
     def __init__(self):
         super().__init__()
@@ -80,6 +94,8 @@ class GameMode(QWidget):
         self._selected_custom_id  = ''
         self._mode_switch_locks   = dict(MODE_SWITCH_LOCK_DEFAULTS)
         self._mode_lock_btns      = {}
+        self._control_gestures    = dict(CONTROL_GESTURE_DEFAULTS)
+        self._control_gesture_btns = {}
 
         self._load_state()
         self._init_ui()
@@ -93,7 +109,7 @@ class GameMode(QWidget):
                 get_selected_custom_mode_id,
                 get_chatbot_enabled, get_mini_overlay_enabled, get_chatbot_backend,
                 get_custom_meta_gestures_enabled, get_openai_api_key,
-                get_mode_switch_locked,
+                get_mode_switch_locked, get_control_gestures_enabled,
             )
             self.selected_mode      = get_game_mode()
             self.mouse_enabled      = get_mouse_enabled()
@@ -112,6 +128,8 @@ class GameMode(QWidget):
                 self._mode_sources[m] = get_model_source(m)
             for m in MODE_SWITCH_LOCK_DEFAULTS:
                 self._mode_switch_locks[m] = get_mode_switch_locked(m)
+            for m in CONTROL_GESTURE_DEFAULTS:
+                self._control_gestures[m] = get_control_gestures_enabled(m)
         except Exception:
             self._camera_index = 0
 
@@ -714,6 +732,47 @@ class GameMode(QWidget):
         cl.addWidget(self.mode_lock_panel)
         self._refresh_mode_lock_buttons()
 
+        self.div1l = QWidget()
+        self.div1l.setFixedHeight(1)
+        cl.addWidget(self.div1l)
+
+        self.control_gesture_panel = QWidget()
+        cgp = QVBoxLayout(self.control_gesture_panel)
+        cgp.setContentsMargins(16, 10, 16, 10)
+        cgp.setSpacing(6)
+
+        control_gesture_text_col = QVBoxLayout()
+        control_gesture_text_col.setSpacing(2)
+        self.control_gesture_hdr_lbl = QLabel("PAUSE / CLOSE HAND GESTURES")
+        self.control_gesture_sub_lbl = QLabel(
+            "Both palms open = pause, both fists held = close app, for that mode")
+        self.control_gesture_sub_lbl.setWordWrap(True)
+        control_gesture_text_col.addWidget(self.control_gesture_hdr_lbl)
+        control_gesture_text_col.addWidget(self.control_gesture_sub_lbl)
+        cgp.addLayout(control_gesture_text_col)
+
+        control_gesture_row = QHBoxLayout()
+        control_gesture_row.setSpacing(6)
+        self._control_gesture_name_lbls = []
+        for mode_id, mode_label in CONTROL_GESTURE_LABELS:
+            col = QVBoxLayout()
+            col.setSpacing(2)
+            name_lbl = QLabel(mode_label)
+            name_lbl.setAlignment(Qt.AlignCenter)
+            self._control_gesture_name_lbls.append(name_lbl)
+            btn = QPushButton()
+            btn.setFixedHeight(24)
+            btn.setMinimumWidth(64)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.clicked.connect(lambda _, m=mode_id: self._toggle_control_gesture(m))
+            self._control_gesture_btns[mode_id] = btn
+            col.addWidget(name_lbl)
+            col.addWidget(btn)
+            control_gesture_row.addLayout(col)
+        cgp.addLayout(control_gesture_row)
+        cl.addWidget(self.control_gesture_panel)
+        self._refresh_control_gesture_buttons()
+
         cl.addStretch()
 
         self._settings_scroll = QScrollArea()
@@ -974,6 +1033,23 @@ class GameMode(QWidget):
         for mode_id, btn in self._mode_lock_btns.items():
             locked = self._mode_switch_locks.get(mode_id, MODE_SWITCH_LOCK_DEFAULTS.get(mode_id, False))
             btn.setText("LOCKED" if locked else "OPEN")
+
+    def _toggle_control_gesture(self, mode_id: str):
+        enabled = not self._control_gestures.get(mode_id, CONTROL_GESTURE_DEFAULTS.get(mode_id, False))
+        self._control_gestures[mode_id] = enabled
+        try:
+            from logic.app_config import set_control_gestures_enabled
+            set_control_gestures_enabled(mode_id, enabled)
+        except Exception:
+            pass
+        self._refresh_control_gesture_buttons()
+        self.control_gestures_changed.emit(mode_id, enabled)
+        self.apply_theme(self.is_dark)
+
+    def _refresh_control_gesture_buttons(self):
+        for mode_id, btn in self._control_gesture_btns.items():
+            enabled = self._control_gestures.get(mode_id, CONTROL_GESTURE_DEFAULTS.get(mode_id, False))
+            btn.setText("ON" if enabled else "OFF")
 
     def _set_model_source(self, mode: str, source: str):
         if source == 'custom' and not self._custom_exists(mode):
@@ -1537,6 +1613,39 @@ class GameMode(QWidget):
             for mode_id, btn in self._mode_lock_btns.items():
                 locked = self._mode_switch_locks.get(mode_id, MODE_SWITCH_LOCK_DEFAULTS.get(mode_id, False))
                 if locked:
+                    btn.setStyleSheet(f"""
+                        QPushButton {{
+                            background-color: {tog_off_bg}; color: {tog_off_txt};
+                            font-size: 8px; font-weight: 700; letter-spacing: 1px;
+                            border: 1px solid {border}; border-radius: 2px;
+                        }}
+                        QPushButton:hover {{ background-color: {hover}; }}
+                    """)
+                else:
+                    btn.setStyleSheet(f"""
+                        QPushButton {{
+                            background-color: {tog_on_bg}; color: {tog_on_txt};
+                            font-size: 8px; font-weight: 700; letter-spacing: 1px;
+                            border: 1px solid {tog_on_bg}; border-radius: 2px;
+                        }}
+                    """)
+
+        if hasattr(self, 'div1l'):
+            self.div1l.setStyleSheet(f"background-color: {border};")
+
+        if hasattr(self, 'control_gesture_panel'):
+            self.control_gesture_panel.setStyleSheet(
+                f"background-color: {panel}; border: 1px solid {border};")
+            self.control_gesture_hdr_lbl.setStyleSheet(
+                f"font-size: 9px; font-weight: 700; color: {text}; letter-spacing: 1.5px; background: transparent; border: none;")
+            self.control_gesture_sub_lbl.setStyleSheet(
+                f"font-size: 8px; color: {muted}; letter-spacing: 1px; background: transparent; border: none;")
+            for name_lbl in self._control_gesture_name_lbls:
+                name_lbl.setStyleSheet(
+                    f"font-size: 8px; color: {muted}; letter-spacing: 0.5px; background: transparent; border: none;")
+            for mode_id, btn in self._control_gesture_btns.items():
+                enabled = self._control_gestures.get(mode_id, CONTROL_GESTURE_DEFAULTS.get(mode_id, False))
+                if enabled:
                     btn.setStyleSheet(f"""
                         QPushButton {{
                             background-color: {tog_on_bg}; color: {tog_on_txt};

@@ -150,6 +150,12 @@ class AirHockeyModeMixin:
         }
 
     def _tick_air_hockey_mode(self, lms, lms2, result, display, now, game_opt_frac):
+        meta_hold_fracs, meta_handled = self._tick_control_gestures(
+            'air_hockey', lms, lms2, now, lambda: (self._release_drag(), self._ah_release_all()))
+        meta_hold_fracs['game_opt'] = game_opt_frac
+        if meta_handled:
+            return
+
         user_left, user_right = split_hands_by_handedness(result)
         if self._mouse_side == 'right':
             devil_hand_lms = user_right
@@ -192,7 +198,7 @@ class AirHockeyModeMixin:
                 'gesture': gesture_m,
                 'game_opt_num': self.game_opt_number or 0,
                 'game_opt_frac': game_opt_frac,
-                'meta': {'game_opt': game_opt_frac},
+                'meta': meta_hold_fracs,
             })
             return
 
@@ -220,5 +226,5 @@ class AirHockeyModeMixin:
             'p2_last_skill':    p2['last_skill'],
             'game_opt_num':  self.game_opt_number or 0,
             'game_opt_frac': game_opt_frac,
-            'meta': {'game_opt': game_opt_frac},
+            'meta': meta_hold_fracs,
         })

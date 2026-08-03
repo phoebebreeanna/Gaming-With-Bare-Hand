@@ -30,6 +30,12 @@ class RacingModeMixin:
         self.rc_held_keys.clear()
 
     def _tick_racing_mode(self, lms, lms2, result, display, now, game_opt_frac):
+        meta_hold_fracs, meta_handled = self._tick_control_gestures(
+            'racing', lms, lms2, now, lambda: (self._release_drag(), self._rc_release_all()))
+        meta_hold_fracs['game_opt'] = game_opt_frac
+        if meta_handled:
+            return
+
         user_left, user_right = split_hands_by_handedness(result)
         lms_left, lms_right   = split_hands(result) if (result and result.hand_landmarks) else (None, None)
 
@@ -72,7 +78,7 @@ class RacingModeMixin:
                 'gesture': gesture_m,
                 'game_opt_num': self.game_opt_number or 0,
                 'game_opt_frac': game_opt_frac,
-                'meta': {'game_opt': game_opt_frac},
+                'meta': meta_hold_fracs,
             })
         else:
             if lms_left  is None: self.rc_prev_row_left  = None
@@ -132,5 +138,5 @@ class RacingModeMixin:
                 'gest_r': gest_r, 'conf_r': round(conf_r, 2),
                 'game_opt_num': self.game_opt_number or 0,
                 'game_opt_frac': game_opt_frac,
-                'meta': {'game_opt': game_opt_frac},
+                'meta': meta_hold_fracs,
             })

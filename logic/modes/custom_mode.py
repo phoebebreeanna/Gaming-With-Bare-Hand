@@ -17,6 +17,12 @@ class CustomModeMixin:
             self.custom_held_key = None
 
     def _tick_custom_mode(self, lms, lms2, result, display, now, game_opt_frac):
+        meta_hold_fracs, meta_handled = self._tick_control_gestures(
+            'custom', lms, lms2, now, lambda: (self._release_drag(), self._custom_release_all()))
+        meta_hold_fracs['game_opt'] = game_opt_frac
+        if meta_handled:
+            return
+
         user_left, user_right = split_hands_by_handedness(result)
 
         if self._mouse_side == 'right':
@@ -60,7 +66,7 @@ class CustomModeMixin:
                 'gesture': gesture_m,
                 'game_opt_num': self.game_opt_number or 0,
                 'game_opt_frac': game_opt_frac,
-                'meta': {'game_opt': game_opt_frac},
+                'meta': meta_hold_fracs,
             })
             return
 
@@ -95,5 +101,5 @@ class CustomModeMixin:
             'held_key': self.custom_held_key or '',
             'game_opt_num': self.game_opt_number or 0,
             'game_opt_frac': game_opt_frac,
-            'meta': {'game_opt': game_opt_frac},
+            'meta': meta_hold_fracs,
         })

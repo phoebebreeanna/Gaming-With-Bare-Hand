@@ -17,6 +17,19 @@ def _open_camera(index):
         return cv2.VideoCapture(index, cv2.CAP_DSHOW)
     return cv2.VideoCapture(index)
 
+def _open_camera_retry(index, attempts=5, delay=0.4):
+    cap = None
+    for attempt in range(attempts):
+        cap = _open_camera(index)
+        if cap.isOpened():
+            ret, _ = cap.read()
+            if ret:
+                return cap
+        cap.release()
+        if attempt < attempts - 1:
+            time.sleep(delay)
+    return cap
+
 try:
     import torch
     import torch.nn as nn
@@ -37,6 +50,7 @@ from logic.hand_utils import (
     landmark_gesture,
 )
 from logic.gesture_net import GestureNet, load_nn, run_nn
+from logic.app_config import CONTROL_GESTURE_DEFAULTS
 
 from logic.modes.mouse_mode      import MouseModeMixin
 from logic.modes.subway_mode     import SubwayModeMixin
@@ -110,6 +124,7 @@ class CameraPreviewThread(QThread):
     distance_ready  = Signal(float, bool)
     fingers_ready   = Signal(int,   bool)
     telemetry_ready = Signal(str,   str)
+    error_occurred  = Signal(str)
 
     def __init__(self, camera_index=0):
         super().__init__()
@@ -135,10 +150,11 @@ class CameraPreviewThread(QThread):
             print(f"[Preview] detector error: {e}")
             return
 
-        cap = _open_camera(self.camera_index)
+        cap = _open_camera_retry(self.camera_index)
         if not cap.isOpened():
             cap.release()
             detector.close()
+            self.error_occurred.emit(f"Cannot open camera {self.camera_index}")
             return
         cap.set(cv2.CAP_PROP_FRAME_WIDTH,  640)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
@@ -244,6 +260,8 @@ class HandControllerThread(
         self._mouse_side            = sources.get('mouse_side', 'right')
         self._custom_meta_gestures_enabled = sources.get('custom_meta_gestures', True)
         self._mode_switch_locks = dict(sources.get('mode_locks', {}))
+        self._control_gestures = dict(CONTROL_GESTURE_DEFAULTS)
+        self._control_gestures.update(sources.get('control_gestures', {}))
 
         def _pick(mode, default_w, default_e, custom_w, custom_e):
             if sources.get(mode) == 'custom' and os.path.exists(custom_w) and os.path.exists(custom_e):
@@ -419,6 +437,55 @@ class HandControllerThread(
         rx = 0.5 if sx < 0.01 else float(np.clip((tx - self.range_min_x) / sx, 0, 1))
         ry = 0.5 if sy < 0.01 else float(np.clip((ty - self.range_min_y) / sy, 0, 1))
         return rx * SCREEN_W, ry * SCREEN_H
+
+    def _tick_control_gestures(self, mode_name, lms, lms2, now, release_fn):
+        fracs = {'start': 0.0, 'stop': 0.0, 'close': 0.0}
+        if not self._control_gestures.get(mode_name, False):
+            self.meta_hold['start'] = None
+            self.meta_hold['stop']  = None
+            self.meta_hold['close'] = None
+            return fracs, False
+
+        both_open = lms is not None and lms2 is not None and is_open_palm(lms) and is_open_palm(lms2)
+        if both_open:
+            if self.meta_hold['stop'] is None: self.meta_hold['stop'] = now
+            fracs['stop'] = min((now - self.meta_hold['stop']) / HOLD_META, 1.0)
+            if fracs['stop'] >= 1.0:
+                release_fn()
+                self.app_state = 'stopped'
+                self.meta_hold = {k: None for k in self.meta_hold}
+                self.state_changed.emit('stopped')
+                return fracs, True
+        else:
+            self.meta_hold['stop'] = None
+
+        both_peace = lms and lms2 and is_peace_sign(lms) and is_peace_sign(lms2)
+        if both_peace:
+            if self.meta_hold['start'] is None: self.meta_hold['start'] = now
+            fracs['start'] = min((now - self.meta_hold['start']) / HOLD_META, 1.0)
+        else:
+            self.meta_hold['start'] = None
+
+        game_opt_now = get_game_option(lms, lms2)
+        both_fists   = lms and lms2 and is_fist(lms) and is_fist(lms2)
+        if both_fists and game_opt_now is None:
+            if self.meta_hold['close'] is None: self.meta_hold['close'] = now
+            fracs['close'] = min((now - self.meta_hold['close']) / HOLD_CLOSE, 1.0)
+            if fracs['close'] >= 1.0:
+                release_fn()
+                self._confirm_close_from   = 'running'
+                self._confirm_close_hold_t = None
+                self.meta_hold = {k: None for k in self.meta_hold}
+                self.app_state = 'confirm_close'
+                self.state_changed.emit('confirm_close')
+                return fracs, True
+        else:
+            self.meta_hold['close'] = None
+
+        return fracs, False
+
+    def set_control_gestures_enabled(self, mode: str, enabled: bool):
+        self._control_gestures[mode] = enabled
 
     def _activate_game_mode(self, opt):
         self._release_drag()
@@ -606,7 +673,7 @@ class HandControllerThread(
         if ow_recognizer is not None:
             print('[OW] GestureRecognizer loaded')
 
-        cap = _open_camera(self.camera_index)
+        cap = _open_camera_retry(self.camera_index)
         if not cap.isOpened():
             self.error_occurred.emit(f"Cannot open camera {self.camera_index}")
             cap.release()

@@ -146,6 +146,26 @@ def set_custom_meta_gestures_enabled(enabled: bool) -> None:
     config['custom_meta_gestures_enabled'] = enabled
     _write(config)
 
+CONTROL_GESTURE_DEFAULTS = {
+    'mouse':      True,
+    'subway':     False,
+    'racing':     False,
+    'open_world': False,
+    'custom':     False,
+    'air_hockey': False,
+}
+
+def get_control_gestures_enabled(mode: str) -> bool:
+    default = CONTROL_GESTURE_DEFAULTS.get(mode, False)
+    return _read().get('control_gestures', {}).get(mode, default)
+
+def set_control_gestures_enabled(mode: str, enabled: bool) -> None:
+    config = _read()
+    d = config.get('control_gestures', {})
+    d[mode] = enabled
+    config['control_gestures'] = d
+    _write(config)
+
 MODE_SWITCH_LOCK_DEFAULTS = {
     'mouse':      False,
     'subway':     False,

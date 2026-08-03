@@ -23,6 +23,7 @@ icon-mac: $(ICON_PNG)
 
 DMG_NAME = HandMouse.dmg
 APP_NAME = HandMouse
+MAC_SIGN_IDENTITY = Apple Development: darrenfasiuslim@gmail.com (FUUX5TF5PW)
 
 run:
 	python main.py
@@ -32,7 +33,7 @@ build-mac-app:
 	/usr/libexec/PlistBuddy -c \
 		"Add :NSCameraUsageDescription string 'HandMouse uses the camera to detect hand gestures for mouse control.'" \
 		dist/HandMouse.app/Contents/Info.plist
-	codesign --force --deep --sign - dist/HandMouse.app
+	codesign --force --deep --sign "$(MAC_SIGN_IDENTITY)" dist/HandMouse.app
 
 build-mac-dmg: build-mac-app
 	rm -f "dist/$(DMG_NAME)"

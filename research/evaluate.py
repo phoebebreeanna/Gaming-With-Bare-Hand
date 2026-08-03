@@ -295,14 +295,21 @@ def plot_evaluation(rule_data, neural_data, labels_found, output_dir):
         plt.setp(ax.get_xticklabels(), rotation=30, ha='right', fontsize=8)
 
         ax = axes[row_idx][2]
-        lat_data = [latencies[l] for l in labels_found if latencies[l]]
         lat_lbls = [l for l in labels_found if latencies[l]]
-        if lat_data:
-            bp = ax.boxplot(lat_data, tick_labels=lat_lbls, patch_artist=True)
-            for patch in bp['boxes']:
-                patch.set_facecolor('#3498db')
-                patch.set_alpha(0.7)
-        ax.set_title(f'{title} - Latency per Label')
+        lat_med  = [float(np.median(latencies[l]))    for l in lat_lbls]
+        lat_p25  = [float(np.percentile(latencies[l], 25)) for l in lat_lbls]
+        lat_p75  = [float(np.percentile(latencies[l], 75)) for l in lat_lbls]
+        if lat_lbls:
+            err_lo = [max(0.0, m - lo) for m, lo in zip(lat_med, lat_p25)]
+            err_hi = [max(0.0, hi - m) for m, hi in zip(lat_med, lat_p75)]
+            bars = ax.bar(lat_lbls, lat_med, yerr=[err_lo, err_hi], capsize=4,
+                          color='#3498db', alpha=0.85,
+                          error_kw={'ecolor': '#555555', 'linewidth': 1})
+            for bar, med, hi in zip(bars, lat_med, lat_p75):
+                ax.text(bar.get_x() + bar.get_width()/2, hi + 0.3,
+                       f'{med:.1f}ms', ha='center', va='bottom', fontsize=8)
+            ax.set_ylim(0, max(lat_p75) * 1.25)
+        ax.set_title(f'{title} - Latency per Label (median, IQR)')
         ax.set_ylabel('Latency (ms)')
         plt.setp(ax.get_xticklabels(), rotation=30, ha='right', fontsize=8)
 
@@ -595,10 +602,10 @@ def main():
                     expected = NEURAL_EXPECTED[label]
                     folder   = dataset_dir / label
                     images   = sorted(p for p in folder.iterdir() if p.suffix.lower() in IMG_EXTS)
-                    _state['prev'] = None
 
                     n_correct = n_total = 0
                     for img_path in images:
+                        _state['prev'] = None
                         img = load_image(img_path)
                         if img is None:
                             continue

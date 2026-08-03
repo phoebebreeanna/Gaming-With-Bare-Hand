@@ -97,6 +97,12 @@ class OpenWorldModeMixin:
         self.ow_gesture_start_times.clear()
 
     def _tick_open_world_mode(self, lms, lms2, result, display, now, game_opt_frac, ow_result):
+        meta_hold_fracs, meta_handled = self._tick_control_gestures(
+            'open_world', lms, lms2, now, lambda: (self._release_drag(), self._ow_release_all()))
+        meta_hold_fracs['game_opt'] = game_opt_frac
+        if meta_handled:
+            return
+
         user_left, user_right = split_hands_by_handedness(result)
 
         if self._mouse_side == 'right':
@@ -140,7 +146,7 @@ class OpenWorldModeMixin:
                 'gesture': gesture_m,
                 'game_opt_num': self.game_opt_number or 0,
                 'game_opt_frac': game_opt_frac,
-                'meta': {'game_opt': game_opt_frac},
+                'meta': meta_hold_fracs,
             })
         else:
             eff_map = self._ow_eff_map
@@ -255,5 +261,5 @@ class OpenWorldModeMixin:
                 'held_keys': list(self.ow_held_keys),
                 'game_opt_num': self.game_opt_number or 0,
                 'game_opt_frac': game_opt_frac,
-                'meta': {'game_opt': game_opt_frac},
+                'meta': meta_hold_fracs,
             })

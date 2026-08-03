@@ -1,21 +1,21 @@
 {
   "rule_based": {
-    "overall_accuracy": 0.8667,
+    "overall_accuracy": 0.8778,
     "per_label_accuracy": {
-      "left_click": 0.95,
-      "release_left_click": 1.0,
-      "release_right_click": 0.9,
-      "right_click": 0.65,
-      "scroll_down": 1.0,
-      "scroll_up": 0.7
+      "left_click": 0.9667,
+      "release_left_click": 0.8333,
+      "release_right_click": 0.8667,
+      "right_click": 0.9667,
+      "scroll_down": 0.7,
+      "scroll_up": 0.9333
     },
     "per_label_avg_lat_ms": {
-      "left_click": 22.347,
-      "release_left_click": 20.28,
-      "release_right_click": 20.092,
-      "right_click": 20.265,
-      "scroll_down": 20.203,
-      "scroll_up": 20.381
+      "left_click": 19.17,
+      "release_left_click": 19.488,
+      "release_right_click": 20.077,
+      "right_click": 19.165,
+      "scroll_down": 20.305,
+      "scroll_up": 19.454
     },
     "classification_report": {
       "idle": {
@@ -25,67 +25,67 @@
         "support": 0.0
       },
       "index_pinch": {
-        "precision": 1.0,
-        "recall": 0.95,
-        "f1-score": 0.9743589743589743,
-        "support": 20.0
+        "precision": 0.725,
+        "recall": 0.9666666666666667,
+        "f1-score": 0.8285714285714286,
+        "support": 30.0
       },
       "move": {
         "precision": 0.0,
         "recall": 0.0,
         "f1-score": 0.0,
-        "support": 40.0
+        "support": 60.0
       },
       "scroll_down": {
         "precision": 1.0,
-        "recall": 1.0,
-        "f1-score": 1.0,
-        "support": 20.0
-      },
-      "scroll_up": {
-        "precision": 1.0,
         "recall": 0.7,
         "f1-score": 0.8235294117647058,
-        "support": 20.0
+        "support": 30.0
+      },
+      "scroll_up": {
+        "precision": 0.875,
+        "recall": 0.9333333333333333,
+        "f1-score": 0.9032258064516129,
+        "support": 30.0
       },
       "tm_pinch": {
-        "precision": 0.8666666666666667,
-        "recall": 0.65,
-        "f1-score": 0.7428571428571429,
-        "support": 20.0
+        "precision": 0.8529411764705882,
+        "recall": 0.9666666666666667,
+        "f1-score": 0.90625,
+        "support": 30.0
       },
-      "accuracy": 0.8666666666666667,
+      "accuracy": 0.8777777777777778,
       "macro avg": {
-        "precision": 0.6444444444444445,
-        "recall": 0.5499999999999999,
-        "f1-score": 0.5901242548301372,
-        "support": 120.0
+        "precision": 0.5754901960784314,
+        "recall": 0.5944444444444444,
+        "f1-score": 0.5769294411312912,
+        "support": 180.0
       },
       "weighted avg": {
-        "precision": 0.6444444444444445,
-        "recall": 0.55,
-        "f1-score": 0.5901242548301372,
-        "support": 120.0
+        "precision": 0.5754901960784314,
+        "recall": 0.5944444444444444,
+        "f1-score": 0.5769294411312912,
+        "support": 180.0
       }
     }
   },
   "neural": {
-    "overall_accuracy": 0.8583,
+    "overall_accuracy": 0.9167,
     "per_label_accuracy": {
-      "left_click": 0.8,
-      "release_left_click": 1.0,
-      "release_right_click": 0.85,
-      "right_click": 0.8,
-      "scroll_down": 0.9,
-      "scroll_up": 0.8
+      "left_click": 0.9333,
+      "release_left_click": 0.9667,
+      "release_right_click": 0.9,
+      "right_click": 0.9,
+      "scroll_down": 0.8667,
+      "scroll_up": 0.9333
     },
     "per_label_avg_lat_ms": {
-      "left_click": 20.9,
-      "release_left_click": 21.906,
-      "release_right_click": 20.767,
-      "right_click": 20.928,
-      "scroll_down": 21.656,
-      "scroll_up": 20.531
+      "left_click": 19.886,
+      "release_left_click": 19.576,
+      "release_right_click": 20.012,
+      "right_click": 19.74,
+      "scroll_down": 20.362,
+      "scroll_up": 20.277
     },
     "classification_report": {
       "idle": {
@@ -95,16 +95,16 @@
         "support": 0.0
       },
       "left_click": {
-        "precision": 0.8,
-        "recall": 0.8,
-        "f1-score": 0.8,
-        "support": 20.0
+        "precision": 0.875,
+        "recall": 0.9333333333333333,
+        "f1-score": 0.9032258064516129,
+        "support": 30.0
       },
       "move": {
-        "precision": 0.0,
-        "recall": 0.0,
-        "f1-score": 0.0,
-        "support": 40.0
+        "precision": 0.2,
+        "recall": 0.016666666666666666,
+        "f1-score": 0.03076923076923077,
+        "support": 60.0
       },
       "pre_left_click": {
         "precision": 0.0,
@@ -119,35 +119,35 @@
         "support": 0.0
       },
       "right_click": {
-        "precision": 0.8421052631578947,
-        "recall": 0.8,
-        "f1-score": 0.8205128205128205,
-        "support": 20.0
+        "precision": 0.9,
+        "recall": 0.9,
+        "f1-score": 0.9,
+        "support": 30.0
       },
       "scroll_down": {
-        "precision": 1.0,
-        "recall": 0.9,
-        "f1-score": 0.9473684210526315,
-        "support": 20.0
+        "precision": 0.65,
+        "recall": 0.8666666666666667,
+        "f1-score": 0.7428571428571429,
+        "support": 30.0
       },
       "scroll_up": {
-        "precision": 1.0,
-        "recall": 0.8,
-        "f1-score": 0.8888888888888888,
-        "support": 20.0
+        "precision": 0.9032258064516129,
+        "recall": 0.9333333333333333,
+        "f1-score": 0.9180327868852459,
+        "support": 30.0
       },
-      "accuracy": 0.8583333333333333,
+      "accuracy": 0.9166666666666666,
       "macro avg": {
-        "precision": 0.4552631578947368,
-        "recall": 0.4125,
-        "f1-score": 0.43209626630679254,
-        "support": 120.0
+        "precision": 0.4410282258064516,
+        "recall": 0.45625000000000004,
+        "f1-score": 0.43686062087040406,
+        "support": 180.0
       },
       "weighted avg": {
-        "precision": 0.6070175438596491,
-        "recall": 0.55,
-        "f1-score": 0.5761283550757235,
-        "support": 120.0
+        "precision": 0.6213709677419355,
+        "recall": 0.6111111111111112,
+        "f1-score": 0.5876090329554106,
+        "support": 180.0
       }
     }
   }

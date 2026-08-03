@@ -135,6 +135,7 @@ class MainMenu(QWidget):
         self.game_mode_widget.mini_overlay_enabled_changed.connect(self._on_mini_overlay_enabled_changed)
         self.game_mode_widget.custom_meta_gestures_changed.connect(self._on_custom_meta_gestures_changed)
         self.game_mode_widget.mode_switch_lock_changed.connect(self._on_mode_switch_lock_changed)
+        self.game_mode_widget.control_gestures_changed.connect(self._on_control_gestures_changed)
         self.pages.addWidget(self.game_mode_widget)
 
         self.pipeline_ui = PipelineUI(is_dark=self.is_dark)
@@ -1438,6 +1439,10 @@ class MainMenu(QWidget):
         if self.controller:
             self.controller.set_mode_switch_locked(mode, locked)
 
+    def _on_control_gestures_changed(self, mode: str, enabled: bool):
+        if self.controller:
+            self.controller.set_control_gestures_enabled(mode, enabled)
+
     def _on_mouse_side_changed(self, side: str):
         set_mouse_side(side)
         if self._is_running and self.controller:
@@ -1604,6 +1609,7 @@ class MainMenu(QWidget):
         self._preview_thread.distance_ready.connect(self._on_preview_distance)
         self._preview_thread.fingers_ready.connect(self._on_preview_fingers)
         self._preview_thread.telemetry_ready.connect(self._on_preview_telemetry)
+        self._preview_thread.error_occurred.connect(self._on_preview_error)
         self._preview_thread.start()
 
     def _stop_preview(self):
@@ -1611,6 +1617,10 @@ class MainMenu(QWidget):
             self._preview_thread.stop()
             self._preview_thread.wait(3000)
             self._preview_thread = None
+
+    def _on_preview_error(self, message: str):
+        if hasattr(self, 'camera_guide'):
+            self.camera_guide.cam_status.setText(message)
 
     def shutdown(self):
         for timer_name in ("uptime_timer", "clock_timer"):
@@ -1722,6 +1732,7 @@ class MainMenu(QWidget):
         from logic.app_config import (
             get_model_source, get_game_mode, get_mouse_enabled, get_cursor_point,
             get_mouse_side, get_custom_meta_gestures_enabled, get_mode_switch_locked,
+            get_control_gestures_enabled,
         )
         model_sources                  = {m: get_model_source(m) for m in ('mouse', 'subway')}
         model_sources['racing']        = 'default'
@@ -1732,6 +1743,10 @@ class MainMenu(QWidget):
         model_sources['mode_locks']    = {
             m: get_mode_switch_locked(m)
             for m in ('mouse', 'subway', 'racing', 'open_world', 'air_hockey')
+        }
+        model_sources['control_gestures'] = {
+            m: get_control_gestures_enabled(m)
+            for m in ('mouse', 'subway', 'racing', 'open_world', 'custom', 'air_hockey')
         }
         initial_game_mode = get_game_mode()
         self._current_running_mode = initial_game_mode
