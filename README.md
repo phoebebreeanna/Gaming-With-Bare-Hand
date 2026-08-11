@@ -72,6 +72,15 @@ pygame >= 2.5.0
 
 ## Installation
 
+There are two ways to get HandMouse running:
+
+- **Option A - Download the installer** (recommended for most users): grab the
+  pre-built app from https://handmouse.vercel.app/ and run it directly. No
+  Python, virtual environment, or dependencies needed - skip straight to
+  [How to use](#how-to-use).
+- **Option B - Run from source** (for development or customization): clone the
+  repo and set up the Python environment yourself, as below.
+
 ### 1. Clone the repository
 
 ```bash
