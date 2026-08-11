@@ -169,8 +169,8 @@ def set_control_gestures_enabled(mode: str, enabled: bool) -> None:
 MODE_SWITCH_LOCK_DEFAULTS = {
     'mouse':      False,
     'subway':     False,
-    'racing':     True,
-    'open_world': True,
+    'racing':     False,
+    'open_world': False,
     'air_hockey': True,
 }
 

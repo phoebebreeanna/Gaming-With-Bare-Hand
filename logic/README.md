@@ -8,7 +8,7 @@ Preserved from comments removed during a cleanup pass. Keep these in mind when t
 - Skills still simulate real key presses (`hockey_game/config.py:KEYBINDS` powers): P1 skills 1-5 = number row `1`-`5`, P2 skills 1-5 = number row `6`-`0` (`AH_SKILLS`).
 - A raw finger count must be held stable for `AH_SKILL_DEBOUNCE` (0.18s) before it fires a skill key, and it won't re-fire until the hand returns to a different count (typically a fist first) - this avoids spamming key presses while a pose is held.
 - `_ah_classify` buckets up to 4 detected hands into P1-half/P2-half by wrist x position (capped at 2 hands per half), then assigns mover/skill roles within each half by MediaPipe handedness (Left = mover, Right = skill) - the same Left/Right convention used by `hand_utils.split_hands_by_handedness`.
-- Air hockey tracks up to 2 players x 2 hands each, so `hand_controller.py` raises MediaPipe's `num_hands` to 4 only when air hockey mode is active at startup. Every other mode only ever reads the first two hands, which keeps the extra detection cost out of solo use.
+- Air hockey tracks up to 2 players x 2 hands each, so `hand_controller.py` always creates the MediaPipe `HandLandmarker` with `num_hands=4` (needed whether air hockey is the launch mode or reached later via a gesture/settings mode swap). Every other mode only ever reads the first two hands, which keeps their gesture logic unaffected by the extra tracking capacity.
 - The fist+fingers "game option switch" gesture is intentionally skipped while in air hockey mode: with up to 4 hands on screen it would misfire constantly, and it also collides semantically with the right-hand skill-select gesture.
 
 ## Mouse control backend (`logic/hand_utils.py`)

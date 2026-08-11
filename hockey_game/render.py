@@ -408,7 +408,7 @@ def draw_intro_screen(surface: pygame.Surface):
 
     pulse = (pygame.time.get_ticks() // 500) % 2 == 0
     prompt_color = cfg.COLOR_TEXT if pulse else cfg.COLOR_TEXT_DIM
-    prompt_text = _get_font(17).render("PRESS  SPACE  TO  START", True, prompt_color)
+    prompt_text = _get_font(17).render("PRESS  SPACE  OR  CLICK  TO  START", True, prompt_color)
     pill = prompt_text.get_rect(centerx=w / 2, top=pill_top).inflate(48, 22)
     pill_surf = pygame.Surface(pill.size, pygame.SRCALPHA)
     pygame.draw.rect(pill_surf, (*cfg.COLOR_CARD, 235), pill_surf.get_rect(), border_radius=999)

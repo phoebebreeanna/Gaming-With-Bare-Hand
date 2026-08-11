@@ -187,6 +187,9 @@ def main():
                     state = GameState()
                     accumulator = 0.0
                     audio_seq = 0
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1 and showing_intro:
+                    showing_intro = False
 
         input_source.update(events)
 

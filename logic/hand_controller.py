@@ -92,8 +92,8 @@ CONFIRM_CLOSE_HOLD   = 3.0
 _MODE_SWITCH_LOCK_DEFAULTS = {
     'mouse':      False,
     'subway':     False,
-    'racing':     True,
-    'open_world': True,
+    'racing':     False,
+    'open_world': False,
     'air_hockey': True,
 }
 
@@ -641,12 +641,11 @@ class HandControllerThread(
         _init_err = None
         ow_recognizer = None
         try:
-            num_hands = 4 if self.initial_game_mode == 'air_hockey' else 2
             base_options = mp_python.BaseOptions(model_asset_path=MODEL_PATH)
             options      = mp_vision.HandLandmarkerOptions(
                 base_options=base_options,
                 running_mode=mp_vision.RunningMode.VIDEO,
-                num_hands=num_hands,
+                num_hands=4,
             )
             detector = mp_vision.HandLandmarker.create_from_options(options)
 

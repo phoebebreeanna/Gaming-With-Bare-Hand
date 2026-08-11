@@ -21,8 +21,8 @@ _CUSTOM_FILES = {
 MODE_SWITCH_LOCK_DEFAULTS = {
     'mouse':      False,
     'subway':     False,
-    'racing':     True,
-    'open_world': True,
+    'racing':     False,
+    'open_world': False,
     'air_hockey': True,
 }
 MODE_SWITCH_LOCK_LABELS = (
