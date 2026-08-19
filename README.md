@@ -540,3 +540,7 @@ Synthetic keypresses go to whichever window has OS focus, same as Subway Surfers
 ## License
 
 MIT License - free to use, modify, and distribute.
+
+---
+> Forked and maintained by Phoebe Charleen Breeanna as part of FYP-26-S2-02.
+
